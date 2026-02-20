@@ -113,3 +113,12 @@ class SQLAlchemyCabinetRepo(CabinetRepository):
         )
         model = result.scalar_one_or_none()
         return self._member_to_entity(model) if model else None
+
+    async def get_members_for_user(self, user_id: UUID) -> list[CabinetMember]:
+        result = await self._session.execute(
+            select(CabinetMemberModel).where(
+                CabinetMemberModel.user_id == user_id,
+                CabinetMemberModel.is_active.is_(True),
+            )
+        )
+        return [self._member_to_entity(m) for m in result.scalars().all()]

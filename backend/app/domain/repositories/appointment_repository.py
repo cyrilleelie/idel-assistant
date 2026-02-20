@@ -22,7 +22,7 @@ class AppointmentRepository(ABC):
 
     @abstractmethod
     async def list_by_patient(
-        self, patient_id: UUID, skip: int = 0, limit: int = 50
+        self, patient_id: UUID, cabinet_id: UUID, skip: int = 0, limit: int = 50
     ) -> tuple[list[Appointment], int]: ...
 
     @abstractmethod

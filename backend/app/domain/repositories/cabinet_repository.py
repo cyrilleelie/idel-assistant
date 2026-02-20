@@ -25,3 +25,8 @@ class CabinetRepository(ABC):
     async def get_member(
         self, cabinet_id: UUID, user_id: UUID
     ) -> CabinetMember | None: ...
+
+    @abstractmethod
+    async def get_members_for_user(
+        self, user_id: UUID
+    ) -> list[CabinetMember]: ...

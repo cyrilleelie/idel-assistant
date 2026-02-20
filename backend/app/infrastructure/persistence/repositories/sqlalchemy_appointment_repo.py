@@ -1,7 +1,7 @@
 import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.appointment import Appointment
@@ -70,10 +70,11 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
         return [self._model_to_entity(m) for m in result.scalars().all()], total
 
     async def list_by_patient(
-        self, patient_id: UUID, skip: int = 0, limit: int = 50
+        self, patient_id: UUID, cabinet_id: UUID, skip: int = 0, limit: int = 50
     ) -> tuple[list[Appointment], int]:
         query = select(AppointmentModel).where(
-            AppointmentModel.patient_id == patient_id
+            AppointmentModel.patient_id == patient_id,
+            AppointmentModel.cabinet_id == cabinet_id,
         )
 
         count_query = select(func.count()).select_from(query.subquery())
@@ -102,7 +103,7 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
             AppointmentModel.scheduled_at < end_at,
             (
                 AppointmentModel.scheduled_at
-                + func.make_interval(mins=AppointmentModel.duration_minutes)
+                + AppointmentModel.duration_minutes * literal_column("INTERVAL '1 minute'")
             )
             > scheduled_at,
         )

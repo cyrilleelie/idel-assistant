@@ -570,125 +570,132 @@ Swagger dispo sur : http://localhost:8000/docs
 
 ---
 
-## PROMPT 4 — Optimisation de tournées (killer feature)
+## PROMPT 4 — Suggestion de créneaux (killer feature)
 
 ```
-Consulte docs/architecture.md. On implémente la feature d'optimisation de tournées
-avec OR-Tools (Vehicle Routing Problem with Time Windows - VRPTW).
+Consulte docs/architecture.md et docs/architecture-update-tournees.md.
+On implémente le moteur de suggestion de créneaux et la visualisation des tournées.
 
-=== SOLVER (infrastructure/optimization/ortools_solver.py) ===
+=== CONTEXTE MÉTIER ===
 
-Implémente un solver OR-Tools qui :
+Les IDEL ne réordonnent JAMAIS leurs RDV une fois planifiés. L'optimisation se fait
+EN AMONT : quand un nouveau patient appelle, on suggère le créneau qui minimise
+les détours et respecte la cohérence géographique par secteurs.
 
-Input :
-- depot: tuple[float, float] (point de départ, domicile IDEL)
-- stops: list[dict] avec pour chaque stop :
-  - location: tuple[float, float]
-  - duration_minutes: int (durée du soin)
-  - time_window: tuple[int, int] (minutes depuis minuit, ex: (480, 600) = 8h-10h)
-    Si pas de contrainte horaire, utiliser (480, 1080) = 8h-18h
-- distance_matrix: list[list[float]] (distances en mètres entre tous les points, incluant depot)
-- duration_matrix: list[list[float]] (durées en secondes entre tous les points)
-- lunch_break: tuple[int, int, int] (start_minute, end_minute, duration_minutes)
+=== DOMAIN (domain/rules/slot_suggestion_rules.py) ===
 
-Output :
-- ordered_stop_indices: list[int] (ordre optimal des stops)
-- total_distance_km: float
-- total_duration_hours: float
-- arrival_times: list[datetime.time] (heure d'arrivée estimée à chaque stop)
-- status: str ("optimal" | "feasible" | "no_solution")
+Implémente les fonctions suivantes (voir docs/architecture-update-tournees.md
+pour les signatures détaillées) :
 
-Utilise :
-- ortools.constraint_solver routing_enums_pb2, pywrapcp
-- 1 véhicule (l'IDEL)
-- Dimension "Time" pour les fenêtres temporelles
-- Break pour la pause déjeuner
-- Timeout solver : 5 secondes (largement suffisant pour <30 stops)
+- find_available_slots() : trouve les trous dans la journée et évalue chacun
+- calculate_detour() : calcule le détour engendré par l'insertion d'un point
+- score_slot() : score composite (détour 40%, secteur 25%, préférence horaire 20%, confort 15%)
+- check_slot_fits() : vérifie qu'un RDV + trajets tient dans un trou
 
-Gère le cas où OR-Tools ne trouve pas de solution (contraintes incompatibles) :
-retourne status="no_solution" avec un message explicatif.
+L'algorithme de find_available_slots :
+1. Trier les RDV existants par time_window_start
+2. Ajouter un "RDV virtuel" début de journée (work_start, à start_location)
+   et fin de journée (work_end, à end_location)
+3. Pour chaque paire consécutive (A, B), calculer le temps disponible :
+   available = B.time_window_start - (A.time_window_end + travel_A_to_new + new_duration + travel_new_to_B)
+4. Si available >= 0, c'est un trou viable → calculer detour et score
+5. Exclure les trous qui chevauchent la pause déjeuner
+6. Trier par score décroissant, retourner top 3
 
-=== CLIENT ROUTING (infrastructure/external/openrouteservice_client.py) ===
+Pour les calculs de distance, utiliser le RoutingService (interface domain).
+En dev/test, le FakeRoutingService (Haversine × 1.4) suffit.
 
-Implémente RoutingService via l'API OpenRouteService (gratuite, 2000 req/jour) :
+=== DOMAIN (domain/entities/) ===
 
-POST https://api.openrouteservice.org/v2/matrix/driving-car
-Headers: Authorization: {api_key}
-Body: {"locations": [[lon,lat], ...], "metrics": ["distance","duration"]}
+Ajouter/modifier :
+- Sector(id, cabinet_id, name, postal_codes: list[str], communes: list[str], color, display_order)
+- Patient : ajouter sector_id, postal_code, city
+- Appointment : ajouter location_type ('home'|'office'), time_window_start, time_window_end
 
-Retourne les matrices distance et durée.
+=== DOMAIN (domain/rules/tournee_rules.py) ===
 
-Pour le développement, crée aussi un FakeRoutingService qui calcule les distances
-à vol d'oiseau (Haversine) × 1.4 (facteur route) et les durées à 30 km/h moyen.
-C'est suffisant pour les tests et les démos sans consommer l'API.
+Remplacer les anciennes règles VRPTW par :
+- build_daily_schedule() : construit les stops ordonnés chronologiquement
+- estimate_daily_metrics() : calcule distances, durées
+- detect_scheduling_inefficiencies() : détecte les allers-retours inutiles
 
-=== USE CASE (application/use_cases/tournees/optimize_tournee.py) ===
+=== INFRASTRUCTURE ===
 
-```python
-class OptimizeTourneeUseCase:
-    def __init__(
-        self,
-        appointment_repo: AppointmentRepository,
-        patient_repo: PatientRepository,
-        tournee_repo: TourneeRepository,
-        routing_service: RoutingService,
-        solver: ORToolsSolver,
-    ):
-        ...
+Persistence :
+- SectorModel + migration Alembic
+- Modifier PatientModel (ajouter sector_id, postal_code, city) + migration
+- Modifier AppointmentModel (ajouter location_type, time_window_start, time_window_end) + migration
+- SQLAlchemy repository pour Sector (CRUD simple)
 
-    async def execute(self, cabinet_id: UUID, idel_id: UUID, date: date,
-                      start_location: tuple[float, float] | None = None) -> TourneeDTO:
-        # 1. Récupérer les appointments du jour pour cette IDEL
-        # 2. Récupérer les patients associés (pour les coordonnées)
-        # 3. Obtenir la matrice de distances via routing_service
-        # 4. Appliquer les règles métier (build_time_windows, lunch_break)
-        # 5. Lancer le solver
-        # 6. Créer et sauvegarder Tournee + TourneeStops
-        # 7. Calculer les savings (vs ordre original)
-        # 8. Retourner TourneeDTO avec toutes les infos
-```
+API Routes :
+- POST /api/v1/slots/suggest (voir contrat API dans architecture-update-tournees.md)
+- POST /api/v1/slots/suggest/{rank}/book (crée le RDV depuis la suggestion)
+- GET /api/v1/tournees/today (journée avec carte et métriques)
+- CRUD /api/v1/sectors
 
-=== ROUTE API ===
+Schemas Pydantic :
+- SlotSuggestRequest, SlotSuggestionResponse, DaySummary
+- SectorCreate, SectorResponse
+- TourneeDetailResponse (avec map_data et metrics)
 
-tournee_routes.py :
-- POST /api/v1/tournees/optimize : optimise la tournée du jour
-  Body: {date: "2026-02-20", idel_id?: uuid, start_location?: {lat, lon}, end_location?: {lat, lon}}
-  Response: 200 avec tournée complète (stops ordonnés, distances, savings, heures estimées)
+=== USE CASE (application/use_cases/) ===
 
-- GET /api/v1/tournees/{id} : détail d'une tournée
+suggest_slot.py :
+1. Récupère les appointments du jour pour l'IDEL
+2. Récupère la localisation du patient (déchiffrée)
+3. Récupère les secteurs du cabinet
+4. Appelle find_available_slots() avec le RoutingService
+5. Retourne les suggestions avec explications
 
-- POST /api/v1/tournees/{id}/reoptimize : ré-optimise après annulation
-  Body: {removed_appointment_ids: [uuid]}
+build_tournee.py :
+1. Récupère les appointments du jour
+2. Construit la tournée (ordonnée chronologiquement)
+3. Calcule les métriques
+4. Détecte les inefficacités
+5. Sauvegarde la tournée si elle n'existe pas déjà
+6. Retourne les données de carte
 
-- GET /api/v1/tournees/stats?from=...&to=... : statistiques (km économisés, temps gagné)
+=== DÉMO (scripts/demo_suggestion.py) ===
 
-=== DÉMO VISUELLE (optionnel mais recommandé) ===
-
-Crée un script backend/scripts/demo_tournee.py qui :
-1. Génère 8 patients fictifs dans l'agglomération nantaise (coordonnées réalistes)
-2. Crée 8 appointments pour aujourd'hui
-3. Lance l'optimisation avec le FakeRoutingService
-4. Génère une carte HTML avec Folium montrant :
-   - Le trajet optimisé (ligne bleue, numérotée)
-   - Le trajet non optimisé (ligne rouge pointillée)
-   - Les marqueurs patients avec popup (nom, heure estimée, type soin)
-   - Un encadré "Gain : X km, X minutes"
-5. Sauvegarde dans demo_output/tournee_demo.html
-
-Utilise des noms de rues réels de Nantes et sa périphérie pour le réalisme.
+Crée un script qui :
+1. Crée 3 secteurs pour l'agglomération nantaise :
+   - "Secteur Nord" : Orvault (44700), Sautron (44880) — couleur bleue
+   - "Secteur Est" : Carquefou (44470), Sainte-Luce (44980) — couleur verte
+   - "Nantes Centre" : Nantes (44000, 44100, 44200, 44300) — couleur rouge
+2. Crée 6 patients chroniques avec des RDV déjà planifiés :
+   - 8h00 Mme Durand, Orvault (insuline)
+   - 8h45 M. Petit, Orvault (pansement)
+   - 9h30 Mme Martin, Sautron (BSI)
+   - 11h00 M. Bernard, Nantes centre (injection)
+   - 14h00 Mme Lefebvre, Nantes centre (pansement)
+   - 15h30 M. Moreau, Nantes centre (prélèvement)
+3. Simule un appel : nouveau patient à Sautron (44880) a besoin d'un pansement
+   → Appelle le moteur de suggestion
+   → Affiche les 3 suggestions avec scores et explications
+4. Génère une carte HTML (Folium) montrant :
+   - Les patients existants (marqueurs colorés par secteur)
+   - Les 3 créneaux suggérés (marqueurs en pointillés avec numéro de rang)
+   - Les secteurs en zones colorées semi-transparentes
+   - Un panneau latéral avec les détails des suggestions
 
 === TESTS ===
 
-tests/unit/test_ortools_solver.py :
-- Test avec 5 stops en carré → vérifie que l'ordre minimise la distance
-- Test avec time windows incompatibles → retourne no_solution
-- Test avec pause déjeuner → vérifie qu'aucun soin pendant la pause
+tests/unit/test_slot_suggestion.py :
+- Test avec journée vide → le créneau suggéré est en début de journée
+- Test insertion entre 2 RDV proches géographiquement → score élevé
+- Test insertion entre 2 RDV éloignés → détour important, score bas
+- Test pause déjeuner respectée → pas de suggestion entre 12h et 13h
+- Test patient même secteur que voisins → bonus de score
+- Test journée pleine → aucune suggestion (retourne liste vide)
+- Test RDV cabinet (horaire fixe) vs domicile (fenêtre 30 min)
 
-tests/integration/test_tournee_optimization.py :
-- Test complet : créer patients + appointments + optimiser + vérifier la tournée sauvegardée
+tests/unit/test_tournee_rules.py :
+- Test build_daily_schedule ordonne bien par horaire
+- Test detect_scheduling_inefficiencies détecte un aller-retour
+- Test estimate_daily_metrics calcule correctement distances et durées
 ```
 
-**✅ Checkpoint 4 :** Lance `python scripts/demo_tournee.py` et ouvre la carte HTML. Tu dois voir les 8 patients sur la carte de Nantes avec le trajet optimisé. C'est cette démo que tu montreras à ta femme. Lance les tests : `pytest tests/unit/test_ortools_solver.py -v`.
+**✅ Checkpoint 4 :** Lance `python scripts/demo_suggestion.py` et ouvre la carte HTML. Tu dois voir les 6 patients existants et les 3 créneaux suggérés sur la carte de Nantes avec les secteurs colorés. Lance les tests : `pytest tests/unit/test_slot_suggestion.py tests/unit/test_tournee_rules.py -v`.
 
 ---
 
@@ -699,7 +706,7 @@ Prompt 0 : Setup (30 min)          → Structure + Docker + venv
 Prompt 1 : Domain (1-2h)           → Entités, règles, tests unitaires
 Prompt 2 : Persistence (2-3h)      → SQLAlchemy, chiffrement, migrations
 Prompt 3 : API (2-3h)              → FastAPI, auth, CRUD, tests API
-Prompt 4 : Tournées (2-3h)         → OR-Tools, optimisation, démo carte
+Prompt 4 : Tournées (2-3h)         → Suggestion créneaux, secteurs, démo carte
 
 Total estimé : 1-2 jours de travail
 Résultat : backend fonctionnel + démo visuelle de la killer feature

@@ -88,7 +88,7 @@ Vérifie spécifiquement ces entités critiques :
   dans le domain (le chiffrement est dans infrastructure, PAS ici)
 - CareProtocol : a bien recurrence_rule (str), start_date, end_date (optionnel)
 - Appointment : a bien care_protocol_id (optionnel), created_by avec les bonnes valeurs
-- Tournee : a bien savings_km, savings_minutes pour mesurer les gains
+- Tournee : a bien total_distance_km, total_duration_minutes, travel_time_minutes pour les métriques
 - TourneeStop : a bien stop_order, estimated_arrival, actual_arrival, status
 - Invoice/InvoiceLine : les montants sont en Decimal, pas en float
 - AuditLog : a bien entity_type, entity_id, action, changes (dict)
@@ -118,7 +118,7 @@ appointment_rules.py :
 
 tournee_rules.py :
 - [ ] validate_lunch_break : vérifie qu'aucun soin n'est pendant la pause
-- [ ] build_time_windows : conversion correcte datetime → minutes depuis minuit
+- [ ] build_daily_schedule : construit les stops ordonnés chronologiquement
 
 care_protocol_rules.py :
 - [ ] generate_appointments_from_protocol : utilise bien RecurrenceRule.generate_occurrences
@@ -383,108 +383,60 @@ Pour chaque problème trouvé, donne :
 
 ---
 
-## REVIEW 4 — Après l'optimisation de tournées
+## REVIEW 4 — Après la suggestion de créneaux
 
 ```
-Tu es un ingénieur optimisation et data scientist. Audite l'implémentation
-de l'optimisation de tournées (OR-Tools VRPTW).
+Tu es un product manager avec expertise en optimisation logistique.
+Audite le moteur de suggestion de créneaux et la visualisation des tournées.
 
-Consulte docs/architecture.md et docs/PRD.md pour les exigences.
+Consulte docs/architecture-update-tournees.md pour les exigences.
 
-=== SOLVER OR-TOOLS (infrastructure/optimization/ortools_solver.py) ===
+=== RÈGLE MÉTIER FONDAMENTALE ===
+- [ ] CRITIQUE : Aucune partie du code ne réordonne des RDV existants
+- [ ] Le moteur suggère des créneaux pour de NOUVEAUX RDV uniquement
+- [ ] Les RDV existants sont traités comme des contraintes fixes
 
-Configuration du modèle :
-- [ ] Le problème est bien un VRPTW (Vehicle Routing Problem with Time Windows)
-- [ ] Un seul véhicule (l'IDEL)
-- [ ] Le depot (point de départ) est le premier élément de la matrice
-- [ ] La dimension "Time" est correctement configurée :
-  - Capacité = durée max journée de travail en minutes (ex: 600 pour 8h-18h)
-  - Transit callback = durée trajet + durée du soin à chaque stop
-  - Les fenêtres temporelles sont correctement appliquées sur chaque noeud
-- [ ] La pause déjeuner est gérée comme un break OR-Tools (ou comme un noeud intermédiaire obligatoire)
-- [ ] Le timeout est raisonnable (5-10 secondes)
-- [ ] La stratégie de première solution est définie (PATH_CHEAPEST_ARC est un bon défaut)
-- [ ] La métaheuristique est configurée (GUIDED_LOCAL_SEARCH)
+=== ALGORITHME DE SUGGESTION ===
 
-Gestion des cas limites :
-- [ ] 0 appointments → retourne tournée vide (pas d'erreur)
-- [ ] 1 appointment → retourne tournée triviale
-- [ ] Fenêtres temporelles incompatibles → status="no_solution" avec message explicatif
-- [ ] Matrice de distances avec des zéros diagonaux
-- [ ] Très grandes distances (patient en zone rurale à 50km)
+- [ ] find_available_slots identifie correctement les trous entre RDV
+- [ ] La pause déjeuner est exclue des suggestions
+- [ ] Le calcul de détour est correct : (A→new + new→B) - A→B
+- [ ] Le scoring pondère : détour 40%, secteur 25%, préférence horaire 20%, confort 15%
+- [ ] Les suggestions sont triées par score décroissant
+- [ ] Maximum 3 suggestions retournées
+- [ ] Si aucun créneau ne tient → retourne liste vide avec message explicatif
+- [ ] Les horaires suggérés respectent les horaires de travail de l'IDEL
 
-Calcul des savings :
-- [ ] La comparaison se fait entre l'ordre optimisé et l'ordre original (ou naturel)
-- [ ] savings_km = distance_originale - distance_optimisée
-- [ ] savings_minutes = durée_originale - durée_optimisée
-- [ ] Les savings sont toujours >= 0 (si l'optimisation ne gagne rien, savings = 0, pas négatif)
+Cas limites :
+- [ ] Journée vide → suggère en début de matinée
+- [ ] Un seul RDV existant → 2 trous (avant et après)
+- [ ] Patient sans coordonnées → erreur claire, pas de crash
+- [ ] Durée de soin > trou disponible → ce trou n'est pas proposé
 
-=== ROUTING CLIENT (infrastructure/external/) ===
+=== LOCATION TYPE ===
+- [ ] RDV 'home' : time_window de 30 min (ex: 9h00-9h30)
+- [ ] RDV 'office' : time_window_start = time_window_end (horaire fixe)
+- [ ] La suggestion adapte la fenêtre selon le location_type
 
-openrouteservice_client.py :
-- [ ] Appelle POST /v2/matrix/driving-car
-- [ ] Envoie les coordonnées au format [longitude, latitude] (attention à l'ordre !)
-- [ ] Gère les erreurs API (rate limit 429, timeout, 5xx)
-- [ ] Convertit les résultats en km et minutes
+=== SECTEURS ===
+- [ ] Les patients sont rattachés automatiquement à un secteur via postal_code
+- [ ] Le bonus secteur dans le score fonctionne (même secteur que RDV adjacents)
+- [ ] CRUD secteurs fonctionne (create, list, update, delete)
+- [ ] Un patient sans secteur ne cause pas de crash
 
-FakeRoutingService :
-- [ ] Calcul Haversine correct (formule avec rayon terrestre)
-- [ ] Facteur route réaliste (1.3 à 1.5 × vol d'oiseau)
-- [ ] Vitesse moyenne réaliste pour zone urbaine/péri-urbaine (25-35 km/h)
+=== TOURNÉE DU JOUR ===
+- [ ] GET /tournees/today retourne les stops dans l'ORDRE CHRONOLOGIQUE (pas optimisé)
+- [ ] Les métriques sont réalistes (distance totale, temps trajet)
+- [ ] detect_scheduling_inefficiencies identifie les allers-retours
+- [ ] Les suggestions d'amélioration sont informatives, pas des actions automatiques
 
-=== USE CASE (application/use_cases/tournees/optimize_tournee.py) ===
+=== DÉMO ===
+- [ ] La carte affiche les 3 secteurs en couleurs distinctes
+- [ ] Les patients existants et les suggestions sont bien visibles
+- [ ] L'explication de chaque suggestion est compréhensible par une IDEL non technique
+- [ ] Les distances et temps affichés sont réalistes pour Nantes
 
-- [ ] Récupère les appointments du jour pour l'IDEL donnée
-- [ ] Récupère les coordonnées patients (via patient_repo, données déchiffrées)
-- [ ] Filtre les appointments dont le patient n'a pas de coordonnées → les exclut
-  avec un warning (ou les géocode à la volée)
-- [ ] Appelle routing_service pour la matrice de distances
-- [ ] Passe les contraintes métier au solver (tournee_rules)
-- [ ] Sauvegarde la Tournee + TourneeStops en BDD
-- [ ] Retourne un DTO complet avec : stops ordonnés, heures estimées, distances, savings
-
-Vérifie le flux de données :
-- [ ] Les coordonnées patients ne sont jamais envoyées en clair dans les logs
-- [ ] Le start_location utilise le domicile de l'IDEL (ou l'adresse du cabinet) par défaut
-
-=== ROUTES API ===
-
-- [ ] POST /tournees/optimize : retourne une tournée complète en < 10 secondes
-- [ ] GET /tournees/{id} : retourne le détail avec stops
-- [ ] GET /tournees/stats : agrège les savings sur une période
-
-=== DÉMO (scripts/demo_tournee.py) ===
-
-- [ ] Utilise des coordonnées réalistes dans l'agglomération nantaise
-- [ ] Les noms de rues existent réellement
-- [ ] La carte Folium affiche :
-  - Marqueurs patients numérotés dans l'ordre de visite
-  - Trajet optimisé (ligne colorée)
-  - Popup sur chaque marqueur (nom patient, heure estimée, type soin)
-  - Encadré avec les statistiques (km, minutes, nombre de patients)
-- [ ] Le fichier HTML généré s'ouvre correctement dans un navigateur
-- [ ] Les gains affichés sont réalistes pour 8 patients en zone urbaine
-  (typiquement 5-15 km et 20-45 minutes gagnées)
-
-=== TESTS ===
-
-tests/unit/test_ortools_solver.py :
-- [ ] Test avec stops en carré → l'ordre minimise les trajets
-- [ ] Test avec fenêtres temporelles → l'ordre respecte les contraintes
-- [ ] Test avec contraintes impossibles → retourne no_solution
-- [ ] Test pause déjeuner → pas de soin entre 12h et 13h
-- [ ] Test 1 seul stop → fonctionne sans erreur
-
-tests/integration/test_tournee_optimization.py :
-- [ ] Test complet end-to-end : create patients → create appointments → optimize → verify
-- [ ] Vérifie que la tournée est bien persistée en BDD
-- [ ] Vérifie que les TourneeStops sont dans le bon ordre
-
-Pour chaque problème trouvé, donne :
-1. Sévérité
-2. Fichier et ligne
-3. Impact (performance, résultat incorrect, crash)
-4. Le code corrigé
+Pour chaque problème, donne sévérité, fichier, et correction.
 ```
 
 ---
@@ -519,9 +471,9 @@ Fais une passe rapide sur l'ensemble du projet et vérifie :
 - [ ] Le Swagger fonctionne et documente tous les endpoints
 
 === DÉMO-READY ===
-- [ ] Le script demo_tournee.py génère une carte propre
-- [ ] Le flow complet fonctionne : register → create patients → create appointments → optimize → voir la carte
-- [ ] Les gains affichés sont réalistes et impressionnants
+- [ ] Le script demo_suggestion.py génère une carte propre
+- [ ] Le flow complet fonctionne : register → create patients → create appointments → suggérer créneau → voir la carte
+- [ ] Les suggestions affichées sont réalistes et pertinentes
 
 === DETTE TECHNIQUE ACCEPTÉE (à noter pour plus tard) ===
 Liste ce qui manque mais est acceptable pour un MVP :

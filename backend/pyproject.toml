@@ -12,7 +12,7 @@ dependencies = [
     "asyncpg>=0.30,<0.31",
     "psycopg2-binary>=2.9,<2.10",
     "alembic>=1.14,<1.15",
-    "pydantic>=2.10,<2.11",
+    "pydantic[email]>=2.10,<2.11",
     "pydantic-settings>=2.7,<2.8",
     "python-jose[cryptography]>=3.3,<3.4",
     "passlib[bcrypt]>=1.7,<1.8",
@@ -23,6 +23,7 @@ dependencies = [
     "ortools>=9.15,<10",
     "python-dateutil>=2.9,<2.10",
     "cryptography>=44,<45",
+    "email-validator>=2.1,<2.2",
 ]
 
 [dependency-groups]
@@ -37,7 +38,11 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning:jose",
+]

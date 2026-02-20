@@ -12,7 +12,7 @@ class AuditLogModel(Base):
     cabinet_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("cabinets.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    entity_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    entity_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     action: Mapped[str] = mapped_column(String(20), nullable=False)
     changes = mapped_column(JSONB, nullable=True)
     ip_address: Mapped[str] = mapped_column(String(45), nullable=False, default="")

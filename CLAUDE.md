@@ -30,7 +30,7 @@ Infrastructure → Application → Domain
 
 ## Stack technique
 
-- Python 3.12, FastAPI, SQLAlchemy 2.0 async (asyncpg), Alembic
+- Python 3.12, **uv** (gestionnaire de dépendances et venv), FastAPI, SQLAlchemy 2.0 async (asyncpg), Alembic
 - PostgreSQL 16 (PostGIS, pg_trgm, RLS), Redis 7
 - OR-Tools (optimisation tournées VRPTW)
 - Chiffrement AES-256-GCM (colonnes sensibles patients)
@@ -61,23 +61,27 @@ Infrastructure → Application → Domain
 # Lancer les services
 docker compose up -d
 
-# Activer le venv
-.venv\Scripts\Activate.ps1
+# Installer / synchroniser les dépendances
+cd backend && uv sync --dev
 
 # Migrations
-cd backend && alembic upgrade head
+cd backend && uv run alembic upgrade head
 
 # Tests
-pytest tests/unit/ -v
-pytest tests/integration/ -v
-pytest tests/api/ -v
-pytest --cov=app tests/
+cd backend && uv run pytest tests/unit/ -v
+cd backend && uv run pytest tests/integration/ -v
+cd backend && uv run pytest tests/api/ -v
+cd backend && uv run pytest --cov=app tests/
 
 # Serveur dev
-cd backend && uvicorn app.main:app --reload --port 8000
+cd backend && uv run uvicorn app.main:app --reload --port 8000
 
 # Linting
-black app/ tests/
-ruff check app/ tests/
-mypy app/
+cd backend && uv run black app/ tests/
+cd backend && uv run ruff check app/ tests/
+cd backend && uv run mypy app/
+
+# Ajouter une dépendance
+cd backend && uv add <package>
+cd backend && uv add --dev <package>
 ```

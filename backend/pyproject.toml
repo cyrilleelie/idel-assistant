@@ -1,0 +1,41 @@
+[project]
+name = "idel-assistant"
+version = "0.1.0"
+description = "Application SaaS pour infirmieres liberales - Backend API"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+
+dependencies = [
+    "fastapi>=0.115,<0.116",
+    "uvicorn[standard]>=0.34,<0.35",
+    "sqlalchemy[asyncio]>=2.0,<2.1",
+    "asyncpg>=0.30,<0.31",
+    "alembic>=1.14,<1.15",
+    "pydantic>=2.10,<2.11",
+    "pydantic-settings>=2.7,<2.8",
+    "python-jose[cryptography]>=3.3,<3.4",
+    "passlib[bcrypt]>=1.7,<1.8",
+    "redis>=5.2,<5.3",
+    "celery>=5.4,<5.5",
+    "httpx>=0.28,<0.29",
+    "ortools>=9.15,<10",
+    "python-dateutil>=2.9,<2.10",
+    "cryptography>=44,<45",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<8.4",
+    "pytest-asyncio>=0.25,<0.26",
+    "pytest-cov>=6.0,<6.1",
+    "black>=24,<25",
+    "ruff>=0.8,<0.9",
+    "mypy>=1.14,<1.15",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

@@ -14,6 +14,8 @@ from app.infrastructure.api.dependencies import (
     get_sector_repository,
 )
 from app.infrastructure.api.schemas.tournee_schemas import (
+    MapData,
+    MapStop,
     TourneeDetailResponse,
     TourneeMetrics,
     TourneeStopResponse,
@@ -74,6 +76,34 @@ async def get_today_tournee(
     stops = result["stops"]
     metrics = result["metrics"]
     inefficiencies = result["inefficiencies"]
+    map_info = result.get("map_info", {})
+
+    # Build map_data from map_info
+    map_stops = []
+    for s in stops:
+        info = map_info.get(str(s.appointment_id), {})
+        if info.get("lat") is not None and info.get("lon") is not None:
+            map_stops.append(
+                MapStop(
+                    lat=info["lat"],
+                    lon=info["lon"],
+                    patient_name=info.get("patient_name", ""),
+                    care_type=info.get("care_type", ""),
+                    time=info.get("time", ""),
+                    sector_name=info.get("sector_name", ""),
+                    sector_color=info.get("sector_color", "#3B82F6"),
+                )
+            )
+
+    map_data = None
+    if map_stops:
+        lats = [ms.lat for ms in map_stops]
+        lons = [ms.lon for ms in map_stops]
+        map_data = MapData(
+            stops=map_stops,
+            center_lat=sum(lats) / len(lats),
+            center_lon=sum(lons) / len(lons),
+        )
 
     return TourneeDetailResponse(
         tournee_id=str(tournee.id) if tournee else None,
@@ -97,4 +127,5 @@ async def get_today_tournee(
             num_stops=len(stops),
         ),
         inefficiencies=inefficiencies,
+        map_data=map_data,
     )

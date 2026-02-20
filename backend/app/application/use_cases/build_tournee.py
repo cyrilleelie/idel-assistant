@@ -71,9 +71,12 @@ class BuildDailyTourneeUseCase:
         patient_locations: dict[str, tuple[float, float]] = {}
         care_durations: dict[str, int] = {}
         patient_sectors: dict[str, str] = {}
+        # Extra info for map display
+        map_info: dict[str, dict] = {}
 
         sectors = await self._sector_repo.list_by_cabinet(cabinet_id)
         sector_map = {s.id: s.name for s in sectors}
+        sector_color_map = {s.id: s.color for s in sectors}
 
         for appt in sorted_appts:
             p = await self._patient_repo.get_by_id(appt.patient_id)
@@ -82,6 +85,15 @@ class BuildDailyTourneeUseCase:
             if p and p.sector_id and p.sector_id in sector_map:
                 patient_sectors[str(appt.id)] = sector_map[p.sector_id]
             care_durations[str(appt.id)] = appt.duration_minutes
+            map_info[str(appt.id)] = {
+                "lat": p.lat if p else None,
+                "lon": p.lon if p else None,
+                "patient_name": f"{p.last_name} {p.first_name}" if p else "Inconnu",
+                "care_type": appt.care_type,
+                "time": appt.scheduled_at.strftime("%H:%M"),
+                "sector_name": sector_map.get(p.sector_id) if p and p.sector_id else "",
+                "sector_color": sector_color_map.get(p.sector_id, "#3B82F6") if p and p.sector_id else "#3B82F6",
+            }
 
         # 3. Pre-compute distances
         distances: dict[tuple[str, str], tuple[float, float]] = {}
@@ -143,4 +155,5 @@ class BuildDailyTourneeUseCase:
             "stops": stops,
             "metrics": metrics,
             "inefficiencies": inefficiencies,
+            "map_info": map_info,
         }

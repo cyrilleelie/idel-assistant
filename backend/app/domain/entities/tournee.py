@@ -8,18 +8,15 @@ class Tournee:
     cabinet_id: UUID
     idel_id: UUID
     tournee_date: datetime.date
-    status: str = "draft"  # draft | optimized | in_progress | completed
+    status: str = "planned"  # planned | in_progress | completed
     start_location_lat: float | None = None
     start_location_lon: float | None = None
     end_location_lat: float | None = None
     end_location_lon: float | None = None
     total_distance_km: float = 0.0
-    total_duration_hours: float = 0.0
-    savings_km: float = 0.0
-    savings_minutes: float = 0.0
+    total_duration_minutes: float = 0.0
+    travel_time_minutes: float = 0.0
     num_stops: int = 0
-    optimization_params: dict = field(default_factory=dict)
-    optimized_at: datetime.datetime | None = None
     started_at: datetime.datetime | None = None
     completed_at: datetime.datetime | None = None
     id: UUID = field(default_factory=uuid4)

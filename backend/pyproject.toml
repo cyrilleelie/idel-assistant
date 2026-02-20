@@ -34,6 +34,7 @@ dev = [
     "black>=24,<25",
     "ruff>=0.8,<0.9",
     "mypy>=1.14,<1.15",
+    "folium>=0.18,<0.19",
 ]
 
 [tool.pytest.ini_options]

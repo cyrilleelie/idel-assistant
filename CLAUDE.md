@@ -16,6 +16,7 @@ Tous les documents de référence sont dans `docs/` :
 - `docs/planning.md` — Planning de réalisation itératif (44 semaines).
 - `docs/business-plan.md` — Business plan et projections financières.
 - `docs/architecture-update-tournees.md` — **ADDENDUM ARCHITECTURE v1.1** : refonte complète de l'optimisation de tournées. Remplace le VRPTW par un moteur de suggestion de créneaux. Contient les ADR-008/009, le nouveau modèle de données (Sector, modifications Patient/Appointment/Tournee), les contrats API révisés, et les **versions réécrites du Prompt 4 et de la Review 4** qui remplacent celles de `prompts-claude-code.md` et `prompts-review.md`.
+- `docs/architecture-frontend.md` — **ARCHITECTURE FRONTEND v1.0** : stratégie mobile-first + dashboard web. ADR-010 à ADR-013, spécifications écrans mobile (React Native + Expo) et web (React + Vite + Tailwind + shadcn/ui). Contient les **Prompt 5, Prompt 6, Review 5 et Review 6**.
 - `docs/developer-setup-guide.md` — Guide setup développeur Windows 11.
 
 ## Architecture
@@ -68,6 +69,8 @@ Après chaque phase de génération de code, suivre **obligatoirement** cette s�
    - Review 2 → après persistence + sécurité (Prompt 2)
    - Review 3 → après API FastAPI (Prompt 3)
    - Review 4 → après suggestion de créneaux (Prompt 4) — **utiliser la version réécrite dans `docs/architecture-update-tournees.md`**, pas celle de `prompts-review.md`
+   - Review 5 → après frontend mobile (Prompt 5)
+   - Review 6 → après frontend web (Prompt 6)
 3. **Exécuter la review** soi-même sur le code qui vient d'être généré, en suivant chaque point de contrôle du prompt de review
 4. **Corriger les problèmes CRITIQUE et IMPORTANT** trouvés lors de la review
 5. **Relancer les tests** pour confirmer que les corrections sont bonnes
@@ -114,4 +117,10 @@ cd backend && uv run mypy app/
 # Ajouter une dépendance
 cd backend && uv add <package>
 cd backend && uv add --dev <package>
+
+# Frontend mobile (React Native + Expo)
+cd frontend-mobile && npx expo start
+
+# Frontend web (React + Vite)
+cd frontend-web && npm install && npm run dev
 ```

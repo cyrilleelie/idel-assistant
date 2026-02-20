@@ -23,6 +23,9 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
             scheduled_at=model.scheduled_at,
             duration_minutes=model.duration_minutes,
             care_type=model.care_type,
+            location_type=model.location_type or "home",
+            time_window_start=model.time_window_start,
+            time_window_end=model.time_window_end,
             status=model.status,
             cancellation_reason=model.cancellation_reason,
             canceled_at=model.canceled_at,
@@ -124,6 +127,9 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
             scheduled_at=appointment.scheduled_at,
             duration_minutes=appointment.duration_minutes,
             care_type=appointment.care_type,
+            location_type=appointment.location_type,
+            time_window_start=appointment.time_window_start,
+            time_window_end=appointment.time_window_end,
             status=appointment.status,
             created_by=appointment.created_by,
         )
@@ -143,6 +149,9 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
                 scheduled_at=appt.scheduled_at,
                 duration_minutes=appt.duration_minutes,
                 care_type=appt.care_type,
+                location_type=appt.location_type,
+                time_window_start=appt.time_window_start,
+                time_window_end=appt.time_window_end,
                 status=appt.status,
                 created_by=appt.created_by,
             )
@@ -162,6 +171,9 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
         model.scheduled_at = appointment.scheduled_at
         model.duration_minutes = appointment.duration_minutes
         model.care_type = appointment.care_type
+        model.location_type = appointment.location_type
+        model.time_window_start = appointment.time_window_start
+        model.time_window_end = appointment.time_window_end
         model.status = appointment.status
         model.cancellation_reason = appointment.cancellation_reason
         model.canceled_at = appointment.canceled_at

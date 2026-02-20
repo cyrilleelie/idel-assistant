@@ -31,6 +31,9 @@ def _entity_to_response(patient: Patient) -> PatientResponse:
         address=patient.address,
         lat=patient.lat,
         lon=patient.lon,
+        sector_id=str(patient.sector_id) if patient.sector_id else None,
+        postal_code=patient.postal_code,
+        city=patient.city,
         phone=patient.phone,
         email=patient.email,
         pathologies=patient.pathologies,
@@ -97,6 +100,9 @@ async def create_patient(
         preferred_time_slot=body.preferred_time_slot,
         care_duration_default=body.care_duration_default,
         notes=body.notes,
+        sector_id=body.sector_id,
+        postal_code=body.postal_code,
+        city=body.city,
     )
     patient = await repo.create(patient)
     return _entity_to_response(patient)
@@ -125,6 +131,7 @@ async def get_patient(
 PATIENT_UPDATABLE_FIELDS = frozenset({
     "first_name", "last_name", "birth_date", "address", "phone",
     "email", "pathologies", "preferred_time_slot", "care_duration_default", "notes",
+    "sector_id", "postal_code", "city",
 })
 
 

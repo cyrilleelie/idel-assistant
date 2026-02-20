@@ -23,6 +23,23 @@ from app.infrastructure.api.schemas.patient_schemas import (
     PatientResponse,
     PatientUpdate,
 )
+from app.infrastructure.api.schemas.sector_schemas import (
+    SectorCreate,
+    SectorListResponse,
+    SectorResponse,
+    SectorUpdate,
+)
+from app.infrastructure.api.schemas.slot_schemas import (
+    SlotBookRequest,
+    SlotSuggestRequest,
+    SlotSuggestResponse,
+    SlotSuggestionItem,
+)
+from app.infrastructure.api.schemas.tournee_schemas import (
+    TourneeDetailResponse,
+    TourneeMetrics,
+    TourneeStopResponse,
+)
 
 __all__ = [
     "AppointmentCreate",
@@ -40,6 +57,17 @@ __all__ = [
     "PatientUpdate",
     "RefreshRequest",
     "RegisterRequest",
+    "SectorCreate",
+    "SectorListResponse",
+    "SectorResponse",
+    "SectorUpdate",
+    "SlotBookRequest",
+    "SlotSuggestRequest",
+    "SlotSuggestResponse",
+    "SlotSuggestionItem",
     "TokenResponse",
+    "TourneeDetailResponse",
+    "TourneeMetrics",
+    "TourneeStopResponse",
     "UserResponse",
 ]

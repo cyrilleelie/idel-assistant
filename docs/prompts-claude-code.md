@@ -699,6 +699,397 @@ tests/unit/test_tournee_rules.py :
 
 ---
 
+## PROMPT 5 — FRONTEND MOBILE (React Native + Expo)
+
+```
+Consulte docs/architecture-frontend.md et docs/architecture-update-tournees.md.
+
+On crée l'application mobile MVP avec React Native + Expo.
+
+=== SETUP PROJET ===
+
+Initialise un projet Expo dans le dossier frontend-mobile/ :
+- Expo SDK 52 (ou le plus récent stable)
+- TypeScript
+- Expo Router (file-based routing)
+- Le template "tabs" d'Expo comme point de départ
+
+Installe ces dépendances :
+- @tanstack/react-query (server state, cache API)
+- zustand (UI state : user, tokens, préférences)
+- react-native-maps (carte native)
+- expo-location (GPS)
+- expo-secure-store (stockage sécurisé des tokens)
+- axios (HTTP client)
+- react-native-paper (composants UI Material Design)
+- date-fns (manipulation dates, format français)
+
+Configuration :
+- app.json / app.config.ts avec nom "IDEL Assistant", icône placeholder, splash screen
+- Thème couleurs : bleu médical (#2563EB primary, #1E40AF dark, #60A5FA light)
+- Font : Inter (Google Fonts via expo-google-fonts, ou system font)
+
+=== STRUCTURE DES DOSSIERS ===
+
+frontend-mobile/
+├── app/                          # Expo Router (file-based)
+│   ├── _layout.tsx               # Root layout (providers, auth check)
+│   ├── (auth)/                   # Groupe non authentifié
+│   │   ├── _layout.tsx
+│   │   ├── login.tsx
+│   │   └── register.tsx
+│   ├── (tabs)/                   # Groupe authentifié (tab navigator)
+│   │   ├── _layout.tsx           # Tab bar config
+│   │   ├── index.tsx             # Tournée du jour (onglet principal)
+│   │   ├── suggest.tsx           # Suggestion de créneaux
+│   │   ├── patients/
+│   │   │   ├── index.tsx         # Liste patients
+│   │   │   └── [id].tsx          # Fiche patient
+│   │   └── profile.tsx           # Profil IDEL
+│   └── modals/
+│       ├── new-appointment.tsx   # Création RDV rapide
+│       └── slot-detail.tsx       # Détail suggestion sur carte
+│
+├── src/
+│   ├── api/                      # Client API
+│   │   ├── client.ts             # Config axios, interceptors, refresh token
+│   │   ├── auth.ts
+│   │   ├── patients.ts
+│   │   ├── appointments.ts
+│   │   ├── slots.ts
+│   │   ├── tournees.ts
+│   │   └── sectors.ts
+│   ├── hooks/                    # Custom hooks
+│   │   ├── useAuth.ts            # Login, logout, token management
+│   │   ├── useTournee.ts         # Query tournée du jour
+│   │   ├── useSlotSuggestion.ts  # Mutation suggestion créneaux
+│   │   └── usePatients.ts        # Query/mutation patients
+│   ├── stores/                   # Zustand stores
+│   │   └── authStore.ts          # User, tokens, isAuthenticated
+│   ├── components/               # Composants réutilisables
+│   │   ├── TourneeMap.tsx        # Carte avec patients et secteurs
+│   │   ├── PatientCard.tsx       # Card patient dans une liste
+│   │   ├── AppointmentItem.tsx   # Ligne RDV dans une liste
+│   │   ├── SlotSuggestionCard.tsx # Card suggestion de créneau
+│   │   ├── SectorBadge.tsx       # Badge coloré du secteur
+│   │   └── MetricsBar.tsx        # Barre de métriques (km, patients, etc.)
+│   ├── types/                    # Types TypeScript
+│   │   └── models.ts
+│   └── utils/
+│       ├── formatters.ts         # Format dates, distances, durées en français
+│       └── colors.ts             # Palette couleurs secteurs
+│
+└── assets/                       # Images, icônes
+
+=== ÉCRANS À IMPLÉMENTER ===
+
+1. Login (app/(auth)/login.tsx) :
+   - Email + password
+   - Bouton "Se connecter"
+   - Lien "Créer un compte"
+   - Stocke tokens dans expo-secure-store
+   - Redirige vers (tabs) après login
+
+2. Tournée du jour (app/(tabs)/index.tsx) — ÉCRAN PRINCIPAL :
+   - En haut : carte react-native-maps avec :
+     - Marqueurs patients colorés par secteur
+     - Zones secteurs en overlay semi-transparent
+     - Ligne du trajet chronologique
+   - En bas : liste scrollable des RDV du jour ordonnés par heure
+     - Chaque item : heure, nom patient, commune, type soin, badge secteur
+     - Tap → ouvre fiche patient
+   - Barre métriques : nombre patients, km total, temps trajet
+   - Si alerte inefficacité → bandeau discret en bas de la carte
+   - Pull-to-refresh pour recharger
+
+3. Suggestion de créneau (app/(tabs)/suggest.tsx) — KILLER FEATURE :
+   - Formulaire : sélection patient (autocomplete), type soin (dropdown),
+     durée, lieu (domicile/cabinet), jour, préférence (matin/après-midi/peu importe)
+   - Bouton "Trouver un créneau"
+   - Résultats : 3 cards SlotSuggestionCard empilées avec :
+     - Rang (⭐1, 2, 3), horaire, score /100
+     - Détour en km et minutes
+     - Badge secteur, explication en langage naturel
+     - Bouton "Réserver ce créneau" → crée le RDV via l'API
+   - État vide : "Aucun créneau disponible pour ce jour"
+   - Loading state pendant la recherche
+
+4. Liste patients (app/(tabs)/patients/index.tsx) :
+   - Barre de recherche en haut
+   - FlatList avec PatientCard (nom, commune, secteur, protocole actif)
+   - FAB "+" pour ajouter un patient
+   - Tap → navigation vers fiche patient
+
+5. Fiche patient (app/(tabs)/patients/[id].tsx) :
+   - Header : nom, adresse, téléphone (tap to call), badge secteur
+   - Section "Protocole actif" : type soin, fréquence, prochains RDV
+   - Section "Dernière transmission" : date, contenu résumé
+   - Section "Prochains RDV" : liste des 5 prochains
+   - Bouton "Nouveau RDV" → modale création
+
+6. Profil (app/(tabs)/profile.tsx) :
+   - Nom, email, RPPS
+   - Horaires de travail (éditable)
+   - Nom du cabinet
+   - Bouton déconnexion
+
+=== CLIENT API ===
+
+client.ts doit gérer :
+- Base URL configurable (localhost:8000 en dev)
+- Interceptor qui ajoute le Bearer token à chaque requête
+- Interceptor qui catch les 401, tente un refresh token, et retry
+- Si refresh échoue → déconnexion automatique (clear store + redirect login)
+- Timeout de 10 secondes
+
+=== AUTH FLOW ===
+
+authStore.ts (Zustand) :
+- State : { user, accessToken, refreshToken, isAuthenticated, isLoading }
+- Actions : login(email, password), logout(), refreshTokens()
+- Persist : tokens dans expo-secure-store (pas AsyncStorage, car données sensibles)
+
+_layout.tsx (root) :
+- Au démarrage, vérifie si un token existe dans secure-store
+- Si oui → tente un refresh → si OK, redirige vers (tabs)
+- Si non → redirige vers (auth)/login
+
+=== CARTE TOURNÉE (composant TourneeMap.tsx) ===
+
+Le composant central. Reçoit les données de GET /tournees/today et affiche :
+- MapView centré sur la bounding box de tous les patients
+- Markers avec couleur du secteur et numéro d'ordre (callout avec nom + heure)
+- Polyline entre les stops dans l'ordre chronologique
+- Polygones/cercles semi-transparents pour les secteurs (optionnel MVP, nice to have)
+
+=== GESTION DES ERREURS ===
+
+- Pas de réseau → message "Vérifiez votre connexion" avec bouton retry
+- API erreur 500 → message générique "Une erreur est survenue"
+- Formulaires : validation inline (champs requis, format email)
+- TanStack Query gère le retry automatique (3 tentatives)
+
+=== TESTS ===
+
+Pas de tests automatisés frontend pour le MVP — le test c'est ta femme qui
+utilise l'app sur son téléphone via Expo Go. Focus sur le fonctionnel.
+
+=== LANCEMENT EN DEV ===
+
+Pour tester sur le téléphone de ta femme :
+1. npx expo start
+2. Scanner le QR code avec Expo Go (Android) ou l'app Caméra (iOS)
+3. L'app se charge en direct, hot reload activé
+```
+
+**✅ Checkpoint 5 :** L'app se lance via `npx expo start`. Sur ton téléphone (Expo Go), tu vois l'écran de login. Après login, l'onglet Tournée affiche la carte avec les patients du jour. L'onglet Suggestion permet de chercher un créneau et affiche les résultats.
+
+---
+
+## PROMPT 6 — FRONTEND WEB (React + Vite)
+
+```
+Consulte docs/architecture-frontend.md et docs/architecture-update-tournees.md.
+
+On crée le dashboard web MVP avec React + Vite + Tailwind + shadcn/ui.
+
+=== SETUP PROJET ===
+
+Initialise un projet dans le dossier frontend-web/ :
+  npm create vite@latest . -- --template react-ts
+
+Installe les dépendances :
+- tailwindcss, @tailwindcss/vite (v4)
+- @tanstack/react-query
+- zustand
+- react-router-dom (v7)
+- axios
+- recharts
+- leaflet + react-leaflet + @types/leaflet
+- date-fns
+- lucide-react (icônes)
+
+Setup shadcn/ui :
+- npx shadcn@latest init
+- Ajouter les composants : button, input, card, table, dialog, dropdown-menu,
+  tabs, badge, select, label, toast, separator, sheet
+
+Configuration :
+- Tailwind configuré avec les couleurs du thème IDEL (#2563EB primary)
+- Vite proxy : /api → http://localhost:8000 (pour éviter CORS en dev)
+- Alias @ → src/
+
+=== STRUCTURE DES DOSSIERS ===
+
+frontend-web/
+├── src/
+│   ├── main.tsx
+│   ├── App.tsx                    # Router + providers
+│   │
+│   ├── api/                       # Client API (même structure que mobile)
+│   │   ├── client.ts
+│   │   ├── auth.ts
+│   │   ├── patients.ts
+│   │   ├── appointments.ts
+│   │   ├── slots.ts
+│   │   ├── tournees.ts
+│   │   └── sectors.ts
+│   │
+│   ├── hooks/                     # Custom hooks (react-query wrappers)
+│   │   ├── useAuth.ts
+│   │   ├── useTournee.ts
+│   │   ├── usePatients.ts
+│   │   ├── useAppointments.ts
+│   │   ├── useSectors.ts
+│   │   └── useSlotSuggestion.ts
+│   │
+│   ├── stores/
+│   │   └── authStore.ts           # Zustand (tokens dans localStorage en dev)
+│   │
+│   ├── types/
+│   │   └── models.ts              # Types TS identiques au mobile
+│   │
+│   ├── pages/                     # Pages (une par route)
+│   │   ├── LoginPage.tsx
+│   │   ├── DashboardPage.tsx
+│   │   ├── AgendaPage.tsx
+│   │   ├── PatientsPage.tsx
+│   │   ├── PatientDetailPage.tsx
+│   │   └── SectorsPage.tsx
+│   │
+│   ├── components/                # Composants réutilisables
+│   │   ├── layout/
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── Header.tsx
+│   │   │   └── AppLayout.tsx      # Sidebar + Header + content
+│   │   ├── dashboard/
+│   │   │   ├── MetricCard.tsx     # Card avec chiffre + label + icône
+│   │   │   ├── TodaySchedule.tsx  # Liste RDV du jour
+│   │   │   ├── WeekChart.tsx      # Recharts : km/jour sur 7j
+│   │   │   └── TourneeMapWeb.tsx  # Carte Leaflet de la tournée
+│   │   ├── patients/
+│   │   │   ├── PatientTable.tsx   # Table avec tri, recherche, pagination
+│   │   │   ├── PatientForm.tsx    # Formulaire création/édition (Dialog)
+│   │   │   └── PatientDetail.tsx  # Détail avec protocoles et RDV
+│   │   ├── agenda/
+│   │   │   ├── WeekView.tsx       # Grille semaine type Google Calendar
+│   │   │   ├── DayColumn.tsx      # Colonne d'un jour
+│   │   │   └── AppointmentBlock.tsx # Bloc RDV coloré par secteur
+│   │   ├── sectors/
+│   │   │   ├── SectorMap.tsx      # Carte Leaflet avec zones colorées
+│   │   │   ├── SectorList.tsx     # Liste des secteurs (sidebar carte)
+│   │   │   └── SectorForm.tsx     # Dialog création/édition secteur
+│   │   └── shared/
+│   │       ├── SectorBadge.tsx
+│   │       ├── LoadingSpinner.tsx
+│   │       └── EmptyState.tsx
+│   │
+│   └── utils/
+│       ├── formatters.ts
+│       └── colors.ts
+│
+├── public/
+├── index.html
+├── vite.config.ts
+├── tailwind.config.ts
+├── tsconfig.json
+└── package.json
+
+=== PAGES À IMPLÉMENTER ===
+
+1. LoginPage :
+   - Centré sur la page, card avec logo + formulaire email/password
+   - Bouton connexion, lien création compte
+   - Stocke tokens, redirige vers dashboard
+
+2. DashboardPage (page d'accueil après login) :
+   - 4 MetricCards en ligne : patients du jour, km trajet, temps trajet, temps soins
+   - Carte Leaflet (TourneeMapWeb) : tournée du jour avec secteurs
+   - Liste "Prochains RDV" (5 prochains, scrollable)
+   - Graphique Recharts : km parcourus par jour sur les 7 derniers jours
+   - Si inefficacité détectée → alerte discrète sous la carte
+
+3. AgendaPage :
+   - Vue semaine (lundi-samedi) avec grille horaire (7h-19h)
+   - Blocs colorés par secteur pour chaque RDV
+   - Navigation semaine précédente/suivante
+   - Clic sur créneau vide → ouvre Dialog suggestion de créneau
+   - Clic sur un RDV → Dialog détail (modifier, annuler)
+   - Sélecteur d'IDEL si cabinet multi-membres
+
+4. PatientsPage :
+   - Table shadcn avec colonnes : nom, commune, secteur (badge couleur), protocole, statut
+   - Recherche en haut (filtre instantané)
+   - Filtres : par secteur (dropdown), par statut (actif/archivé)
+   - Pagination
+   - Bouton "Ajouter" → Dialog PatientForm
+   - Clic ligne → PatientDetailPage
+
+5. PatientDetailPage :
+   - Header avec nom, adresse, téléphone, email, badge secteur
+   - Onglets : "Protocoles", "RDV à venir", "Transmissions", "Infos"
+   - Boutons : "Modifier", "Archiver", "Nouveau RDV"
+
+6. SectorsPage :
+   - Layout 60/40 : carte Leaflet à gauche, liste secteurs à droite
+   - Sur la carte : zones colorées semi-transparentes par secteur, marqueurs patients
+   - Liste : cards par secteur avec nom, communes, nombre de patients, couleur
+   - Bouton "Ajouter secteur" → Dialog formulaire
+   - Clic "Modifier" sur un secteur → Dialog édition
+   - Suppression avec confirmation
+
+=== CARTE LEAFLET (composant TourneeMapWeb.tsx) ===
+
+Utilise react-leaflet avec tiles OpenStreetMap :
+- TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+- Markers avec icônes personnalisées (numéro + couleur secteur)
+- Polyline pour le trajet chronologique
+- Popup sur chaque marker : nom patient, heure, type soin
+- Bounds automatiques pour cadrer tous les patients
+
+=== ROUTING (react-router-dom) ===
+
+<Routes>
+  <Route path="/login" element={<LoginPage />} />
+  <Route element={<ProtectedRoute />}>    {/* Vérifie auth */}
+    <Route element={<AppLayout />}>       {/* Sidebar + Header */}
+      <Route path="/" element={<DashboardPage />} />
+      <Route path="/agenda" element={<AgendaPage />} />
+      <Route path="/patients" element={<PatientsPage />} />
+      <Route path="/patients/:id" element={<PatientDetailPage />} />
+      <Route path="/sectors" element={<SectorsPage />} />
+    </Route>
+  </Route>
+</Routes>
+
+ProtectedRoute : vérifie que le user est authentifié (token valide dans store).
+Si non → redirect vers /login.
+
+=== RESPONSIVE ===
+
+Le dashboard est prévu pour desktop (écran large).
+- Sidebar collapse en mode tablette (icônes seulement)
+- Pas de support mobile pour le web (c'est le rôle de l'app native)
+- Min-width recommandé : 1024px
+
+=== TESTS ===
+
+Pas de tests automatisés pour le MVP web. Test manuel en navigateur.
+Focus sur Chrome (desktop) — support Firefox/Safari en bonus.
+
+=== LANCEMENT EN DEV ===
+
+cd frontend-web
+npm install
+npm run dev
+# → http://localhost:5173
+# Le proxy Vite redirige /api vers le backend FastAPI sur :8000
+```
+
+**✅ Checkpoint 6 :** Le dashboard se lance sur http://localhost:5173. Après login, tu vois le dashboard avec les 4 métriques, la carte de la tournée, et la liste des prochains RDV. La page Patients affiche la table avec recherche. La page Secteurs affiche la carte avec les zones colorées.
+
+---
+
 ## RÉSUMÉ DE LA SÉQUENCE
 
 ```
@@ -707,9 +1098,11 @@ Prompt 1 : Domain (1-2h)           → Entités, règles, tests unitaires
 Prompt 2 : Persistence (2-3h)      → SQLAlchemy, chiffrement, migrations
 Prompt 3 : API (2-3h)              → FastAPI, auth, CRUD, tests API
 Prompt 4 : Tournées (2-3h)         → Suggestion créneaux, secteurs, démo carte
+Prompt 5 : Mobile (3-4h)           → React Native + Expo, carte, suggestion
+Prompt 6 : Web (3-4h)              → React + Vite + Tailwind, dashboard, agenda
 
-Total estimé : 1-2 jours de travail
-Résultat : backend fonctionnel + démo visuelle de la killer feature
+Total estimé : 2-3 jours de travail
+Résultat : backend fonctionnel + app mobile + dashboard web
 ```
 
 Après chaque prompt, prends le temps de vérifier le checkpoint.

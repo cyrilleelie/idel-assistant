@@ -42,6 +42,7 @@ _ALL_TABLES = [
     "appointments",
     "care_protocols",
     "patients",
+    "sectors",
     "care_type_catalog",
     "cabinet_members",
     "users",

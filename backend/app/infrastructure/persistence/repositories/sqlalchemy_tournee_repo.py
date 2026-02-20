@@ -28,12 +28,9 @@ class SQLAlchemyTourneeRepo(TourneeRepository):
             end_location_lat=(model.end_location or {}).get("lat"),
             end_location_lon=(model.end_location or {}).get("lon"),
             total_distance_km=model.total_distance_km,
-            total_duration_hours=model.total_duration_hours,
-            savings_km=model.savings_km,
-            savings_minutes=model.savings_minutes,
+            total_duration_minutes=model.total_duration_minutes,
+            travel_time_minutes=model.travel_time_minutes,
             num_stops=model.num_stops,
-            optimization_params=model.optimization_params or {},
-            optimized_at=model.optimized_at,
             started_at=model.started_at,
             completed_at=model.completed_at,
             created_at=model.created_at,
@@ -96,12 +93,9 @@ class SQLAlchemyTourneeRepo(TourneeRepository):
             if tournee.end_location_lat
             else None,
             total_distance_km=tournee.total_distance_km,
-            total_duration_hours=tournee.total_duration_hours,
-            savings_km=tournee.savings_km,
-            savings_minutes=tournee.savings_minutes,
+            total_duration_minutes=tournee.total_duration_minutes,
+            travel_time_minutes=tournee.travel_time_minutes,
             num_stops=tournee.num_stops,
-            optimization_params=tournee.optimization_params,
-            optimized_at=tournee.optimized_at,
         )
         self._session.add(model)
 
@@ -159,19 +153,19 @@ class SQLAlchemyTourneeRepo(TourneeRepository):
         result = await self._session.execute(
             select(
                 sqlfunc.count(TourneeModel.id).label("num_tournees"),
-                sqlfunc.coalesce(sqlfunc.sum(TourneeModel.savings_km), 0).label("total_km_saved"),
-                sqlfunc.coalesce(sqlfunc.sum(TourneeModel.savings_minutes), 0).label("total_minutes_saved"),
+                sqlfunc.coalesce(sqlfunc.sum(TourneeModel.total_distance_km), 0).label("total_distance_km"),
+                sqlfunc.coalesce(sqlfunc.sum(TourneeModel.travel_time_minutes), 0).label("total_travel_minutes"),
                 sqlfunc.coalesce(sqlfunc.avg(TourneeModel.num_stops), 0).label("avg_patients_per_day"),
             ).where(
                 TourneeModel.cabinet_id == cabinet_id,
                 TourneeModel.tournee_date.between(from_date, to_date),
-                TourneeModel.status.in_(["optimized", "in_progress", "completed"]),
+                TourneeModel.status.in_(["planned", "in_progress", "completed"]),
             )
         )
         row = result.one()
         return {
             "num_tournees": row.num_tournees,
-            "total_km_saved": float(row.total_km_saved),
-            "total_minutes_saved": float(row.total_minutes_saved),
+            "total_distance_km": float(row.total_distance_km),
+            "total_travel_minutes": float(row.total_travel_minutes),
             "avg_patients_per_day": float(row.avg_patients_per_day),
         }

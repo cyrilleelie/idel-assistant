@@ -14,6 +14,9 @@ class Patient:
     address: str = ""
     lat: float | None = None
     lon: float | None = None
+    sector_id: UUID | None = None
+    postal_code: str = ""
+    city: str = ""
     pathologies: list[str] = field(default_factory=list)
     preferred_time_slot: str = ""  # morning | afternoon | evening
     care_duration_default: int = 30

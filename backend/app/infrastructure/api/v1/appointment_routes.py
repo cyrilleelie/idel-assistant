@@ -40,6 +40,9 @@ def _entity_to_response(appt: Appointment) -> AppointmentResponse:
         scheduled_at=appt.scheduled_at,
         duration_minutes=appt.duration_minutes,
         care_type=appt.care_type,
+        location_type=appt.location_type,
+        time_window_start=appt.time_window_start,
+        time_window_end=appt.time_window_end,
         care_protocol_id=str(appt.care_protocol_id) if appt.care_protocol_id else None,
         status=appt.status,
         cancellation_reason=appt.cancellation_reason,
@@ -134,6 +137,9 @@ async def create_appointment(
         scheduled_at=body.scheduled_at,
         duration_minutes=body.duration_minutes,
         care_type=body.care_type,
+        location_type=body.location_type,
+        time_window_start=body.time_window_start,
+        time_window_end=body.time_window_end,
         care_protocol_id=body.care_protocol_id,
     )
     appointment = await repo.create(appointment)

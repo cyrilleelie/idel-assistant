@@ -11,6 +11,9 @@ class Appointment:
     scheduled_at: datetime.datetime
     duration_minutes: int
     care_type: str
+    location_type: str = "home"  # home | office | hospital
+    time_window_start: datetime.time | None = None
+    time_window_end: datetime.time | None = None
     care_protocol_id: UUID | None = None
     status: str = "scheduled"  # scheduled | in_progress | completed | canceled | no_show
     cancellation_reason: str = ""

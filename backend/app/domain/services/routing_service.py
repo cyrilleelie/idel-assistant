@@ -17,3 +17,12 @@ class RoutingService(ABC):
     ) -> list[list[float]]:
         """Retourne matrice de durees en secondes entre tous les points."""
         ...
+
+    @abstractmethod
+    async def get_distance(
+        self,
+        origin: tuple[float, float],
+        destination: tuple[float, float],
+    ) -> tuple[float, float]:
+        """Retourne (distance_km, duration_minutes) entre deux points."""
+        ...

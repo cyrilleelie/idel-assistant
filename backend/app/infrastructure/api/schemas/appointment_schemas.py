@@ -11,6 +11,9 @@ class AppointmentCreate(BaseModel):
     scheduled_at: datetime.datetime
     duration_minutes: int = Field(ge=5, le=240)
     care_type: str = Field(min_length=1, max_length=50)
+    location_type: str = Field(default="home", pattern=r"^(home|office|hospital)$")
+    time_window_start: datetime.time | None = None
+    time_window_end: datetime.time | None = None
     care_protocol_id: UUID | None = None
     idel_id: UUID | None = None
 
@@ -33,6 +36,9 @@ class AppointmentResponse(BaseModel):
     scheduled_at: datetime.datetime
     duration_minutes: int
     care_type: str
+    location_type: str = "home"
+    time_window_start: datetime.time | None = None
+    time_window_end: datetime.time | None = None
     care_protocol_id: str | None = None
     status: str
     cancellation_reason: str = ""

@@ -485,3 +485,113 @@ Liste ce qui manque mais est acceptable pour un MVP :
 Donne un verdict global : PRÊT POUR DEMO / CORRECTIONS NÉCESSAIRES / PROBLÈMES BLOQUANTS
 Avec la liste ordonnée des corrections par priorité.
 ```
+
+---
+
+## REVIEW 5 — Frontend mobile (React Native + Expo)
+
+```
+Tu es un développeur React Native senior et UX designer spécialisé en apps terrain.
+Audite l'application mobile qu'on vient de générer.
+
+Consulte docs/architecture-frontend.md pour les spécifications.
+
+=== UTILISABILITÉ TERRAIN ===
+Le contexte d'usage est critique : une infirmière entre deux patients,
+debout sur le palier, avec une main occupée et 2 minutes devant elle.
+
+- [ ] Les boutons et zones tactiles font au minimum 44x44 px (recommandation Apple)
+- [ ] Le texte est lisible sans plisser les yeux (16px minimum pour le body)
+- [ ] L'écran principal (tournée) affiche l'info essentielle SANS scroll
+- [ ] Le nombre de taps pour les actions fréquentes est minimal :
+  - Voir la tournée du jour : 0 tap (écran d'accueil)
+  - Chercher un créneau : 1 tap (onglet Suggestion)
+  - Voir un patient : 2 taps (onglet Patients → tap patient)
+- [ ] Le loading est rapide (<2s) ou montre un skeleton/spinner
+- [ ] Pull-to-refresh fonctionne sur les listes
+
+=== NAVIGATION ===
+- [ ] La tab bar a 4 onglets max (Tournée, Suggestion, Patients, Profil)
+- [ ] Les icônes des tabs sont claires et distinctes
+- [ ] Le retour arrière fonctionne correctement (hardware back sur Android)
+- [ ] Les modales se ferment en swipe down ou bouton X
+
+=== SUGGESTION DE CRÉNEAUX (écran critique) ===
+- [ ] Le formulaire est simple : patient, type soin, durée, lieu, jour, préférence
+- [ ] L'autocomplete patient fonctionne (recherche par nom)
+- [ ] Les résultats sont clairs : score, horaire, détour, explication
+- [ ] Le bouton "Réserver" crée bien le RDV et confirme à l'utilisateur
+- [ ] Si aucun créneau → message explicite, pas un écran vide
+
+=== CARTE ===
+- [ ] La carte se charge en <3s
+- [ ] Les marqueurs sont visibles et distinguables (couleurs + numéros)
+- [ ] Le zoom par défaut montre tous les patients du jour
+- [ ] Tap sur un marqueur → popup avec nom patient et heure
+
+=== AUTH ===
+- [ ] Les tokens sont dans expo-secure-store (PAS AsyncStorage)
+- [ ] Le refresh token fonctionne automatiquement
+- [ ] Déconnexion → retour à login, tokens supprimés
+- [ ] L'app au démarrage vérifie le token et redirige correctement
+
+=== QUALITÉ CODE ===
+- [ ] Pas de any TypeScript (ou très peu, justifiés)
+- [ ] Les hooks react-query ont des queryKey cohérents
+- [ ] Les erreurs API sont gérées (état erreur affiché à l'utilisateur)
+- [ ] Pas de console.log en production
+- [ ] Les composants sont raisonnablement découpés (pas de fichier de 500 lignes)
+
+Pour chaque problème, donne sévérité et correction.
+```
+
+---
+
+## REVIEW 6 — Frontend web (React + Vite)
+
+```
+Tu es un développeur frontend senior spécialisé en dashboards React.
+Audite le dashboard web qu'on vient de générer.
+
+Consulte docs/architecture-frontend.md pour les spécifications.
+
+=== FONCTIONNEL ===
+- [ ] Le login fonctionne et redirige vers le dashboard
+- [ ] Le dashboard affiche les 4 métriques et la carte
+- [ ] La table patients a recherche, filtres, pagination
+- [ ] L'agenda semaine affiche les RDV en blocs colorés par secteur
+- [ ] La page secteurs affiche la carte avec zones et la liste
+- [ ] La navigation sidebar fonctionne sur toutes les pages
+
+=== CARTE LEAFLET ===
+- [ ] Les tiles OpenStreetMap se chargent correctement
+- [ ] Les marqueurs patients sont colorés par secteur
+- [ ] Le trajet chronologique est affiché en polyline
+- [ ] Les popups fonctionnent au clic
+- [ ] La carte s'adapte automatiquement pour montrer tous les points (fitBounds)
+- [ ] Pas d'erreur dans la console liée à Leaflet
+
+=== UI/UX ===
+- [ ] Le layout sidebar + content est propre et aligné
+- [ ] Les couleurs correspondent au thème défini (#2563EB primary)
+- [ ] Les tables sont lisibles avec suffisamment d'espace
+- [ ] Les graphiques Recharts sont lisibles et légendés
+- [ ] Les dialogs/modales fonctionnent (ouvrir, fermer, valider)
+- [ ] Les états de chargement sont gérés (spinner ou skeleton)
+- [ ] Les états vides sont gérés ("Aucun patient" avec bouton d'action)
+
+=== SÉCURITÉ ===
+- [ ] Les tokens sont gérés correctement (pas en clair dans le code)
+- [ ] Les routes protégées redirigent vers /login si non authentifié
+- [ ] Le refresh token fonctionne
+- [ ] Le proxy Vite est configuré pour /api → backend
+
+=== QUALITÉ CODE ===
+- [ ] TypeScript strict (pas de any injustifiés)
+- [ ] Les composants shadcn/ui sont utilisés correctement
+- [ ] Les hooks react-query sont cohérents
+- [ ] Le code est raisonnablement structuré par feature
+- [ ] Les imports sont propres (pas de chemins relatifs profonds, utilise @/)
+
+Pour chaque problème, donne sévérité et correction.
+```

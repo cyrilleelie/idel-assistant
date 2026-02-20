@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    
+        <script>
+            L_NO_TOUCH = false;
+            L_DISABLE_3D = false;
+        </script>
+    
+    <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
+    <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_b5e8abd6c84ef538a00f39d48fabe602 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_b5e8abd6c84ef538a00f39d48fabe602" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_b5e8abd6c84ef538a00f39d48fabe602 = L.map(
+                "map_b5e8abd6c84ef538a00f39d48fabe602",
+                {
+                    center: [47.285, -1.58],
+                    crs: L.CRS.EPSG3857,
+                    zoom: 12,
+                    zoomControl: true,
+                    preferCanvas: false,
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_94f6c18490a177fe648756f97e5f7331 = L.tileLayer(
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {"attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors", "detectRetina": false, "maxNativeZoom": 19, "maxZoom": 19, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+            );
+        
+    
+            tile_layer_94f6c18490a177fe648756f97e5f7331.addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+            var circle_marker_5c6952572ec9198fe776b3b6ece654b0 = L.circleMarker(
+                [47.2814, -1.5906],
+                {"bubblingMouseEvents": true, "color": "#10B981", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#10B981", "fillOpacity": 0.7, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 8, "stroke": true, "weight": 3}
+            ).addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+        var popup_8fbcdea2bb62c80d5426624c2d2c622b = L.popup({"maxWidth": "100%"});
+
+        
+            
+                var html_4ae689313d2e95ca4da0c8fc062af573 = $(`<div id="html_4ae689313d2e95ca4da0c8fc062af573" style="width: 100.0%; height: 100.0%;">Marie Dupont<br>08:00<br>pansement</div>`)[0];
+                popup_8fbcdea2bb62c80d5426624c2d2c622b.setContent(html_4ae689313d2e95ca4da0c8fc062af573);
+            
+        
+
+        circle_marker_5c6952572ec9198fe776b3b6ece654b0.bindPopup(popup_8fbcdea2bb62c80d5426624c2d2c622b)
+        ;
+
+        
+    
+    
+            var circle_marker_94fcb9facf6afdcb1de11d9fd9fc5113 = L.circleMarker(
+                [47.2966, -1.6383],
+                {"bubblingMouseEvents": true, "color": "#EF4444", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#EF4444", "fillOpacity": 0.7, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 8, "stroke": true, "weight": 3}
+            ).addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+        var popup_f4499effb966d667c775a859a503a2d7 = L.popup({"maxWidth": "100%"});
+
+        
+            
+                var html_8e0ab31356649fc9e85b5ebb99cab1a6 = $(`<div id="html_8e0ab31356649fc9e85b5ebb99cab1a6" style="width: 100.0%; height: 100.0%;">Jean Martin<br>09:00<br>injection</div>`)[0];
+                popup_f4499effb966d667c775a859a503a2d7.setContent(html_8e0ab31356649fc9e85b5ebb99cab1a6);
+            
+        
+
+        circle_marker_94fcb9facf6afdcb1de11d9fd9fc5113.bindPopup(popup_f4499effb966d667c775a859a503a2d7)
+        ;
+
+        
+    
+    
+            var circle_marker_a9e949a51e668322ebf9db601a22f9fb = L.circleMarker(
+                [47.3, -1.4933],
+                {"bubblingMouseEvents": true, "color": "#3B82F6", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#3B82F6", "fillOpacity": 0.7, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 8, "stroke": true, "weight": 3}
+            ).addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+        var popup_52318e9fc6a74f89b5f52a5a7ec0ff47 = L.popup({"maxWidth": "100%"});
+
+        
+            
+                var html_a0a8fe513a2cb0a85fb048ce150157bf = $(`<div id="html_a0a8fe513a2cb0a85fb048ce150157bf" style="width: 100.0%; height: 100.0%;">Pierre Durand<br>10:30<br>prise_sang</div>`)[0];
+                popup_52318e9fc6a74f89b5f52a5a7ec0ff47.setContent(html_a0a8fe513a2cb0a85fb048ce150157bf);
+            
+        
+
+        circle_marker_a9e949a51e668322ebf9db601a22f9fb.bindPopup(popup_52318e9fc6a74f89b5f52a5a7ec0ff47)
+        ;
+
+        
+    
+    
+            var circle_marker_7cbff6a86f9dad21a117c3e7d3cd1dcc = L.circleMarker(
+                [47.27, -1.56],
+                {"bubblingMouseEvents": true, "color": "#10B981", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#10B981", "fillOpacity": 0.7, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 8, "stroke": true, "weight": 3}
+            ).addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+        var popup_9c6fd0d705fe43e5ff89462b14f976d5 = L.popup({"maxWidth": "100%"});
+
+        
+            
+                var html_b764492ada252cbfdda122e77f0e1e11 = $(`<div id="html_b764492ada252cbfdda122e77f0e1e11" style="width: 100.0%; height: 100.0%;">Sophie Leroy<br>13:30<br>pansement</div>`)[0];
+                popup_9c6fd0d705fe43e5ff89462b14f976d5.setContent(html_b764492ada252cbfdda122e77f0e1e11);
+            
+        
+
+        circle_marker_7cbff6a86f9dad21a117c3e7d3cd1dcc.bindPopup(popup_9c6fd0d705fe43e5ff89462b14f976d5)
+        ;
+
+        
+    
+    
+            var circle_marker_37532564e74771b2153e5e880f842652 = L.circleMarker(
+                [47.31, -1.62],
+                {"bubblingMouseEvents": true, "color": "#EF4444", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#EF4444", "fillOpacity": 0.7, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 8, "stroke": true, "weight": 3}
+            ).addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+        var popup_b0289db12c313811472b2367e840c305 = L.popup({"maxWidth": "100%"});
+
+        
+            
+                var html_633d11f02a7d83452cce84633852f43f = $(`<div id="html_633d11f02a7d83452cce84633852f43f" style="width: 100.0%; height: 100.0%;">Luc Bernard<br>14:30<br>perfusion</div>`)[0];
+                popup_b0289db12c313811472b2367e840c305.setContent(html_633d11f02a7d83452cce84633852f43f);
+            
+        
+
+        circle_marker_37532564e74771b2153e5e880f842652.bindPopup(popup_b0289db12c313811472b2367e840c305)
+        ;
+
+        
+    
+    
+            var circle_marker_cfba8882431138abfc23b8f07700aae4 = L.circleMarker(
+                [47.285, -1.52],
+                {"bubblingMouseEvents": true, "color": "#3B82F6", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#3B82F6", "fillOpacity": 0.7, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 8, "stroke": true, "weight": 3}
+            ).addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+        var popup_7ec709452ac6663bd96acae2eb8c8d08 = L.popup({"maxWidth": "100%"});
+
+        
+            
+                var html_2a34989de9f3dce35b4509afb330a21d = $(`<div id="html_2a34989de9f3dce35b4509afb330a21d" style="width: 100.0%; height: 100.0%;">Anne Petit<br>15:30<br>injection</div>`)[0];
+                popup_7ec709452ac6663bd96acae2eb8c8d08.setContent(html_2a34989de9f3dce35b4509afb330a21d);
+            
+        
+
+        circle_marker_cfba8882431138abfc23b8f07700aae4.bindPopup(popup_7ec709452ac6663bd96acae2eb8c8d08)
+        ;
+
+        
+    
+    
+            var marker_d2e6114727165126527981e6c3d698f8 = L.marker(
+                [47.2637, -1.673],
+                {}
+            ).addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+            var icon_5f31ac582ed1a01ab86d930eee9510a2 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "star", "iconColor": "white", "markerColor": "red", "prefix": "glyphicon"}
+            );
+            marker_d2e6114727165126527981e6c3d698f8.setIcon(icon_5f31ac582ed1a01ab86d930eee9510a2);
+        
+    
+        var popup_600bbca5e7a05a85c5114ec669700904 = L.popup({"maxWidth": "100%"});
+
+        
+            
+                var html_3e5cc5d85c756c7bbb54caaf412ce2af = $(`<div id="html_3e5cc5d85c756c7bbb54caaf412ce2af" style="width: 100.0%; height: 100.0%;">NOUVEAU : Claire Moreau</div>`)[0];
+                popup_600bbca5e7a05a85c5114ec669700904.setContent(html_3e5cc5d85c756c7bbb54caaf412ce2af);
+            
+        
+
+        marker_d2e6114727165126527981e6c3d698f8.bindPopup(popup_600bbca5e7a05a85c5114ec669700904)
+        ;
+
+        
+    
+    
+            var poly_line_bdb23d2fefe4213ea55f12e2afa594c3 = L.polyline(
+                [[47.3, -1.4933], [47.2637, -1.673]],
+                {"bubblingMouseEvents": true, "color": "#FF6B6B", "dashArray": "5 10", "dashOffset": null, "fill": false, "fillColor": "#FF6B6B", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 1.0, "smoothFactor": 1.0, "stroke": true, "weight": 2}
+            ).addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+        var popup_1abb1d7a2e8760a2067e0390b1520ebd = L.popup({"maxWidth": "100%"});
+
+        
+            
+                var html_87673456d632e9d02d17635974230d5e = $(`<div id="html_87673456d632e9d02d17635974230d5e" style="width: 100.0%; height: 100.0%;">Suggestion #2: 11:29</div>`)[0];
+                popup_1abb1d7a2e8760a2067e0390b1520ebd.setContent(html_87673456d632e9d02d17635974230d5e);
+            
+        
+
+        poly_line_bdb23d2fefe4213ea55f12e2afa594c3.bindPopup(popup_1abb1d7a2e8760a2067e0390b1520ebd)
+        ;
+
+        
+    
+    
+            var poly_line_802b16b8dc634b1cafd0f06da6112d40 = L.polyline(
+                [[47.285, -1.52], [47.2637, -1.673]],
+                {"bubblingMouseEvents": true, "color": "#FF6B6B", "dashArray": "5 10", "dashOffset": null, "fill": false, "fillColor": "#FF6B6B", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 1.0, "smoothFactor": 1.0, "stroke": true, "weight": 2}
+            ).addTo(map_b5e8abd6c84ef538a00f39d48fabe602);
+        
+    
+        var popup_59dfda327982ca6da15a34dc0e2638fa = L.popup({"maxWidth": "100%"});
+
+        
+            
+                var html_89e664e8ec69b9d6ef10eb2623fd8dc3 = $(`<div id="html_89e664e8ec69b9d6ef10eb2623fd8dc3" style="width: 100.0%; height: 100.0%;">Suggestion #3: 16:24</div>`)[0];
+                popup_59dfda327982ca6da15a34dc0e2638fa.setContent(html_89e664e8ec69b9d6ef10eb2623fd8dc3);
+            
+        
+
+        poly_line_802b16b8dc634b1cafd0f06da6112d40.bindPopup(popup_59dfda327982ca6da15a34dc0e2638fa)
+        ;
+
+        
+    
+</script>
+</html>

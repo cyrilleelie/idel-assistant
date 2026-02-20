@@ -17,11 +17,13 @@ from app.infrastructure.persistence.repositories import (
     SQLAlchemyAppointmentRepo,
     SQLAlchemyCabinetRepo,
     SQLAlchemyPatientRepo,
+    SQLAlchemySectorRepo,
     SQLAlchemyUserRepo,
 )
 from app.infrastructure.persistence.repositories.sqlalchemy_care_protocol_repo import (
     SQLAlchemyCareProtocolRepo,
 )
+from app.infrastructure.services.fake_routing_service import FakeRoutingService
 from app.infrastructure.security.jwt_handler import TokenError, verify_token
 from app.infrastructure.security.key_manager import KeyManager
 
@@ -163,3 +165,13 @@ def get_care_protocol_repository(
     db: AsyncSession = Depends(get_db),
 ) -> SQLAlchemyCareProtocolRepo:
     return SQLAlchemyCareProtocolRepo(db)
+
+
+def get_sector_repository(
+    db: AsyncSession = Depends(get_db),
+) -> SQLAlchemySectorRepo:
+    return SQLAlchemySectorRepo(db)
+
+
+def get_routing_service() -> FakeRoutingService:
+    return FakeRoutingService()

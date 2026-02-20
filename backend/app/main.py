@@ -9,7 +9,15 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.infrastructure.api.middleware import AuditMiddleware
-from app.infrastructure.api.v1 import auth_routes, patient_routes, appointment_routes, care_protocol_routes
+from app.infrastructure.api.v1 import (
+    appointment_routes,
+    auth_routes,
+    care_protocol_routes,
+    patient_routes,
+    sector_routes,
+    slot_routes,
+    tournee_routes,
+)
 from app.infrastructure.persistence.database import engine
 
 logger = logging.getLogger(__name__)
@@ -67,6 +75,9 @@ app.include_router(auth_routes.router, prefix="/api/v1")
 app.include_router(patient_routes.router, prefix="/api/v1")
 app.include_router(appointment_routes.router, prefix="/api/v1")
 app.include_router(care_protocol_routes.router, prefix="/api/v1")
+app.include_router(sector_routes.router, prefix="/api/v1")
+app.include_router(slot_routes.router, prefix="/api/v1")
+app.include_router(tournee_routes.router, prefix="/api/v1")
 
 
 @app.get("/health")

@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String, func
+from sqlalchemy import ForeignKey, Integer, String, Time, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,6 +16,9 @@ class AppointmentModel(Base):
     scheduled_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, index=True)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     care_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    location_type: Mapped[str] = mapped_column(String(20), nullable=False, server_default="home")
+    time_window_start = mapped_column(Time, nullable=True)
+    time_window_end = mapped_column(Time, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="scheduled", index=True)
     cancellation_reason: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     canceled_at = mapped_column(TIMESTAMP(timezone=True), nullable=True)

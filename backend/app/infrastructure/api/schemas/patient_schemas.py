@@ -1,6 +1,7 @@
 """Schemas Pydantic pour les patients."""
 
 import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +17,9 @@ class PatientCreate(BaseModel):
     preferred_time_slot: str = Field(default="", pattern=r"^(morning|afternoon|evening|)$")
     care_duration_default: int = Field(default=30, ge=5, le=240)
     notes: str = Field(default="", max_length=5000)
+    sector_id: UUID | None = None
+    postal_code: str = Field(default="", max_length=10)
+    city: str = Field(default="", max_length=100)
 
 
 class PatientUpdate(BaseModel):
@@ -29,6 +33,9 @@ class PatientUpdate(BaseModel):
     preferred_time_slot: str | None = Field(default=None, pattern=r"^(morning|afternoon|evening|)$")
     care_duration_default: int | None = Field(default=None, ge=5, le=240)
     notes: str | None = Field(default=None, max_length=5000)
+    sector_id: UUID | None = None
+    postal_code: str | None = Field(default=None, max_length=10)
+    city: str | None = Field(default=None, max_length=100)
 
 
 class PatientResponse(BaseModel):
@@ -39,6 +46,9 @@ class PatientResponse(BaseModel):
     address: str = ""
     lat: float | None = None
     lon: float | None = None
+    sector_id: str | None = None
+    postal_code: str = ""
+    city: str = ""
     phone: str = ""
     email: str = ""
     pathologies: list[str] = Field(default_factory=list)

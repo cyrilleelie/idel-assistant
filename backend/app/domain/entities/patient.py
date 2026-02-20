@@ -1,0 +1,26 @@
+import datetime
+from dataclasses import dataclass, field
+from uuid import UUID, uuid4
+
+
+@dataclass
+class Patient:
+    cabinet_id: UUID
+    first_name: str
+    last_name: str
+    birth_date: datetime.date | None = None
+    phone: str = ""
+    email: str = ""
+    address: str = ""
+    lat: float | None = None
+    lon: float | None = None
+    pathologies: list[str] = field(default_factory=list)
+    preferred_time_slot: str = ""  # morning | afternoon | evening
+    care_duration_default: int = 30
+    notes: str = ""
+    status: str = "active"  # active | archived
+    archived_reason: str = ""
+    archived_at: datetime.datetime | None = None
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime.datetime = field(default_factory=lambda: datetime.datetime.now(datetime.UTC))
+    updated_at: datetime.datetime = field(default_factory=lambda: datetime.datetime.now(datetime.UTC))

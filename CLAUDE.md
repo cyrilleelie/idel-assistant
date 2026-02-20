@@ -9,6 +9,7 @@ Application SaaS pour infirmières libérales (IDEL) en France. Combinaison d'IA
 Tous les documents de référence sont dans `docs/` :
 - `docs/architecture.md` — **DOCUMENT PRINCIPAL** : architecture technique, ADR, modèle de données, structure Clean Architecture 3 couches. À lire en priorité.
 - `docs/prompts-claude-code.md` — Prompts séquentiels avec patterns de code attendus et checkpoints de validation.
+- `docs/prompts-review.md` — **Critères de review** détaillés pour chaque phase. À exécuter systématiquement après chaque prompt de génération.
 - `docs/PRD.md` — Product Requirements Document complet (user stories, endpoints API, flows).
 - `docs/cahier-des-charges.md` — Cahier des charges fonctionnel.
 - `docs/etude-faisabilite.md` — Étude de faisabilité technique.
@@ -54,6 +55,24 @@ Infrastructure → Application → Domain
 - Search hash (HMAC-SHA256) pour recherche par nom sans déchiffrer
 - JWT (access + refresh tokens) avec httpOnly cookies en production
 - Conformité RGPD/HDS obligatoire — audit trail sur toutes les opérations
+
+## Workflow de développement
+
+Après chaque phase de génération de code, suivre **obligatoirement** cette séquence :
+
+1. **Lancer les tests** concernés (`uv run pytest tests/unit/ -v`, etc.)
+2. **Lire le prompt de review** correspondant dans `docs/prompts-review.md` :
+   - Review 0 → après setup projet (Prompt 0)
+   - Review 1 → après domain layer (Prompt 1)
+   - Review 2 → après persistence + sécurité (Prompt 2)
+   - Review 3 → après API FastAPI (Prompt 3)
+   - Review 4 → après optimisation tournées (Prompt 4)
+3. **Exécuter la review** soi-même sur le code qui vient d'être généré, en suivant chaque point de contrôle du prompt de review
+4. **Corriger les problèmes CRITIQUE et IMPORTANT** trouvés lors de la review
+5. **Relancer les tests** pour confirmer que les corrections sont bonnes
+6. **Résumer** les findings et corrections à l'utilisateur avant de passer à la phase suivante
+
+Le fichier `docs/prompts-review.md` contient les critères de validation détaillés pour chaque phase. Toujours s'y référer — ne jamais considérer une phase comme terminée sans avoir exécuté la review correspondante.
 
 ## Commandes utiles
 

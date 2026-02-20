@@ -1,4 +1,4 @@
-"""Demo du moteur de suggestion de creneaux.
+"""Demo du moteur de suggestion de creneaux (Marais Poitevin).
 
 Usage: cd backend && uv run python scripts/demo_suggestion.py
 """
@@ -18,91 +18,103 @@ from app.domain.entities.sector import Sector
 from app.domain.rules.slot_suggestion_rules import GapDistances, find_available_slots
 from app.infrastructure.services.fake_routing_service import FakeRoutingService
 
-# --- Donnees de demo (region nantaise) ---
+# --- Donnees de demo (Marais Poitevin, Damvix 85420) ---
 
 CABINET_ID = uuid4()
 IDEL_ID = uuid4()
 
 # 3 secteurs
-sector_nord = Sector(
+sector_damvix = Sector(
     cabinet_id=CABINET_ID,
-    name="Nord / Orvault",
-    postal_codes=["44700", "44240"],
-    communes=["Orvault", "Suce-sur-Erdre"],
-    color="#EF4444",
-)
-sector_est = Sector(
-    cabinet_id=CABINET_ID,
-    name="Est / Carquefou",
-    postal_codes=["44470", "44980"],
-    communes=["Carquefou", "Sainte-Luce-sur-Loire"],
-    color="#3B82F6",
-)
-sector_centre = Sector(
-    cabinet_id=CABINET_ID,
-    name="Centre / Nantes",
-    postal_codes=["44000", "44100", "44200", "44300"],
-    communes=["Nantes"],
+    name="Damvix",
+    postal_codes=["85420"],
+    communes=["Damvix"],
     color="#10B981",
 )
+sector_nord = Sector(
+    cabinet_id=CABINET_ID,
+    name="Nord / Maille",
+    postal_codes=["85420"],
+    communes=["Maille", "Le Coudreau"],
+    color="#3B82F6",
+)
+sector_sud = Sector(
+    cabinet_id=CABINET_ID,
+    name="Sud / Mazeau-Sigismond",
+    postal_codes=["85420"],
+    communes=["Le Mazeau", "Saint-Sigismond"],
+    color="#EF4444",
+)
 
-SECTORS = [sector_nord, sector_est, sector_centre]
+SECTORS = [sector_damvix, sector_nord, sector_sud]
 SECTOR_MAP = {s.id: s.name for s in SECTORS}
 
-# 6 patients avec coordonnees GPS
+# 8 patients avec coordonnees GPS (sous-ensemble representatif)
 patients = [
-    Patient(cabinet_id=CABINET_ID, first_name="Marie", last_name="Dupont",
-            lat=47.2814, lon=-1.5906, sector_id=sector_centre.id,
-            postal_code="44000", city="Nantes"),
-    Patient(cabinet_id=CABINET_ID, first_name="Jean", last_name="Martin",
-            lat=47.2966, lon=-1.6383, sector_id=sector_nord.id,
-            postal_code="44700", city="Orvault"),
-    Patient(cabinet_id=CABINET_ID, first_name="Pierre", last_name="Durand",
-            lat=47.3000, lon=-1.4933, sector_id=sector_est.id,
-            postal_code="44470", city="Carquefou"),
-    Patient(cabinet_id=CABINET_ID, first_name="Sophie", last_name="Leroy",
-            lat=47.2700, lon=-1.5600, sector_id=sector_centre.id,
-            postal_code="44100", city="Nantes"),
-    Patient(cabinet_id=CABINET_ID, first_name="Luc", last_name="Bernard",
-            lat=47.3100, lon=-1.6200, sector_id=sector_nord.id,
-            postal_code="44700", city="Orvault"),
-    Patient(cabinet_id=CABINET_ID, first_name="Anne", last_name="Petit",
-            lat=47.2850, lon=-1.5200, sector_id=sector_est.id,
-            postal_code="44980", city="Sainte-Luce-sur-Loire"),
+    Patient(cabinet_id=CABINET_ID, first_name="Lucienne", last_name="Moreau",
+            lat=46.3145, lon=-0.7110, sector_id=sector_damvix.id,
+            postal_code="85420", city="Damvix"),
+    Patient(cabinet_id=CABINET_ID, first_name="Marcel", last_name="Gauthier",
+            lat=46.3120, lon=-0.7155, sector_id=sector_damvix.id,
+            postal_code="85420", city="Damvix"),
+    Patient(cabinet_id=CABINET_ID, first_name="Yvette", last_name="Robin",
+            lat=46.3160, lon=-0.7098, sector_id=sector_damvix.id,
+            postal_code="85420", city="Damvix"),
+    Patient(cabinet_id=CABINET_ID, first_name="Jeannine", last_name="Bouchet",
+            lat=46.3310, lon=-0.7260, sector_id=sector_nord.id,
+            postal_code="85420", city="Maille"),
+    Patient(cabinet_id=CABINET_ID, first_name="Simone", last_name="Dupuis",
+            lat=46.3325, lon=-0.7230, sector_id=sector_nord.id,
+            postal_code="85420", city="Maille"),
+    Patient(cabinet_id=CABINET_ID, first_name="Odette", last_name="Vrignaud",
+            lat=46.3240, lon=-0.7380, sector_id=sector_nord.id,
+            postal_code="85420", city="Le Coudreau"),
+    Patient(cabinet_id=CABINET_ID, first_name="Henri", last_name="Bardin",
+            lat=46.3130, lon=-0.7180, sector_id=sector_damvix.id,
+            postal_code="85420", city="Damvix"),
+    Patient(cabinet_id=CABINET_ID, first_name="Madeleine", last_name="Girard",
+            lat=46.2980, lon=-0.7510, sector_id=sector_sud.id,
+            postal_code="85420", city="Saint-Sigismond"),
 ]
 
-# RDV planifies (8h00 - 15h30)
+# RDV planifies (7h30 - 15h30)
 appointments = [
     Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[0].id,
-                scheduled_at=datetime.datetime(2026, 2, 20, 8, 0, tzinfo=datetime.UTC),
-                duration_minutes=30, care_type="pansement"),
+                scheduled_at=datetime.datetime(2026, 2, 20, 7, 30, tzinfo=datetime.UTC),
+                duration_minutes=20, care_type="injection_insuline"),
     Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[1].id,
-                scheduled_at=datetime.datetime(2026, 2, 20, 9, 0, tzinfo=datetime.UTC),
-                duration_minutes=45, care_type="injection"),
-    Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[2].id,
-                scheduled_at=datetime.datetime(2026, 2, 20, 10, 30, tzinfo=datetime.UTC),
-                duration_minutes=30, care_type="prise_sang"),
-    Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[3].id,
-                scheduled_at=datetime.datetime(2026, 2, 20, 13, 30, tzinfo=datetime.UTC),
+                scheduled_at=datetime.datetime(2026, 2, 20, 8, 30, tzinfo=datetime.UTC),
                 duration_minutes=30, care_type="pansement"),
+    Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[2].id,
+                scheduled_at=datetime.datetime(2026, 2, 20, 9, 15, tzinfo=datetime.UTC),
+                duration_minutes=30, care_type="soins_hygiene"),
+    Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[3].id,
+                scheduled_at=datetime.datetime(2026, 2, 20, 10, 0, tzinfo=datetime.UTC),
+                duration_minutes=20, care_type="injection_insuline"),
     Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[4].id,
-                scheduled_at=datetime.datetime(2026, 2, 20, 14, 30, tzinfo=datetime.UTC),
-                duration_minutes=45, care_type="perfusion"),
+                scheduled_at=datetime.datetime(2026, 2, 20, 10, 30, tzinfo=datetime.UTC),
+                duration_minutes=45, care_type="pansement"),
     Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[5].id,
+                scheduled_at=datetime.datetime(2026, 2, 20, 11, 30, tzinfo=datetime.UTC),
+                duration_minutes=15, care_type="surveillance_tension"),
+    Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[6].id,
+                scheduled_at=datetime.datetime(2026, 2, 20, 13, 30, tzinfo=datetime.UTC),
+                duration_minutes=45, care_type="perfusion"),
+    Appointment(cabinet_id=CABINET_ID, idel_id=IDEL_ID, patient_id=patients[7].id,
                 scheduled_at=datetime.datetime(2026, 2, 20, 15, 30, tzinfo=datetime.UTC),
-                duration_minutes=30, care_type="injection"),
+                duration_minutes=30, care_type="soins_hygiene"),
 ]
 
-# Nouveau patient a Sautron (nord-ouest de Nantes)
+# Nouveau patient au Mazeau (secteur sud)
 new_patient = Patient(
     cabinet_id=CABINET_ID,
-    first_name="Claire",
-    last_name="Moreau",
-    lat=47.2637,
-    lon=-1.6730,
-    sector_id=sector_nord.id,
-    postal_code="44880",
-    city="Sautron",
+    first_name="Francoise",
+    last_name="Renaud",
+    lat=46.3195,
+    lon=-0.6840,
+    sector_id=sector_sud.id,
+    postal_code="85420",
+    city="Le Mazeau",
     preferred_time_slot="morning",
 )
 
@@ -188,6 +200,7 @@ async def main():
     # Affichage
     print("=" * 60)
     print("DEMO - Moteur de suggestion de creneaux IDEL")
+    print("Region : Marais Poitevin (Damvix, 85420)")
     print("=" * 60)
     print()
     print(f"Nouveau patient : {new_patient.first_name} {new_patient.last_name}")
@@ -202,7 +215,7 @@ async def main():
         sector = SECTOR_MAP.get(p.sector_id, "?")
         print(f"  {appt.scheduled_at.strftime('%H:%M')}-"
               f"{appt.end_at.strftime('%H:%M')} "
-              f"{p.first_name} {p.last_name} ({sector}) - {appt.care_type}")
+              f"{p.first_name} {p.last_name} ({p.city}, {sector}) - {appt.care_type}")
     print()
     print(f"{'='*60}")
     print(f"  {len(suggestions)} suggestion(s) trouvee(s)")
@@ -221,7 +234,7 @@ async def main():
     try:
         import folium
 
-        m = folium.Map(location=[47.285, -1.58], zoom_start=12)
+        m = folium.Map(location=[46.312, -0.720], zoom_start=13)
 
         # Patients existants
         sector_colors = {s.id: s.color for s in SECTORS}
@@ -233,6 +246,7 @@ async def main():
                     location=[p.lat, p.lon],
                     radius=8,
                     popup=f"{p.first_name} {p.last_name}<br>"
+                          f"{p.city}<br>"
                           f"{appt.scheduled_at.strftime('%H:%M')}<br>"
                           f"{appt.care_type}",
                     color=color_hex,
@@ -244,7 +258,8 @@ async def main():
         # Nouveau patient
         folium.Marker(
             location=[new_patient.lat, new_patient.lon],
-            popup=f"NOUVEAU : {new_patient.first_name} {new_patient.last_name}",
+            popup=f"NOUVEAU : {new_patient.first_name} {new_patient.last_name}<br>"
+                  f"{new_patient.city}",
             icon=folium.Icon(color="red", icon="star"),
         ).add_to(m)
 

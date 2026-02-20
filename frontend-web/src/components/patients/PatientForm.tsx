@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import {
   Dialog,
   DialogContent,
@@ -35,21 +35,34 @@ export function PatientForm({
   onSubmit,
   loading,
 }: PatientFormProps) {
-  const [firstName, setFirstName] = useState(patient?.first_name ?? "");
-  const [lastName, setLastName] = useState(patient?.last_name ?? "");
-  const [address, setAddress] = useState(patient?.address ?? "");
-  const [postalCode, setPostalCode] = useState(patient?.postal_code ?? "");
-  const [city, setCity] = useState(patient?.city ?? "");
-  const [phone, setPhone] = useState(patient?.phone ?? "");
-  const [email, setEmail] = useState(patient?.email ?? "");
-  const [sectorId, setSectorId] = useState(patient?.sector_id ?? "");
-  const [preferredTimeSlot, setPreferredTimeSlot] = useState(
-    patient?.preferred_time_slot ?? "morning"
-  );
-  const [careDuration, setCareDuration] = useState(
-    patient?.care_duration_default?.toString() ?? "30"
-  );
-  const [notes, setNotes] = useState(patient?.notes ?? "");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [address, setAddress] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [city, setCity] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [sectorId, setSectorId] = useState("");
+  const [preferredTimeSlot, setPreferredTimeSlot] = useState("morning");
+  const [careDuration, setCareDuration] = useState("30");
+  const [notes, setNotes] = useState("");
+
+  // Reset form fields when dialog opens or patient changes
+  useEffect(() => {
+    if (open) {
+      setFirstName(patient?.first_name ?? "");
+      setLastName(patient?.last_name ?? "");
+      setAddress(patient?.address ?? "");
+      setPostalCode(patient?.postal_code ?? "");
+      setCity(patient?.city ?? "");
+      setPhone(patient?.phone ?? "");
+      setEmail(patient?.email ?? "");
+      setSectorId(patient?.sector_id ?? "");
+      setPreferredTimeSlot(patient?.preferred_time_slot ?? "morning");
+      setCareDuration(patient?.care_duration_default?.toString() ?? "30");
+      setNotes(patient?.notes ?? "");
+    }
+  }, [open, patient]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();

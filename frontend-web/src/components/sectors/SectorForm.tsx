@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import {
   Dialog,
   DialogContent,
@@ -29,16 +29,20 @@ export function SectorForm({
   onSubmit,
   loading,
 }: SectorFormProps) {
-  const [name, setName] = useState(sector?.name ?? "");
-  const [postalCodes, setPostalCodes] = useState(
-    sector?.postal_codes.join(", ") ?? ""
-  );
-  const [communes, setCommunes] = useState(
-    sector?.communes.join(", ") ?? ""
-  );
-  const [color, setColor] = useState(
-    sector?.color ?? getSectorColor(existingCount)
-  );
+  const [name, setName] = useState("");
+  const [postalCodes, setPostalCodes] = useState("");
+  const [communes, setCommunes] = useState("");
+  const [color, setColor] = useState(getSectorColor(0));
+
+  // Reset form fields when dialog opens or sector changes
+  useEffect(() => {
+    if (open) {
+      setName(sector?.name ?? "");
+      setPostalCodes(sector?.postal_codes.join(", ") ?? "");
+      setCommunes(sector?.communes.join(", ") ?? "");
+      setColor(sector?.color ?? getSectorColor(existingCount));
+    }
+  }, [open, sector, existingCount]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();

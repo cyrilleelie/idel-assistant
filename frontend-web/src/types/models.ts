@@ -219,6 +219,10 @@ export interface CareProtocol {
   updated_at: string;
 }
 
+export interface PatientUpdate extends Partial<PatientCreate> {
+  status?: string;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

@@ -12,8 +12,9 @@ class PatientRepository(ABC):
     async def list_by_cabinet(
         self,
         cabinet_id: UUID,
-        status: str = "active",
+        status: str | None = "active",
         search: str | None = None,
+        sector_id: UUID | None = None,
         skip: int = 0,
         limit: int = 50,
     ) -> tuple[list[Patient], int]: ...

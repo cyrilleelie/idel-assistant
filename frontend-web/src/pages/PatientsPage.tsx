@@ -43,7 +43,7 @@ export function PatientsPage() {
     () => ({
       search: debouncedSearch || undefined,
       sector_id: sectorFilter !== "all" ? sectorFilter : undefined,
-      status: statusFilter !== "all" ? statusFilter : undefined,
+      status: statusFilter,
       skip: page * PAGE_SIZE,
       limit: PAGE_SIZE,
     }),
@@ -97,8 +97,7 @@ export function PatientsPage() {
           <SelectContent>
             <SelectItem value="all">Tous</SelectItem>
             <SelectItem value="active">Actif</SelectItem>
-            <SelectItem value="inactive">Inactif</SelectItem>
-            <SelectItem value="archived">Archive</SelectItem>
+            <SelectItem value="archived">Inactif</SelectItem>
           </SelectContent>
         </Select>
         <Button onClick={() => setFormOpen(true)}>

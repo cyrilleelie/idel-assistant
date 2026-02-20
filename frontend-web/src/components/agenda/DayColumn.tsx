@@ -63,6 +63,7 @@ export function DayColumn({
                 ? `${patient.last_name} ${patient.first_name}`
                 : undefined
             }
+            isArchived={patient?.status === "archived"}
             onClick={() => onClickAppointment?.(apt)}
           />
         );

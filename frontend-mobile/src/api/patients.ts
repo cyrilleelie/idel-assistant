@@ -6,7 +6,7 @@ export async function listPatients(params?: {
   skip?: number;
   limit?: number;
 }): Promise<PaginatedResponse<Patient>> {
-  const { data } = await apiClient.get<PaginatedResponse<Patient>>('/patients', { params });
+  const { data } = await apiClient.get<PaginatedResponse<Patient>>('/patients/', { params });
   return data;
 }
 
@@ -16,7 +16,7 @@ export async function getPatient(id: string): Promise<Patient> {
 }
 
 export async function createPatient(payload: PatientCreate): Promise<Patient> {
-  const { data } = await apiClient.post<Patient>('/patients', payload);
+  const { data } = await apiClient.post<Patient>('/patients/', payload);
   return data;
 }
 

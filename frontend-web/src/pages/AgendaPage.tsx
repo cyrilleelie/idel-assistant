@@ -65,7 +65,7 @@ export function AgendaPage() {
   });
 
   // Fetch patients and sectors for name/color display
-  const { data: patientsData, isLoading: patientsLoading } = usePatients({ limit: 100 });
+  const { data: patientsData, isLoading: patientsLoading } = usePatients({ status: "all", limit: 100 });
   const { data: sectorsData } = useSectors();
 
   const isLoading = dayQueries.some((q) => q.isLoading) || patientsLoading;
@@ -173,6 +173,14 @@ export function AgendaPage() {
                     return p
                       ? `${p.last_name} ${p.first_name}`
                       : "Patient inconnu";
+                  })()}
+                  {(() => {
+                    const p = patientsMap.get(selectedAppointment.patient_id);
+                    return p?.status === "archived" ? (
+                      <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">
+                        Inactif
+                      </Badge>
+                    ) : null;
                   })()}
                 </span>
               </div>

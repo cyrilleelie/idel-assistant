@@ -71,7 +71,7 @@ export default function PatientsListScreen() {
         style={styles.fab}
         color="#FFFFFF"
         onPress={() => {
-          // TODO: modal creation patient
+          router.push('/patients/create' as any);
         }}
       />
     </View>

@@ -123,15 +123,20 @@ class SQLAlchemyPatientRepo(PatientRepository):
     async def list_by_cabinet(
         self,
         cabinet_id: UUID,
-        status: str = "active",
+        status: str | None = "active",
         search: str | None = None,
+        sector_id: UUID | None = None,
         skip: int = 0,
         limit: int = 50,
     ) -> tuple[list[Patient], int]:
         query = select(PatientModel).where(
             PatientModel.cabinet_id == cabinet_id,
-            PatientModel.status == status,
         )
+        if status is not None:
+            query = query.where(PatientModel.status == status)
+
+        if sector_id is not None:
+            query = query.where(PatientModel.sector_id == sector_id)
 
         if search:
             search_hash = self._search_hash(search, cabinet_id)

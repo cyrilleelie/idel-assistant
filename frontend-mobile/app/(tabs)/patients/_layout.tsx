@@ -11,6 +11,7 @@ export default function PatientsLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="create" options={{ title: 'Nouveau patient', presentation: 'modal' }} />
       <Stack.Screen name="[id]" options={{ title: 'Patient' }} />
     </Stack>
   );

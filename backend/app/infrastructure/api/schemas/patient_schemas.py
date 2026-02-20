@@ -36,6 +36,7 @@ class PatientUpdate(BaseModel):
     sector_id: UUID | None = None
     postal_code: str | None = Field(default=None, max_length=10)
     city: str | None = Field(default=None, max_length=100)
+    status: str | None = Field(default=None, pattern=r"^(active|archived)$")
 
 
 class PatientResponse(BaseModel):

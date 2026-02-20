@@ -8,7 +8,7 @@ import {
 } from "@/api/patients";
 import { listAppointments } from "@/api/appointments";
 import { listCareProtocols } from "@/api/care-protocols";
-import type { PatientCreate } from "@/types/models";
+import type { PatientCreate, PatientUpdate } from "@/types/models";
 
 export function usePatients(params?: {
   search?: string;
@@ -65,7 +65,7 @@ export function useUpdatePatient() {
       payload,
     }: {
       id: string;
-      payload: Partial<PatientCreate>;
+      payload: PatientUpdate;
     }) => updatePatient(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["patients"] });

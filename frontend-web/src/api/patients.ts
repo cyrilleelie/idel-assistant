@@ -1,5 +1,5 @@
 import apiClient from "./client";
-import type { Patient, PatientCreate, PaginatedResponse } from "@/types/models";
+import type { Patient, PatientCreate, PatientUpdate, PaginatedResponse } from "@/types/models";
 
 export async function listPatients(params?: {
   search?: string;
@@ -27,7 +27,7 @@ export async function createPatient(payload: PatientCreate): Promise<Patient> {
 
 export async function updatePatient(
   id: string,
-  payload: Partial<PatientCreate>
+  payload: PatientUpdate
 ): Promise<Patient> {
   const { data } = await apiClient.patch<Patient>(`/patients/${id}`, payload);
   return data;

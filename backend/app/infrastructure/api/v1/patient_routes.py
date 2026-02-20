@@ -53,6 +53,7 @@ async def list_patients(
     repo: SQLAlchemyPatientRepo = Depends(get_patient_repository),
     search: str | None = Query(default=None, max_length=100),
     status_filter: str = Query(default="active", alias="status"),
+    sector_id: UUID | None = Query(default=None),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
 ):
@@ -60,10 +61,14 @@ async def list_patients(
     request.state.user_id = auth.user_id
     request.state.cabinet_id = auth.cabinet_id
 
+    # "all" means no status filter
+    effective_status = None if status_filter == "all" else status_filter
+
     patients, total = await repo.list_by_cabinet(
         cabinet_id=auth.cabinet_id,
-        status=status_filter,
+        status=effective_status,
         search=search,
+        sector_id=sector_id,
         skip=skip,
         limit=limit,
     )
@@ -131,7 +136,7 @@ async def get_patient(
 PATIENT_UPDATABLE_FIELDS = frozenset({
     "first_name", "last_name", "birth_date", "address", "phone",
     "email", "pathologies", "preferred_time_slot", "care_duration_default", "notes",
-    "sector_id", "postal_code", "city",
+    "sector_id", "postal_code", "city", "status",
 })
 
 
@@ -155,9 +160,24 @@ async def update_patient(
         )
 
     update_data = body.model_dump(exclude_unset=True)
+
+    # Guard: only allow archived -> active transition
+    if "status" in update_data:
+        new_status = update_data["status"]
+        if not (patient.status == "archived" and new_status == "active"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Seule la reactivation (archived -> active) est autorisee",
+            )
+
     for field_name, value in update_data.items():
         if field_name in PATIENT_UPDATABLE_FIELDS:
             setattr(patient, field_name, value)
+
+    # Clear archive fields on reactivation
+    if update_data.get("status") == "active":
+        patient.archived_reason = None
+        patient.archived_at = None
 
     patient = await repo.update(patient)
     return _entity_to_response(patient)

@@ -7,6 +7,7 @@ interface AppointmentBlockProps {
   heightPercent: number;
   color: string;
   patientName?: string;
+  isArchived?: boolean;
   onClick?: () => void;
 }
 
@@ -16,6 +17,7 @@ export function AppointmentBlock({
   heightPercent,
   color,
   patientName,
+  isArchived,
   onClick,
 }: AppointmentBlockProps) {
   return (
@@ -30,8 +32,15 @@ export function AppointmentBlock({
       }}
       onClick={onClick}
     >
-      <p className="truncate font-medium" style={{ color }}>
-        {patientName || appointment.patient_id.slice(0, 8)}
+      <p className="truncate font-medium" style={{ color: isArchived ? "#9ca3af" : color }}>
+        <span className={isArchived ? "italic" : ""}>
+          {patientName || appointment.patient_id.slice(0, 8)}
+        </span>
+        {isArchived && (
+          <span className="ml-1 rounded bg-red-100 px-1 text-[9px] text-red-600 font-normal not-italic">
+            inactif
+          </span>
+        )}
       </p>
       <p className="truncate text-muted-foreground">
         {formatTime(appointment.scheduled_at)} - {appointment.care_type}

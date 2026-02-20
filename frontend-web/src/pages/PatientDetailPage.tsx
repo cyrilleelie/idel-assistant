@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Edit, Archive } from "lucide-react";
+import { ArrowLeft, Edit } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,6 @@ import {
   usePatientAppointments,
   usePatientProtocols,
   useUpdatePatient,
-  useDeletePatient,
 } from "@/hooks/usePatients";
 import { useSectors } from "@/hooks/useSectors";
 import { formatDate, formatTime } from "@/utils/formatters";
@@ -37,7 +36,6 @@ export function PatientDetailPage() {
   const { data: protocolsData } = usePatientProtocols(id!);
   const { data: sectorsData } = useSectors();
   const updateMutation = useUpdatePatient();
-  const deleteMutation = useDeletePatient();
 
   const sectors = sectorsData?.items ?? [];
   const appointments = appointmentsData?.items ?? [];
@@ -50,12 +48,6 @@ export function PatientDetailPage() {
     if (!id) return;
     await updateMutation.mutateAsync({ id, payload });
     setEditOpen(false);
-  }
-
-  async function handleArchive() {
-    if (!id) return;
-    await deleteMutation.mutateAsync(id);
-    navigate("/patients");
   }
 
   if (isLoading || !patient) {
@@ -83,16 +75,10 @@ export function PatientDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
-            <Edit className="mr-2 h-4 w-4" />
-            Modifier
-          </Button>
-          <Button variant="outline" onClick={handleArchive}>
-            <Archive className="mr-2 h-4 w-4" />
-            Archiver
-          </Button>
-        </div>
+        <Button variant="outline" onClick={() => setEditOpen(true)}>
+          <Edit className="mr-2 h-4 w-4" />
+          Modifier
+        </Button>
       </div>
 
       {/* Tabs */}

@@ -8,9 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.cabinet import Cabinet
 from app.domain.entities.user import CabinetMember, User
+from app.infrastructure.api.dependencies import AuthContext, get_current_user
 from app.infrastructure.api.schemas.auth_schemas import (
     LoginRequest,
     LogoutRequest,
+    MeCabinetResponse,
+    MeResponse,
+    MeUserResponse,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
@@ -238,3 +242,46 @@ async def logout(
                     await blacklist_token(jti, remaining)
         except TokenError:
             pass
+
+
+@router.get("/me", response_model=MeResponse)
+async def get_me(
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retourne le profil de l'utilisateur connecté et les infos de son cabinet."""
+    user_repo = SQLAlchemyUserRepo(db)
+    cabinet_repo = SQLAlchemyCabinetRepo(db)
+
+    user = await user_repo.get_by_id(auth.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilisateur introuvable",
+        )
+
+    cabinet = await cabinet_repo.get_by_id(auth.cabinet_id)
+    if not cabinet:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cabinet introuvable",
+        )
+
+    return MeResponse(
+        user=MeUserResponse(
+            id=str(user.id),
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            rpps=user.rpps,
+            phone=user.phone,
+            role=auth.role,
+        ),
+        cabinet=MeCabinetResponse(
+            id=str(cabinet.id),
+            name=cabinet.name,
+            address=cabinet.address,
+            plan=cabinet.plan,
+            subscription_status=cabinet.subscription_status,
+        ),
+    )

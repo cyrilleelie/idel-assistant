@@ -18,6 +18,7 @@ from app.infrastructure.persistence.repositories import (
     SQLAlchemyCabinetRepo,
     SQLAlchemyDocumentRepo,
     SQLAlchemyPatientRepo,
+    SQLAlchemyScheduleAssignmentRepo,
     SQLAlchemySectorRepo,
     SQLAlchemyUserRepo,
 )
@@ -190,6 +191,12 @@ def get_document_repository(
     db: AsyncSession = Depends(get_db),
 ) -> SQLAlchemyDocumentRepo:
     return SQLAlchemyDocumentRepo(db)
+
+
+def get_schedule_assignment_repository(
+    db: AsyncSession = Depends(get_db),
+) -> SQLAlchemyScheduleAssignmentRepo:
+    return SQLAlchemyScheduleAssignmentRepo(db)
 
 
 def get_sector_repository(

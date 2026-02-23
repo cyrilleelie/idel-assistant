@@ -16,6 +16,7 @@ from app.infrastructure.api.v1 import (
     care_protocol_routes,
     document_routes,
     patient_routes,
+    schedule_assignment_routes,
     sector_routes,
     slot_routes,
     tournee_routes,
@@ -84,6 +85,7 @@ app.include_router(slot_routes.router, prefix="/api/v1")
 app.include_router(tournee_routes.router, prefix="/api/v1")
 app.include_router(cabinet_member_routes.router, prefix="/api/v1")
 app.include_router(document_routes.router, prefix="/api/v1")
+app.include_router(schedule_assignment_routes.router, prefix="/api/v1")
 
 
 @app.get("/health")

@@ -34,7 +34,14 @@ class SQLAlchemyPatientRepo(PatientRepository):
     def _model_to_entity(self, model: PatientModel) -> Patient:
         cabinet_id = model.cabinet_id
         pathologies_raw = self._decrypt_field(model.pathologies_encrypted, cabinet_id)
-        pathologies = json.loads(pathologies_raw) if pathologies_raw else []
+        if not pathologies_raw:
+            pathologies = []
+        else:
+            try:
+                pathologies = json.loads(pathologies_raw)
+            except (json.JSONDecodeError, TypeError):
+                # Legacy data stored as plain text instead of JSON array
+                pathologies = [line for line in pathologies_raw.split("\n") if line.strip()]
 
         birth_date_raw = self._decrypt_field(model.birth_date_encrypted, cabinet_id)
         birth_date = (
@@ -63,7 +70,7 @@ class SQLAlchemyPatientRepo(PatientRepository):
             doctor_name=self._decrypt_field(model.doctor_name_encrypted, cabinet_id),
             doctor_contact=self._decrypt_field(model.doctor_contact_encrypted, cabinet_id),
             status=model.status,
-            archived_reason=model.archived_reason,
+            archived_reason=model.archived_reason or "",
             archived_at=model.archived_at,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -86,7 +93,7 @@ class SQLAlchemyPatientRepo(PatientRepository):
             "preferred_time_slot": patient.preferred_time_slot or None,
             "care_duration_default": patient.care_duration_default,
             "status": patient.status,
-            "archived_reason": patient.archived_reason,
+            "archived_reason": patient.archived_reason or "",
             "archived_at": patient.archived_at,
         }
         # Champs optionnels chiffres (toujours inclure la cle pour que update() ecrase)

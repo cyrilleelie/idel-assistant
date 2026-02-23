@@ -15,7 +15,8 @@ const availableColors = [
 export default function NurseDetail({
   selectedNurseId, nurseForm, setNurseForm,
   isEditingNurse, setIsEditingNurse,
-  closeNurseDetail, handleSaveNurse, deactivateNurse, reactivateNurse
+  closeNurseDetail, handleSaveNurse, deactivateNurse, reactivateNurse,
+  readOnly = false,
 }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const isInactive = nurseForm.active === false;
@@ -44,33 +45,35 @@ export default function NurseDetail({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 ml-16 md:ml-0">
-          {!isEditingNurse ? (
-            <>
-              {isInactive ? (
-                <button onClick={() => reactivateNurse(selectedNurseId)} className="text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-                  <UserPlus size={16}/> Réactiver
+        {!readOnly && (
+          <div className="flex items-center gap-2 ml-16 md:ml-0">
+            {!isEditingNurse ? (
+              <>
+                {isInactive ? (
+                  <button onClick={() => reactivateNurse(selectedNurseId)} className="text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                    <UserPlus size={16}/> Réactiver
+                  </button>
+                ) : (
+                  <button onClick={() => setShowDeleteConfirm(true)} className="text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                    <UserMinus size={16}/> Désactiver
+                  </button>
+                )}
+                <button onClick={() => setIsEditingNurse(true)} className="bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2">
+                  <Edit size={16}/> Modifier
                 </button>
-              ) : (
-                <button onClick={() => setShowDeleteConfirm(true)} className="text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-                  <UserMinus size={16}/> Désactiver
+              </>
+            ) : (
+              <>
+                <button onClick={() => selectedNurseId === 'new' ? closeNurseDetail() : setIsEditingNurse(false)} className="text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-lg font-medium transition-colors">
+                  Annuler
                 </button>
-              )}
-              <button onClick={() => setIsEditingNurse(true)} className="bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2">
-                <Edit size={16}/> Modifier
-              </button>
-            </>
-          ) : (
-            <>
-              <button onClick={() => selectedNurseId === 'new' ? closeNurseDetail() : setIsEditingNurse(false)} className="text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-lg font-medium transition-colors">
-                Annuler
-              </button>
-              <button onClick={handleSaveNurse} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
-                Enregistrer
-              </button>
-            </>
-          )}
-        </div>
+                <button onClick={handleSaveNurse} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                  Enregistrer
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Contenu */}

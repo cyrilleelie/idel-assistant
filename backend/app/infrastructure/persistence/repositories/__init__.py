@@ -13,6 +13,9 @@ from app.infrastructure.persistence.repositories.sqlalchemy_document_repo import
 from app.infrastructure.persistence.repositories.sqlalchemy_patient_repo import (
     SQLAlchemyPatientRepo,
 )
+from app.infrastructure.persistence.repositories.sqlalchemy_schedule_assignment_repo import (
+    SQLAlchemyScheduleAssignmentRepo,
+)
 from app.infrastructure.persistence.repositories.sqlalchemy_sector_repo import (
     SQLAlchemySectorRepo,
 )
@@ -29,6 +32,7 @@ __all__ = [
     "SQLAlchemyCareProtocolRepo",
     "SQLAlchemyDocumentRepo",
     "SQLAlchemyPatientRepo",
+    "SQLAlchemyScheduleAssignmentRepo",
     "SQLAlchemySectorRepo",
     "SQLAlchemyTourneeRepo",
     "SQLAlchemyUserRepo",

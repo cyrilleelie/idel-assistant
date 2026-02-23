@@ -32,12 +32,12 @@ export default function AgendasTab({
     displayDays.some(date => {
       const daySchedule = schedule[formatDate(date)];
       if (!daySchedule) return false;
-      return Object.values(daySchedule).some(assigned => assigned.includes(nurse.id));
+      return Object.values(daySchedule).some(assigned => assigned.includes(nurse.userId));
     })
   );
 
   const selectAllWorking = () => {
-    const ids = nursesWorkingDisplayDays.map(n => n.id);
+    const ids = nursesWorkingDisplayDays.map(n => n.userId);
     if (ids.length > 0) setSelectedAgendaNurseIds(ids);
   };
 
@@ -116,7 +116,7 @@ export default function AgendasTab({
               <button
                 onClick={selectAllWorking}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
-                  nursesWorkingDisplayDays.every(n => selectedAgendaNurseIds.includes(n.id))
+                  nursesWorkingDisplayDays.every(n => selectedAgendaNurseIds.includes(n.userId))
                     ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm'
                     : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
                 }`}
@@ -125,11 +125,11 @@ export default function AgendasTab({
               </button>
             )}
             {workingNurses.map(nurse => {
-              const isSelected = selectedAgendaNurseIds.includes(nurse.id);
+              const isSelected = selectedAgendaNurseIds.includes(nurse.userId);
               return (
                 <button
-                  key={nurse.id}
-                  onClick={() => toggleNurseSelection(nurse.id)}
+                  key={nurse.userId}
+                  onClick={() => toggleNurseSelection(nurse.userId)}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${isSelected ? `${nurse.color} border-current shadow-sm` : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}
                 >
                   {isSelected && <Check size={14} />}
@@ -142,7 +142,7 @@ export default function AgendasTab({
           {/* Agendas empilés */}
           <div className="space-y-6">
             {selectedAgendaNurseIds.map(nurseId => {
-              const nurse = nurses.find(n => n.id === nurseId);
+              const nurse = nurses.find(n => n.userId === nurseId);
               if (!nurse) return null;
               return (
                 <NurseAgenda
@@ -187,7 +187,7 @@ function NurseAgenda({ nurse, displayDays, viewMode, schedule, appointments, get
           const activeConfig = getActiveConfigForDate(date);
           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
           const isToday = formatDate(date) === formatDate(new Date());
-          const workingSlots = activeConfig.slots.filter(slot => schedule[dateStr]?.[slot.id]?.includes(nurse.id));
+          const workingSlots = activeConfig.slots.filter(slot => schedule[dateStr]?.[slot.id]?.includes(nurse.userId));
           const worksToday = workingSlots.length > 0;
 
           return (
@@ -208,7 +208,7 @@ function NurseAgenda({ nurse, displayDays, viewMode, schedule, appointments, get
               <div className="flex-1 p-3 space-y-4 overflow-y-auto">
                 {worksToday ? (
                   workingSlots.map(slot => {
-                    const slotAppts = appointments.filter(a => a.dateStr === dateStr && a.slotId === slot.id && a.nurseId === nurse.id);
+                    const slotAppts = appointments.filter(a => a.dateStr === dateStr && a.slotId === slot.id && a.nurseId === nurse.userId);
                     return (
                       <div key={slot.id} className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex flex-col gap-2 shadow-sm min-h-[140px]">
                         <div className="text-xs font-semibold text-blue-800 flex items-center gap-1">
@@ -233,7 +233,7 @@ function NurseAgenda({ nurse, displayDays, viewMode, schedule, appointments, get
                           )}
                         </div>
 
-                        <button onClick={() => openRdvModal(dateStr, slot.id, nurse.id)} className="w-full bg-white hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded text-xs py-1.5 font-medium transition-colors flex items-center justify-center gap-1">
+                        <button onClick={() => openRdvModal(dateStr, slot.id, nurse.userId)} className="w-full bg-white hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded text-xs py-1.5 font-medium transition-colors flex items-center justify-center gap-1">
                           <Plus size={14} /> Ajouter RDV
                         </button>
                       </div>

@@ -45,3 +45,30 @@ class UserResponse(BaseModel):
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}
+
+
+class MeCabinetResponse(BaseModel):
+    id: str
+    name: str
+    address: str
+    plan: str
+    subscription_status: str
+
+    model_config = {"from_attributes": True}
+
+
+class MeUserResponse(BaseModel):
+    id: str
+    email: str
+    first_name: str
+    last_name: str
+    rpps: str
+    phone: str
+    role: str
+
+    model_config = {"from_attributes": True}
+
+
+class MeResponse(BaseModel):
+    user: MeUserResponse
+    cabinet: MeCabinetResponse

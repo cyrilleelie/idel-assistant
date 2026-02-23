@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Lock, ShieldCheck, Calendar, CalendarDays, Locate } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lock, ShieldCheck, Calendar, CalendarDays, Locate, Eye } from 'lucide-react';
 import { formatDate, getWeekDays, getWeekNumber } from '../../utils/dateTime';
 
 const viewModes = [
@@ -11,7 +11,8 @@ export default function PlanningTab({
   nurses, configs, schedule, daysInMonth,
   currentDate, currentPlanningStatus,
   prevMonth, nextMonth, goToCurrentMonth, togglePlanningStatus,
-  getActiveConfigForDate, toggleNurseSlot
+  getActiveConfigForDate, toggleNurseSlot,
+  readOnly = false,
 }) {
   const [viewMode, setViewMode] = useState('month');
   const [weekRef, setWeekRef] = useState(() => new Date());
@@ -73,8 +74,15 @@ export default function PlanningTab({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Statut planning — uniquement en vue mois */}
-          {viewMode === 'month' && (
+          {/* Consultation badge in readOnly mode */}
+          {readOnly && (
+            <span className="flex items-center gap-1.5 text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-md border border-slate-200">
+              <Eye size={14} /> Consultation
+            </span>
+          )}
+
+          {/* Statut planning — uniquement en vue mois, masqué en readOnly */}
+          {!readOnly && viewMode === 'month' && (
             <div className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-md border border-slate-200 shadow-sm">
               <span className={`flex items-center gap-1.5 text-sm font-medium ${currentPlanningStatus === 'validated' ? 'text-emerald-600' : 'text-amber-600'}`}>
                 {currentPlanningStatus === 'validated' ? <ShieldCheck size={16} /> : <Lock size={16} className="opacity-50" />}
@@ -145,15 +153,18 @@ export default function PlanningTab({
                       <td key={dateStr} className={`p-1 align-middle border-x border-slate-50 ${isWeekend ? 'bg-slate-50/80' : ''}`}>
                         <div className="flex flex-col gap-1 items-center">
                           {activeConfig.slots.map(slot => {
-                            const isAssigned = schedule[dateStr]?.[slot.id]?.includes(nurse.id);
+                            const isAssigned = schedule[dateStr]?.[slot.id]?.includes(nurse.userId);
+                            const disabled = readOnly || currentPlanningStatus === 'validated';
                             return (
                               <button
                                 key={slot.id}
-                                onClick={() => toggleNurseSlot(dateStr, slot.id, nurse.id)}
-                                disabled={currentPlanningStatus === 'validated'}
+                                onClick={disabled ? undefined : () => toggleNurseSlot(dateStr, slot.id, nurse.userId)}
+                                disabled={disabled}
                                 title={`${slot.name} - ${nurse.firstName} ${nurse.lastName}`}
                                 className={`w-full text-[10px] py-1 px-0.5 rounded border transition-all font-medium ${
-                                  isAssigned ? `${nurse.color} ${currentPlanningStatus === 'validated' ? 'opacity-60 cursor-not-allowed' : ''}` : `bg-white border-slate-200 ${currentPlanningStatus === 'validated' ? 'opacity-40 cursor-not-allowed text-slate-300' : 'text-slate-400 hover:border-slate-300 hover:bg-slate-50'}`
+                                  isAssigned
+                                    ? `${nurse.color} ${disabled ? 'opacity-60 cursor-default' : ''}`
+                                    : `bg-white border-slate-200 ${disabled ? 'opacity-40 cursor-default text-slate-300' : 'text-slate-400 hover:border-slate-300 hover:bg-slate-50'}`
                                 }`}
                               >
                                 {viewMode === 'week' ? slot.name : slot.name.substring(0, 3)}

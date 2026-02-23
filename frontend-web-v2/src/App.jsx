@@ -1,32 +1,125 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Calendar, CalendarDays, UserCircle, Users, Clock } from 'lucide-react';
 import { getDaysInMonth, formatDate, doSlotsOverlap, isTimeWithinSlot } from './utils/dateTime';
-import { defaultNurses, defaultConfigs, defaultPatients, defaultAppointments, nurseColors } from './data/defaults';
+import { defaultConfigs, nurseColors } from './data/defaults';
+import { listMembers, inviteMember, updateMember } from './api/cabinet-members';
+import { apiToFrontend, frontendToApiUpdate, frontendToApiInvite } from './utils/memberMapper';
+import { listPatients, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, archivePatient as apiArchivePatient } from './api/patients';
+import { listAppointments, createAppointment as apiCreateAppointment, cancelAppointment as apiCancelAppointment } from './api/appointments';
+import { fetchMonthSchedule, toggleScheduleAssignment } from './api/schedule-assignments';
+import { patientApiToFrontend, patientFrontendToApiCreate, patientFrontendToApiUpdate } from './utils/patientMapper';
+import { apptApiToFrontend, assignSlotIds, frontendToApiCreate as apptFrontendToApiCreate } from './utils/appointmentMapper';
+import { getUserRole, getUserEmail } from './utils/auth';
+import { fetchMe } from './api/auth';
 import Header from './components/Header';
+import InfoBanner from './components/InfoBanner';
 import TabNav from './components/TabNav';
+import LoginPage from './components/LoginPage';
 import PatientsTab from './components/patients/PatientsTab';
 import PlanningTab from './components/planning/PlanningTab';
 import AgendasTab from './components/agendas/AgendasTab';
 import EquipeTab from './components/equipe/EquipeTab';
 import CreneauxTab from './components/creneaux/CreneauxTab';
+import FacturationTab from './components/facturation/FacturationTab';
 import RdvModal from './components/modals/RdvModal';
 
+// --- Sub-tab definitions per screen ---
+const soinsTabs = [
+  { id: 'patients', label: 'Patients', icon: UserCircle },
+  { id: 'agendas', label: 'Agendas RDV', icon: CalendarDays },
+];
+
+const cabinetTabs = [
+  { id: 'planning', label: 'Planning', icon: Calendar },
+  { id: 'equipe', label: 'Équipe', icon: Users },
+  { id: 'creneaux', label: 'Créneaux', icon: Clock },
+];
+
+const defaultTabForScreen = {
+  soins: 'patients',
+  cabinet: 'planning',
+  facturation: null,
+};
+
 export default function App() {
-  // --- ÉTATS (State) ---
+  // --- AUTH ---
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('access_token'));
+  const [userRole, setUserRole] = useState(() => getUserRole());
+  const [userEmail, setUserEmail] = useState(() => getUserEmail() || '');
+
+  // Profile data from GET /me (user + cabinet)
+  const [meData, setMeData] = useState(null);
+
+  const loadMe = useCallback(async () => {
+    try {
+      const data = await fetchMe();
+      setMeData(data);
+      setUserRole(data.user.role);
+      setUserEmail(data.user.email);
+    } catch (err) {
+      console.error('Failed to fetch /me:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadMe();
+    }
+  }, [isAuthenticated, loadMe]);
+
+  const handleLogin = useCallback((email) => {
+    const role = getUserRole();
+    const decodedEmail = getUserEmail() || email;
+    setUserEmail(decodedEmail);
+    setUserRole(role);
+    setIsAuthenticated(true);
+    setActiveScreen('soins');
+    setActiveTab('patients');
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    setIsAuthenticated(false);
+    setUserEmail('');
+    setUserRole(null);
+    setMeData(null);
+    setActiveScreen('soins');
+  }, []);
+
+  // Listen for forced logout from the API client (expired refresh token)
+  useEffect(() => {
+    const onForceLogout = () => handleLogout();
+    window.addEventListener('auth:logout', onForceLogout);
+    return () => window.removeEventListener('auth:logout', onForceLogout);
+  }, [handleLogout]);
+
+  // --- NAVIGATION ---
+  const [activeScreen, setActiveScreen] = useState('soins');
   const [activeTab, setActiveTab] = useState('patients');
+
+  const handleScreenChange = useCallback((screen) => {
+    setActiveScreen(screen);
+    setActiveTab(defaultTabForScreen[screen]);
+  }, []);
+
+  // --- ÉTATS (State) ---
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedAgendaNurseIds, setSelectedAgendaNurseIds] = useState([]);
 
-  // Liste des infirmiers
-  const [nurses, setNurses] = useState(defaultNurses);
+  // Liste des infirmiers — fetched from API
+  const [nurses, setNurses] = useState([]);
+  const [nursesLoading, setNursesLoading] = useState(false);
+  const [nursesError, setNursesError] = useState('');
 
   // Configurations horaires
   const [configs, setConfigs] = useState(defaultConfigs);
-  // Planning mensuel : { "YYYY-MM-DD": { "slot_id": ["nurse_id_1", "nurse_id_2"] } }
   const [schedule, setSchedule] = useState({});
   const [planningStatuses, setPlanningStatuses] = useState({});
 
   // RDVs
-  const [appointments, setAppointments] = useState(defaultAppointments);
+  const [appointments, setAppointments] = useState([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [rdvModalParams, setRdvModalParams] = useState(null);
   const [rdvForm, setRdvForm] = useState({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '' });
   const [rdvError, setRdvError] = useState('');
@@ -44,20 +137,128 @@ export default function App() {
   const [slotErrors, setSlotErrors] = useState({});
 
   // --- ÉTATS PATIENTS ---
-  const [patients, setPatients] = useState(defaultPatients);
+  const [patients, setPatients] = useState([]);
+  const [patientsLoading, setPatientsLoading] = useState(false);
+  const [patientsError, setPatientsError] = useState('');
   const [patientSearch, setPatientSearch] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [patientSubTab, setPatientSubTab] = useState('info');
   const [isEditingPatient, setIsEditingPatient] = useState(false);
   const [patientForm, setPatientForm] = useState({});
 
-  // --- LISTES ACTIVES (pour planning, agendas, RDV) ---
+  // --- FETCH NURSES FROM API ---
+  const fetchNurses = useCallback(async () => {
+    setNursesLoading(true);
+    setNursesError('');
+    try {
+      const data = await listMembers(true);
+      setNurses(data.items.map(apiToFrontend));
+    } catch (err) {
+      console.error('Failed to fetch members:', err);
+      setNursesError('Impossible de charger les membres du cabinet.');
+    } finally {
+      setNursesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchNurses();
+    }
+  }, [isAuthenticated, fetchNurses]);
+
+  // --- FETCH PATIENTS FROM API ---
+  const fetchPatients = useCallback(async () => {
+    setPatientsLoading(true);
+    setPatientsError('');
+    try {
+      const data = await listPatients({ status: 'all', limit: 100 });
+      setPatients(data.items.map(patientApiToFrontend));
+    } catch (err) {
+      console.error('Failed to fetch patients:', err);
+      setPatientsError('Impossible de charger les patients.');
+    } finally {
+      setPatientsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchPatients();
+    }
+  }, [isAuthenticated, fetchPatients]);
+
+  // --- FETCH SCHEDULE FROM API ---
+  const fetchAndSetSchedule = useCallback(async (year, month) => {
+    try {
+      const data = await fetchMonthSchedule(year, month + 1); // API months are 1-based
+      setSchedule(prev => ({ ...prev, ...data.schedule }));
+    } catch (err) {
+      console.error('Failed to fetch schedule:', err);
+    }
+  }, []);
+
+  const scheduleYear = currentDate.getFullYear();
+  const scheduleMonth = currentDate.getMonth();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchAndSetSchedule(scheduleYear, scheduleMonth);
+    }
+  }, [isAuthenticated, scheduleYear, scheduleMonth, fetchAndSetSchedule]);
+
+  // --- LOGIQUE PLANNING (defined early — used by fetchAppointments) ---
+  const getActiveConfigForDate = (date) => {
+    const dateStr = formatDate(date);
+    const sorted = [...configs].sort((a, b) => b.startDate.localeCompare(a.startDate));
+    return sorted.find(c => c.startDate <= dateStr) || sorted[sorted.length - 1] || { slots: [] };
+  };
+
+  // --- FETCH APPOINTMENTS FROM API ---
+  const patientsRef = useRef(patients);
+  patientsRef.current = patients;
+
+  const fetchAppointments = useCallback(async () => {
+    setAppointmentsLoading(true);
+    try {
+      const data = await listAppointments({ status: 'scheduled', limit: 200 });
+      const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
+      const mapped = data.items.map(a => apptApiToFrontend(a, pMap));
+      assignSlotIds(mapped, getActiveConfigForDate);
+      setAppointments(mapped);
+    } catch (err) {
+      console.error('Failed to fetch appointments:', err);
+    } finally {
+      setAppointmentsLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getActiveConfigForDate]);
+
+  useEffect(() => {
+    if (isAuthenticated && patients.length > 0) {
+      fetchAppointments();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, patients.length > 0]);
+
+  // Re-assign slotIds when configs change
+  useEffect(() => {
+    if (appointments.length > 0) {
+      setAppointments(prev => {
+        const updated = prev.map(a => ({ ...a }));
+        assignSlotIds(updated, getActiveConfigForDate);
+        return updated;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configs]);
+
+  // --- LISTES ACTIVES ---
   const activeNurses = nurses.filter(n => n.active !== false);
   const activePatients = patients.filter(p => p.active !== false);
 
   const openNewPatient = () => {
-    const newPatient = { firstName: '', lastName: '', phone: '', email: '', address: '', ssn: '', doctorName: '', doctorContact: '', antecedents: '', notes: '', prescriptions: [] };
-    setPatientForm(newPatient);
+    setPatientForm({ firstName: '', lastName: '', phone: '', email: '', address: '', ssn: '', doctorName: '', doctorContact: '', antecedents: '', notes: '', prescriptions: [] });
     setSelectedPatientId('new');
     setIsEditingPatient(true);
     setPatientSubTab('info');
@@ -75,27 +276,60 @@ export default function App() {
     setIsEditingPatient(false);
   };
 
-  const handleSavePatient = (e) => {
+  const handleSavePatient = async (e) => {
     e.preventDefault();
     if (!patientForm.lastName.trim() || !patientForm.firstName.trim()) return;
-
     if (selectedPatientId === 'new') {
-      const newId = 'p_' + Date.now();
-      setPatients([...patients, { ...patientForm, id: newId }]);
-      setSelectedPatientId(newId);
+      try {
+        const payload = patientFrontendToApiCreate(patientForm);
+        const created = await apiCreatePatient(payload);
+        const mapped = patientApiToFrontend(created);
+        setPatients(prev => [...prev, mapped]);
+        setSelectedPatientId(mapped.id);
+        setPatientForm(mapped);
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Erreur lors de la création du patient.');
+        return;
+      }
     } else {
-      setPatients(patients.map(p => p.id === selectedPatientId ? { ...patientForm, id: selectedPatientId } : p));
+      try {
+        const payload = patientFrontendToApiUpdate(patientForm);
+        const updated = await apiUpdatePatient(selectedPatientId, payload);
+        const mapped = patientApiToFrontend(updated);
+        setPatients(prev => prev.map(p => p.id === selectedPatientId ? mapped : p));
+        setPatientForm(mapped);
+        // Update patient names in existing appointments
+        setAppointments(prev => prev.map(a =>
+          a.patientId === selectedPatientId
+            ? { ...a, patient: `${mapped.firstName} ${mapped.lastName.toUpperCase()}` }
+            : a
+        ));
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Erreur lors de la mise à jour du patient.');
+        return;
+      }
     }
     setIsEditingPatient(false);
   };
 
-  const deactivatePatient = (id) => {
-    setPatients(patients.map(p => p.id === id ? { ...p, active: false } : p));
-    closePatientDetail();
+  const deactivatePatient = async (id) => {
+    try {
+      await apiArchivePatient(id, 'Archivé depuis le cabinet');
+      setPatients(prev => prev.map(p => p.id === id ? { ...p, active: false } : p));
+      closePatientDetail();
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Erreur lors de l\'archivage du patient.');
+    }
   };
-  const reactivatePatient = (id) => {
-    setPatients(patients.map(p => p.id === id ? { ...p, active: true } : p));
-    setPatientForm(f => ({ ...f, active: true }));
+  const reactivatePatient = async (id) => {
+    try {
+      const updated = await apiUpdatePatient(id, { status: 'active' });
+      const mapped = patientApiToFrontend(updated);
+      setPatients(prev => prev.map(p => p.id === id ? mapped : p));
+      setPatientForm(mapped);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Erreur lors de la réactivation du patient.');
+    }
   };
 
   // --- LOGIQUE INFIRMIERS ---
@@ -113,25 +347,55 @@ export default function App() {
     setSelectedNurseId(null);
     setIsEditingNurse(false);
   };
-  const handleSaveNurse = (e) => {
+
+  const handleSaveNurse = async (e) => {
     e.preventDefault();
-    if (!nurseForm.lastName.trim() || !nurseForm.firstName.trim()) return;
     if (selectedNurseId === 'new') {
-      const newId = Date.now().toString();
-      setNurses([...nurses, { ...nurseForm, id: newId }]);
-      setSelectedNurseId(newId);
+      if (!nurseForm.email?.trim()) return;
+      try {
+        const payload = frontendToApiInvite(nurseForm);
+        const created = await inviteMember(payload);
+        const mapped = apiToFrontend(created);
+        setNurses((prev) => [...prev, mapped]);
+        setSelectedNurseId(mapped.id);
+        setIsEditingNurse(false);
+      } catch (err) {
+        alert(err.response?.data?.detail || "Erreur lors de l'invitation.");
+      }
     } else {
-      setNurses(nurses.map(n => n.id === selectedNurseId ? { ...nurseForm, id: selectedNurseId } : n));
+      try {
+        const payload = frontendToApiUpdate(nurseForm);
+        const updated = await updateMember(selectedNurseId, payload);
+        const mapped = apiToFrontend(updated);
+        setNurses((prev) => prev.map((n) => (n.id === selectedNurseId ? mapped : n)));
+        setNurseForm(mapped);
+        setIsEditingNurse(false);
+      } catch (err) {
+        alert(err.response?.data?.detail || 'Erreur lors de la mise à jour.');
+      }
     }
-    setIsEditingNurse(false);
   };
-  const deactivateNurse = (id) => {
-    setNurses(nurses.map(n => n.id === id ? { ...n, active: false } : n));
-    closeNurseDetail();
+
+  const deactivateNurse = async (id) => {
+    try {
+      const updated = await updateMember(id, { is_active: false });
+      const mapped = apiToFrontend(updated);
+      setNurses((prev) => prev.map((n) => (n.id === id ? mapped : n)));
+      closeNurseDetail();
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Erreur lors de la désactivation.');
+    }
   };
-  const reactivateNurse = (id) => {
-    setNurses(nurses.map(n => n.id === id ? { ...n, active: true } : n));
-    setNurseForm(f => ({ ...f, active: true }));
+
+  const reactivateNurse = async (id) => {
+    try {
+      const updated = await updateMember(id, { is_active: true });
+      const mapped = apiToFrontend(updated);
+      setNurses((prev) => prev.map((n) => (n.id === id ? mapped : n)));
+      setNurseForm(mapped);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Erreur lors de la réactivation.');
+    }
   };
 
   // --- LOGIQUE CONFIGURATIONS ---
@@ -161,21 +425,24 @@ export default function App() {
   };
   const removeSlotFromConfig = (configId, slotId) => setConfigs(configs.map(c => c.id === configId ? { ...c, slots: c.slots.filter(s => s.id !== slotId) } : c));
 
-  // --- LOGIQUE PLANNING ---
-  const getActiveConfigForDate = (date) => {
-    const dateStr = formatDate(date);
-    const sorted = [...configs].sort((a, b) => b.startDate.localeCompare(a.startDate));
-    return sorted.find(c => c.startDate <= dateStr) || sorted[sorted.length - 1] || { slots: [] };
-  };
-
   const toggleNurseSlot = (dateStr, slotId, nurseId) => {
     const monthKey = dateStr.substring(0, 7);
     if (planningStatuses[monthKey] === 'validated') return;
+
+    // Optimistic local update
     setSchedule(prev => {
       const daySchedule = prev[dateStr] || {};
       const slotSchedule = daySchedule[slotId] || [];
       if (slotSchedule.includes(nurseId)) return { ...prev, [dateStr]: { ...daySchedule, [slotId]: slotSchedule.filter(id => id !== nurseId) } };
       else return { ...prev, [dateStr]: { ...daySchedule, [slotId]: [...slotSchedule, nurseId] } };
+    });
+
+    // Persist to backend — rollback on error
+    toggleScheduleAssignment(nurseId, slotId, dateStr).catch(err => {
+      console.error('Failed to toggle schedule assignment:', err);
+      // Rollback: refetch the month
+      const [y, m] = monthKey.split('-').map(Number);
+      fetchAndSetSchedule(y, m - 1);
     });
   };
 
@@ -191,9 +458,8 @@ export default function App() {
     setRdvError('');
   };
 
-  const handleSaveRdv = (e) => {
+  const handleSaveRdv = async (e) => {
     e.preventDefault(); setRdvError('');
-
     let finalPatientId = rdvForm.patientId;
     let finalPatientName = '';
 
@@ -201,19 +467,23 @@ export default function App() {
       if (!rdvForm.newLastName.trim() || !rdvForm.newFirstName.trim()) {
         setRdvError("Le nom et le prénom sont requis pour un nouveau patient."); return;
       }
-      finalPatientId = 'p_' + Date.now();
-      finalPatientName = `${rdvForm.newFirstName} ${rdvForm.newLastName.toUpperCase()}`;
-
-      setPatients(prev => [...prev, {
-        id: finalPatientId,
-        firstName: rdvForm.newFirstName,
-        lastName: rdvForm.newLastName.toUpperCase(),
-        phone: '', email: '', address: '', ssn: '', doctorName: '', doctorContact: '', antecedents: '', notes: '', prescriptions: []
-      }]);
-    } else {
-      if (!finalPatientId) {
-        setRdvError("Veuillez sélectionner un patient existant."); return;
+      // Create patient via API first
+      try {
+        const patientPayload = patientFrontendToApiCreate({
+          firstName: rdvForm.newFirstName,
+          lastName: rdvForm.newLastName.toUpperCase(),
+        });
+        const createdPatient = await apiCreatePatient(patientPayload);
+        const mappedPatient = patientApiToFrontend(createdPatient);
+        setPatients(prev => [...prev, mappedPatient]);
+        finalPatientId = mappedPatient.id;
+        finalPatientName = `${mappedPatient.firstName} ${mappedPatient.lastName.toUpperCase()}`;
+      } catch (err) {
+        setRdvError(err.response?.data?.detail || 'Erreur lors de la création du patient.');
+        return;
       }
+    } else {
+      if (!finalPatientId) { setRdvError("Veuillez sélectionner un patient existant."); return; }
       const p = patients.find(p => p.id === finalPatientId);
       finalPatientName = `${p.firstName} ${p.lastName.toUpperCase()}`;
     }
@@ -234,32 +504,61 @@ export default function App() {
       setRdvError("Chevauchement avec un autre RDV."); return;
     }
 
-    setAppointments([...appointments, {
-      id: 'rdv_' + Date.now(),
-      ...rdvModalParams,
-      patientId: finalPatientId,
-      patient: finalPatientName,
-      startTime: rdvForm.startTime,
-      endTime: rdvForm.endTime
-    }]);
-    setRdvModalParams(null);
+    // Create appointment via API
+    try {
+      const apptPayload = apptFrontendToApiCreate({
+        dateStr: rdvModalParams.dateStr,
+        startTime: rdvForm.startTime,
+        endTime: rdvForm.endTime,
+        nurseId: rdvModalParams.nurseId,
+        patientId: finalPatientId,
+      });
+      const createdAppt = await apiCreateAppointment(apptPayload);
+      const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
+      const mappedAppt = apptApiToFrontend(createdAppt, pMap);
+      mappedAppt.slotId = rdvModalParams.slotId;
+      // Override patient name in case patientsRef is stale for new patient
+      if (!mappedAppt.patient || mappedAppt.patient === '(Patient inconnu)') {
+        mappedAppt.patient = finalPatientName;
+      }
+      setAppointments(prev => [...prev, mappedAppt]);
+      setRdvModalParams(null);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      if (err.response?.status === 409) {
+        setRdvError(detail || 'Conflit horaire avec un autre RDV.');
+      } else {
+        setRdvError(detail || 'Erreur lors de la création du RDV.');
+      }
+    }
   };
-  const deleteRdv = (id) => setAppointments(appointments.filter(a => a.id !== id));
+
+  const deleteRdv = async (id) => {
+    try {
+      await apiCancelAppointment(id, 'Annulé depuis le planning');
+      setAppointments(prev => prev.filter(a => a.id !== id));
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Erreur lors de l\'annulation du RDV.');
+    }
+  };
 
   // --- VALEURS CALCULÉES ---
+  // Scan ALL loaded schedule data (not just current month) so that
+  // Agendas still works when currentDate is on a different month.
   const workingNursesIds = useMemo(() => {
     const ids = new Set();
-    daysInMonth.forEach(date => {
-      const daySchedule = schedule[formatDate(date)];
-      if (daySchedule) Object.values(daySchedule).forEach(assigned => assigned.forEach(id => ids.add(id)));
-    });
+    for (const daySchedule of Object.values(schedule)) {
+      for (const assigned of Object.values(daySchedule)) {
+        for (const id of assigned) ids.add(id);
+      }
+    }
     return ids;
-  }, [schedule, daysInMonth]);
-  const workingNurses = useMemo(() => nurses.filter(n => workingNursesIds.has(n.id) && n.active !== false), [nurses, workingNursesIds]);
+  }, [schedule]);
+  const workingNurses = useMemo(() => nurses.filter(n => workingNursesIds.has(n.userId) && n.active !== false), [nurses, workingNursesIds]);
 
   useEffect(() => {
     const validIds = selectedAgendaNurseIds.filter(id => workingNursesIds.has(id));
-    if (workingNurses.length > 0 && validIds.length === 0) setSelectedAgendaNurseIds([workingNurses[0].id]);
+    if (workingNurses.length > 0 && validIds.length === 0) setSelectedAgendaNurseIds([workingNurses[0].userId]);
     else if (validIds.length !== selectedAgendaNurseIds.length) setSelectedAgendaNurseIds(validIds);
   }, [workingNursesIds, workingNurses, selectedAgendaNurseIds]);
 
@@ -268,8 +567,8 @@ export default function App() {
   const togglePlanningStatus = () => setPlanningStatuses(prev => ({ ...prev, [currentMonthKey]: currentPlanningStatus === 'draft' ? 'validated' : 'draft' }));
 
   const lockedConfigIds = new Set();
-  Object.entries(planningStatuses).forEach(([monthKey, status]) => {
-    if (status === 'validated') {
+  Object.entries(planningStatuses).forEach(([monthKey, st]) => {
+    if (st === 'validated') {
       const [year, month] = monthKey.split('-').map(Number);
       getDaysInMonth(year, month - 1).forEach(day => {
         const config = getActiveConfigForDate(day);
@@ -278,17 +577,41 @@ export default function App() {
     }
   });
 
+  // --- Tabs & readOnly ---
+  const visibleTabs = activeScreen === 'cabinet' ? cabinetTabs : activeScreen === 'soins' ? soinsTabs : [];
+  const isReadOnly = userRole !== 'admin';
+
+  // --- AUTH GUARD ---
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   // --- RENDU ---
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 p-4 md:p-8 font-sans">
       <div className="max-w-screen-2xl mx-auto">
 
-        <Header />
-        <TabNav activeTab={activeTab} setActiveTab={setActiveTab} />
+        <Header activeScreen={activeScreen} onScreenChange={handleScreenChange} onLogout={handleLogout} />
+        <InfoBanner cabinet={meData?.cabinet} user={meData?.user} />
+        {visibleTabs.length > 0 && (
+          <TabNav tabs={visibleTabs} activeTab={activeTab} setActiveTab={setActiveTab} />
+        )}
 
         <main className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 min-h-[600px]">
 
-          {activeTab === 'patients' && (
+          {/* --- Soins --- */}
+          {activeScreen === 'soins' && activeTab === 'patients' && (
+            <>
+              {patientsLoading && (
+                <div className="text-center py-12 text-slate-500">Chargement des patients...</div>
+              )}
+              {patientsError && (
+                <div className="text-center py-12">
+                  <p className="text-red-600 mb-4">{patientsError}</p>
+                  <button onClick={fetchPatients} className="text-blue-600 hover:underline text-sm">Réessayer</button>
+                </div>
+              )}
+              {!patientsLoading && !patientsError && (
             <PatientsTab
               patients={patients}
               patientSearch={patientSearch}
@@ -309,26 +632,11 @@ export default function App() {
               appointments={appointments}
               nurses={nurses}
             />
+              )}
+            </>
           )}
 
-          {activeTab === 'planning' && (
-            <PlanningTab
-              nurses={activeNurses}
-              configs={configs}
-              schedule={schedule}
-              daysInMonth={daysInMonth}
-              currentDate={currentDate}
-              currentPlanningStatus={currentPlanningStatus}
-              prevMonth={prevMonth}
-              nextMonth={nextMonth}
-              goToCurrentMonth={goToCurrentMonth}
-              togglePlanningStatus={togglePlanningStatus}
-              getActiveConfigForDate={getActiveConfigForDate}
-              toggleNurseSlot={toggleNurseSlot}
-            />
-          )}
-
-          {activeTab === 'agendas' && (
+          {activeScreen === 'soins' && activeTab === 'agendas' && (
             <AgendasTab
               nurses={nurses}
               workingNurses={workingNurses}
@@ -346,24 +654,57 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'equipe' && (
-            <EquipeTab
-              nurses={nurses}
-              nurseForm={nurseForm}
-              setNurseForm={setNurseForm}
-              selectedNurseId={selectedNurseId}
-              isEditingNurse={isEditingNurse}
-              setIsEditingNurse={setIsEditingNurse}
-              openNurseDetail={openNurseDetail}
-              openNewNurse={openNewNurse}
-              closeNurseDetail={closeNurseDetail}
-              handleSaveNurse={handleSaveNurse}
-              deactivateNurse={deactivateNurse}
-              reactivateNurse={reactivateNurse}
+          {/* --- Cabinet --- */}
+          {activeScreen === 'cabinet' && activeTab === 'planning' && (
+            <PlanningTab
+              nurses={activeNurses}
+              configs={configs}
+              schedule={schedule}
+              daysInMonth={daysInMonth}
+              currentDate={currentDate}
+              currentPlanningStatus={currentPlanningStatus}
+              prevMonth={prevMonth}
+              nextMonth={nextMonth}
+              goToCurrentMonth={goToCurrentMonth}
+              togglePlanningStatus={togglePlanningStatus}
+              getActiveConfigForDate={getActiveConfigForDate}
+              toggleNurseSlot={toggleNurseSlot}
+              readOnly={isReadOnly}
             />
           )}
 
-          {activeTab === 'creneaux' && (
+          {activeScreen === 'cabinet' && activeTab === 'equipe' && (
+            <>
+              {nursesLoading && (
+                <div className="text-center py-12 text-slate-500">Chargement des membres...</div>
+              )}
+              {nursesError && (
+                <div className="text-center py-12">
+                  <p className="text-red-600 mb-4">{nursesError}</p>
+                  <button onClick={fetchNurses} className="text-blue-600 hover:underline text-sm">Réessayer</button>
+                </div>
+              )}
+              {!nursesLoading && !nursesError && (
+                <EquipeTab
+                  nurses={nurses}
+                  nurseForm={nurseForm}
+                  setNurseForm={setNurseForm}
+                  selectedNurseId={selectedNurseId}
+                  isEditingNurse={isEditingNurse}
+                  setIsEditingNurse={setIsEditingNurse}
+                  openNurseDetail={openNurseDetail}
+                  openNewNurse={openNewNurse}
+                  closeNurseDetail={closeNurseDetail}
+                  handleSaveNurse={handleSaveNurse}
+                  deactivateNurse={deactivateNurse}
+                  reactivateNurse={reactivateNurse}
+                  readOnly={isReadOnly}
+                />
+              )}
+            </>
+          )}
+
+          {activeScreen === 'cabinet' && activeTab === 'creneaux' && (
             <CreneauxTab
               configs={configs}
               lockedConfigIds={lockedConfigIds}
@@ -379,7 +720,13 @@ export default function App() {
               removeConfig={removeConfig}
               addSlotToConfig={addSlotToConfig}
               removeSlotFromConfig={removeSlotFromConfig}
+              readOnly={isReadOnly}
             />
+          )}
+
+          {/* --- Facturation --- */}
+          {activeScreen === 'facturation' && (
+            <FacturationTab />
           )}
 
         </main>

@@ -13,6 +13,7 @@ from app.infrastructure.api.v1 import (
     appointment_routes,
     auth_routes,
     cabinet_member_routes,
+    cabinet_routes,
     care_protocol_routes,
     document_routes,
     patient_routes,
@@ -83,6 +84,7 @@ app.include_router(care_protocol_routes.router, prefix="/api/v1")
 app.include_router(sector_routes.router, prefix="/api/v1")
 app.include_router(slot_routes.router, prefix="/api/v1")
 app.include_router(tournee_routes.router, prefix="/api/v1")
+app.include_router(cabinet_routes.router, prefix="/api/v1")
 app.include_router(cabinet_member_routes.router, prefix="/api/v1")
 app.include_router(document_routes.router, prefix="/api/v1")
 app.include_router(schedule_assignment_routes.router, prefix="/api/v1")

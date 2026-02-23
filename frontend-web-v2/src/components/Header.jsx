@@ -1,8 +1,8 @@
 import { Calendar, LogOut, HeartPulse, Building2, Receipt } from 'lucide-react';
 
 const screens = [
-  { id: 'soins', label: 'Soins', icon: HeartPulse },
   { id: 'cabinet', label: 'Cabinet', icon: Building2 },
+  { id: 'soins', label: 'Soins', icon: HeartPulse },
   { id: 'facturation', label: 'Facturation', icon: Receipt },
 ];
 

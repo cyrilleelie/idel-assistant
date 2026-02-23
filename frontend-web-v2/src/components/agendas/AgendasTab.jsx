@@ -103,9 +103,9 @@ export default function AgendasTab({
         </div>
       </div>
 
-      {workingNurses.length === 0 ? (
+      {nursesWorkingDisplayDays.length === 0 ? (
         <div className="text-center py-12 text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-300">
-          Aucun infirmier n'est planifié pour ce mois-ci.
+          Aucun infirmier n'est planifié sur cette période.
         </div>
       ) : (
         <>
@@ -124,7 +124,7 @@ export default function AgendasTab({
                 <Users size={14} /> Tous
               </button>
             )}
-            {workingNurses.map(nurse => {
+            {nursesWorkingDisplayDays.map(nurse => {
               const isSelected = selectedAgendaNurseIds.includes(nurse.userId);
               return (
                 <button

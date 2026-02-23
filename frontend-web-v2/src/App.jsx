@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Calendar, CalendarDays, UserCircle, Users, Clock } from 'lucide-react';
+import { Building2, Calendar, CalendarDays, UserCircle, Users, Clock } from 'lucide-react';
 import { getDaysInMonth, formatDate, doSlotsOverlap, isTimeWithinSlot } from './utils/dateTime';
 import { defaultConfigs, nurseColors } from './data/defaults';
 import { listMembers, inviteMember, updateMember } from './api/cabinet-members';
@@ -11,6 +11,7 @@ import { patientApiToFrontend, patientFrontendToApiCreate, patientFrontendToApiU
 import { apptApiToFrontend, assignSlotIds, frontendToApiCreate as apptFrontendToApiCreate } from './utils/appointmentMapper';
 import { getUserRole, getUserEmail } from './utils/auth';
 import { fetchMe } from './api/auth';
+import { fetchCabinet, updateCabinet } from './api/cabinet';
 import Header from './components/Header';
 import InfoBanner from './components/InfoBanner';
 import TabNav from './components/TabNav';
@@ -19,6 +20,7 @@ import PatientsTab from './components/patients/PatientsTab';
 import PlanningTab from './components/planning/PlanningTab';
 import AgendasTab from './components/agendas/AgendasTab';
 import EquipeTab from './components/equipe/EquipeTab';
+import CabinetTab from './components/cabinet/CabinetTab';
 import CreneauxTab from './components/creneaux/CreneauxTab';
 import FacturationTab from './components/facturation/FacturationTab';
 import RdvModal from './components/modals/RdvModal';
@@ -26,18 +28,19 @@ import RdvModal from './components/modals/RdvModal';
 // --- Sub-tab definitions per screen ---
 const soinsTabs = [
   { id: 'patients', label: 'Patients', icon: UserCircle },
-  { id: 'agendas', label: 'Agendas RDV', icon: CalendarDays },
+  { id: 'agendas', label: 'Agenda', icon: CalendarDays },
 ];
 
 const cabinetTabs = [
-  { id: 'planning', label: 'Planning', icon: Calendar },
+  { id: 'cabinet-info', label: 'Cabinet', icon: Building2 },
   { id: 'equipe', label: 'Équipe', icon: Users },
-  { id: 'creneaux', label: 'Créneaux', icon: Clock },
+  { id: 'creneaux', label: 'Administration', icon: Clock },
+  { id: 'planning', label: 'Planning', icon: Calendar },
 ];
 
 const defaultTabForScreen = {
   soins: 'patients',
-  cabinet: 'planning',
+  cabinet: 'cabinet-info',
   facturation: null,
 };
 
@@ -50,6 +53,10 @@ export default function App() {
   // Profile data from GET /me (user + cabinet)
   const [meData, setMeData] = useState(null);
 
+  // Full cabinet data from GET /cabinet/
+  const [cabinetData, setCabinetData] = useState(null);
+  const [cabinetLoading, setCabinetLoading] = useState(false);
+
   const loadMe = useCallback(async () => {
     try {
       const data = await fetchMe();
@@ -61,11 +68,24 @@ export default function App() {
     }
   }, []);
 
+  const loadCabinet = useCallback(async () => {
+    setCabinetLoading(true);
+    try {
+      const data = await fetchCabinet();
+      setCabinetData(data);
+    } catch (err) {
+      console.error('Failed to fetch /cabinet:', err);
+    } finally {
+      setCabinetLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isAuthenticated) {
       loadMe();
+      loadCabinet();
     }
-  }, [isAuthenticated, loadMe]);
+  }, [isAuthenticated, loadMe, loadCabinet]);
 
   const handleLogin = useCallback((email) => {
     const role = getUserRole();
@@ -73,8 +93,15 @@ export default function App() {
     setUserEmail(decodedEmail);
     setUserRole(role);
     setIsAuthenticated(true);
-    setActiveScreen('soins');
-    setActiveTab('patients');
+    setActiveScreen('cabinet');
+    setActiveTab('cabinet-info');
+  }, []);
+
+  const handleCabinetUpdate = useCallback(async (payload) => {
+    const updated = await updateCabinet(payload);
+    setCabinetData(updated);
+    // Sync the partial meData.cabinet so InfoBanner stays consistent
+    setMeData(prev => prev ? { ...prev, cabinet: { ...prev.cabinet, name: updated.name, address: updated.address } } : prev);
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -84,7 +111,8 @@ export default function App() {
     setUserEmail('');
     setUserRole(null);
     setMeData(null);
-    setActiveScreen('soins');
+    setCabinetData(null);
+    setActiveScreen('cabinet');
   }, []);
 
   // Listen for forced logout from the API client (expired refresh token)
@@ -95,8 +123,8 @@ export default function App() {
   }, [handleLogout]);
 
   // --- NAVIGATION ---
-  const [activeScreen, setActiveScreen] = useState('soins');
-  const [activeTab, setActiveTab] = useState('patients');
+  const [activeScreen, setActiveScreen] = useState('cabinet');
+  const [activeTab, setActiveTab] = useState('cabinet-info');
 
   const handleScreenChange = useCallback((screen) => {
     setActiveScreen(screen);
@@ -146,13 +174,17 @@ export default function App() {
   const [isEditingPatient, setIsEditingPatient] = useState(false);
   const [patientForm, setPatientForm] = useState({});
 
+  // --- SORT NURSES BY ROLE: Titulaire → Collaborateur → Remplaçant(e) ---
+  const roleOrder = { 'Titulaire': 0, 'Collaborateur': 1, 'Remplaçant(e)': 2 };
+  const sortByRole = (list) => [...list].sort((a, b) => (roleOrder[a.role] ?? 9) - (roleOrder[b.role] ?? 9));
+
   // --- FETCH NURSES FROM API ---
   const fetchNurses = useCallback(async () => {
     setNursesLoading(true);
     setNursesError('');
     try {
       const data = await listMembers(true);
-      setNurses(data.items.map(apiToFrontend));
+      setNurses(sortByRole(data.items.map(apiToFrontend)));
     } catch (err) {
       console.error('Failed to fetch members:', err);
       setNursesError('Impossible de charger les membres du cabinet.');
@@ -356,7 +388,7 @@ export default function App() {
         const payload = frontendToApiInvite(nurseForm);
         const created = await inviteMember(payload);
         const mapped = apiToFrontend(created);
-        setNurses((prev) => [...prev, mapped]);
+        setNurses((prev) => sortByRole([...prev, mapped]));
         setSelectedNurseId(mapped.id);
         setIsEditingNurse(false);
       } catch (err) {
@@ -367,7 +399,7 @@ export default function App() {
         const payload = frontendToApiUpdate(nurseForm);
         const updated = await updateMember(selectedNurseId, payload);
         const mapped = apiToFrontend(updated);
-        setNurses((prev) => prev.map((n) => (n.id === selectedNurseId ? mapped : n)));
+        setNurses((prev) => sortByRole(prev.map((n) => (n.id === selectedNurseId ? mapped : n))));
         setNurseForm(mapped);
         setIsEditingNurse(false);
       } catch (err) {
@@ -533,6 +565,18 @@ export default function App() {
     }
   };
 
+  // Generic appointment creation callable from PrescriptionsTab
+  const createAppointmentForPrescription = useCallback(async ({ dateStr, startTime, endTime, nurseId, patientId }) => {
+    const apptPayload = apptFrontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId });
+    const createdAppt = await apiCreateAppointment(apptPayload);
+    const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
+    const mappedAppt = apptApiToFrontend(createdAppt, pMap);
+    assignSlotIds([mappedAppt], getActiveConfigForDate);
+    setAppointments(prev => [...prev, mappedAppt]);
+    return mappedAppt;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getActiveConfigForDate]);
+
   const deleteRdv = async (id) => {
     try {
       await apiCancelAppointment(id, 'Annulé depuis le planning');
@@ -631,6 +675,11 @@ export default function App() {
               reactivatePatient={reactivatePatient}
               appointments={appointments}
               nurses={nurses}
+              schedule={schedule}
+              configs={configs}
+              getActiveConfigForDate={getActiveConfigForDate}
+              onCreateAppointment={createAppointmentForPrescription}
+              onCancelAppointment={deleteRdv}
             />
               )}
             </>
@@ -655,6 +704,21 @@ export default function App() {
           )}
 
           {/* --- Cabinet --- */}
+          {activeScreen === 'cabinet' && activeTab === 'cabinet-info' && (
+            <>
+              {cabinetLoading && (
+                <div className="text-center py-12 text-slate-500">Chargement des informations...</div>
+              )}
+              {!cabinetLoading && (
+                <CabinetTab
+                  cabinet={cabinetData}
+                  onUpdate={handleCabinetUpdate}
+                  readOnly={isReadOnly}
+                />
+              )}
+            </>
+          )}
+
           {activeScreen === 'cabinet' && activeTab === 'planning' && (
             <PlanningTab
               nurses={activeNurses}
@@ -669,6 +733,7 @@ export default function App() {
               togglePlanningStatus={togglePlanningStatus}
               getActiveConfigForDate={getActiveConfigForDate}
               toggleNurseSlot={toggleNurseSlot}
+              appointments={appointments}
               readOnly={isReadOnly}
             />
           )}

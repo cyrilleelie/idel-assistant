@@ -12,6 +12,7 @@ export default function PlanningTab({
   currentDate, currentPlanningStatus,
   prevMonth, nextMonth, goToCurrentMonth, togglePlanningStatus,
   getActiveConfigForDate, toggleNurseSlot,
+  appointments = [],
   readOnly = false,
 }) {
   const [viewMode, setViewMode] = useState('month');
@@ -24,6 +25,22 @@ export default function PlanningTab({
   const nextWeek = useCallback(() => setWeekRef(w => new Date(w.getFullYear(), w.getMonth(), w.getDate() + 7)), []);
 
   const displayDays = viewMode === 'month' ? daysInMonth : weekDays;
+
+  const handleToggleSlot = (dateStr, slotId, nurseId) => {
+    const isAssigned = schedule[dateStr]?.[slotId]?.includes(nurseId);
+    if (isAssigned) {
+      const slotAppts = appointments.filter(
+        a => a.dateStr === dateStr && a.slotId === slotId && a.nurseId === nurseId
+      );
+      if (slotAppts.length > 0) {
+        const confirmed = window.confirm(
+          `Attention : ${slotAppts.length} RDV programmé(s) sur ce créneau.\nVoulez-vous vraiment retirer ce membre ?`
+        );
+        if (!confirmed) return;
+      }
+    }
+    toggleNurseSlot(dateStr, slotId, nurseId);
+  };
 
   const handleViewChange = (mode) => {
     setViewMode(mode);
@@ -93,7 +110,7 @@ export default function PlanningTab({
                 onClick={togglePlanningStatus}
                 className={`text-sm px-3 py-1 rounded font-medium transition-colors ${currentPlanningStatus === 'validated' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'}`}
               >
-                {currentPlanningStatus === 'validated' ? 'Déverrouiller' : 'Valider le mois'}
+                {currentPlanningStatus === 'validated' ? 'Déverrouiller' : 'Verrouiller le mois'}
               </button>
             </div>
           )}
@@ -158,7 +175,7 @@ export default function PlanningTab({
                             return (
                               <button
                                 key={slot.id}
-                                onClick={disabled ? undefined : () => toggleNurseSlot(dateStr, slot.id, nurse.userId)}
+                                onClick={disabled ? undefined : () => handleToggleSlot(dateStr, slot.id, nurse.userId)}
                                 disabled={disabled}
                                 title={`${slot.name} - ${nurse.firstName} ${nurse.lastName}`}
                                 className={`w-full text-[10px] py-1 px-0.5 rounded border transition-all font-medium ${

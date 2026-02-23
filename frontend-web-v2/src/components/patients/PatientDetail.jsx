@@ -1,6 +1,6 @@
 import {
-  ArrowLeft, UserMinus, UserPlus, Edit, UserCircle, Activity, History,
-  MapPin, Phone, Mail, Stethoscope, FileText, Clock, ClipboardList
+  ArrowLeft, UserMinus, UserPlus, Edit, UserCircle, Activity,
+  MapPin, Phone, Mail, Stethoscope, FileText, ClipboardList
 } from 'lucide-react';
 import PrescriptionsTab from './PrescriptionsTab';
 
@@ -9,7 +9,8 @@ export default function PatientDetail({
   isEditingPatient, setIsEditingPatient,
   patientSubTab, setPatientSubTab,
   closePatientDetail, handleSavePatient, deactivatePatient, reactivatePatient,
-  appointments, nurses
+  appointments, nurses, schedule, configs, getActiveConfigForDate,
+  onCreateAppointment, onCancelAppointment
 }) {
   const isInactive = patientForm.active === false;
   return (
@@ -73,9 +74,6 @@ export default function PatientDetail({
         </button>
         <button onClick={() => setPatientSubTab('prescriptions')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'prescriptions' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           <ClipboardList size={16}/> Ordonnances
-        </button>
-        <button onClick={() => setPatientSubTab('history')} disabled={selectedPatientId === 'new'} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'history' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed'}`}>
-          <History size={16}/> Historique
         </button>
       </div>
 
@@ -169,50 +167,16 @@ export default function PatientDetail({
             setPatientForm={setPatientForm}
             isEditingPatient={isEditingPatient}
             setIsEditingPatient={setIsEditingPatient}
+            nurses={nurses}
+            appointments={appointments}
+            schedule={schedule}
+            configs={configs}
+            getActiveConfigForDate={getActiveConfigForDate}
+            onCreateAppointment={onCreateAppointment}
+            onCancelAppointment={onCancelAppointment}
           />
         )}
 
-        {/* HISTORY TAB */}
-        {patientSubTab === 'history' && (
-          <div>
-            <h3 className="text-lg font-semibold text-slate-800 mb-4 border-b border-slate-100 pb-2">Historique des passages planifiés</h3>
-
-            {appointments.filter(a => a.patientId === patientForm.id).length > 0 ? (
-              <div className="space-y-3">
-                {appointments
-                  .filter(a => a.patientId === patientForm.id)
-                  .sort((a, b) => new Date(b.dateStr) - new Date(a.dateStr))
-                  .map(rdv => {
-                    const nurse = nurses.find(n => n.id === rdv.nurseId);
-                    return (
-                      <div key={rdv.id} className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-sm transition-shadow">
-                        <div className="flex items-center gap-4">
-                          <div className="bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-center font-bold">
-                            <div className="text-xs uppercase opacity-80">{new Date(rdv.dateStr).toLocaleDateString('fr-FR', { weekday: 'short' })}</div>
-                            <div className="text-lg">{new Date(rdv.dateStr).getDate()}</div>
-                          </div>
-                          <div>
-                            <div className="font-medium text-slate-800 capitalize">{new Date(rdv.dateStr).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>
-                            <div className="text-sm text-slate-500 flex items-center gap-1 mt-1">
-                              <Clock size={14}/> {rdv.startTime} - {rdv.endTime}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200">
-                          <div className={`w-2 h-2 rounded-full ${nurse?.color.split(' ')[0] || 'bg-slate-400'}`}></div>
-                          <span className="text-sm font-medium text-slate-700">{nurse ? `${nurse.firstName} ${nurse.lastName}` : 'Infirmier inconnu'}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-                Aucun rendez-vous trouvé dans l'agenda pour ce patient.
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

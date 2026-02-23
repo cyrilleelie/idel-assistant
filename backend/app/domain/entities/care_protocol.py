@@ -11,6 +11,9 @@ class CareProtocol:
     duration_minutes: int
     recurrence_rule: str  # RRULE format
     start_date: datetime.date
+    label: str = ""                    # Nom libre de l'ordonnance
+    frequency_display: str = "daily"   # daily|2xday|3xday|weekly|2xweek|3xweek|custom
+    custom_frequency: str = ""         # Texte libre si frequency_display == "custom"
     preferred_time: datetime.time | None = None
     preferred_slot: str = ""  # morning | afternoon | evening
     end_date: datetime.date | None = None

@@ -7,6 +7,9 @@ from app.infrastructure.persistence.repositories.sqlalchemy_cabinet_repo import 
 from app.infrastructure.persistence.repositories.sqlalchemy_care_protocol_repo import (
     SQLAlchemyCareProtocolRepo,
 )
+from app.infrastructure.persistence.repositories.sqlalchemy_document_repo import (
+    SQLAlchemyDocumentRepo,
+)
 from app.infrastructure.persistence.repositories.sqlalchemy_patient_repo import (
     SQLAlchemyPatientRepo,
 )
@@ -24,6 +27,7 @@ __all__ = [
     "SQLAlchemyAppointmentRepo",
     "SQLAlchemyCabinetRepo",
     "SQLAlchemyCareProtocolRepo",
+    "SQLAlchemyDocumentRepo",
     "SQLAlchemyPatientRepo",
     "SQLAlchemySectorRepo",
     "SQLAlchemyTourneeRepo",

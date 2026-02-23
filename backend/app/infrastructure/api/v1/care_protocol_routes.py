@@ -18,6 +18,7 @@ from app.infrastructure.api.schemas.care_protocol_schemas import (
     CareProtocolCreate,
     CareProtocolListResponse,
     CareProtocolResponse,
+    CareProtocolUpdate,
 )
 from app.infrastructure.persistence.repositories import (
     SQLAlchemyAppointmentRepo,
@@ -36,6 +37,9 @@ def _entity_to_response(protocol: CareProtocol) -> CareProtocolResponse:
         patient_id=str(protocol.patient_id),
         cabinet_id=str(protocol.cabinet_id),
         care_type=protocol.care_type,
+        label=protocol.label,
+        frequency_display=protocol.frequency_display,
+        custom_frequency=protocol.custom_frequency,
         duration_minutes=protocol.duration_minutes,
         recurrence_rule=protocol.recurrence_rule,
         start_date=protocol.start_date,
@@ -88,6 +92,9 @@ async def create_care_protocol(
         patient_id=body.patient_id,
         cabinet_id=auth.cabinet_id,
         care_type=body.care_type,
+        label=body.label,
+        frequency_display=body.frequency_display,
+        custom_frequency=body.custom_frequency,
         duration_minutes=body.duration_minutes,
         recurrence_rule=body.recurrence_rule,
         start_date=body.start_date,
@@ -141,3 +148,59 @@ async def list_care_protocols(
         items=[_entity_to_response(p) for p in protocols],
         total=total,
     )
+
+
+CARE_PROTOCOL_UPDATABLE_FIELDS = frozenset({
+    "care_type", "label", "frequency_display", "custom_frequency",
+    "duration_minutes", "recurrence_rule", "start_date", "end_date",
+    "preferred_time", "preferred_slot", "notes", "status",
+})
+
+
+@router.patch("/{protocol_id}", response_model=CareProtocolResponse)
+async def update_care_protocol(
+    protocol_id: UUID,
+    body: CareProtocolUpdate,
+    request: Request,
+    auth: AuthContext = Depends(get_current_user),
+    repo: SQLAlchemyCareProtocolRepo = Depends(get_care_protocol_repository),
+):
+    """Met à jour partiellement un protocole de soins."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    protocol = await repo.get_by_id(protocol_id)
+    if not protocol or protocol.cabinet_id != auth.cabinet_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Protocole introuvable",
+        )
+
+    update_data = body.model_dump(exclude_unset=True)
+    for field_name, value in update_data.items():
+        if field_name in CARE_PROTOCOL_UPDATABLE_FIELDS:
+            setattr(protocol, field_name, value)
+
+    protocol = await repo.update(protocol)
+    return _entity_to_response(protocol)
+
+
+@router.delete("/{protocol_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_care_protocol(
+    protocol_id: UUID,
+    request: Request,
+    auth: AuthContext = Depends(get_current_user),
+    repo: SQLAlchemyCareProtocolRepo = Depends(get_care_protocol_repository),
+):
+    """Supprime un protocole de soins."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    protocol = await repo.get_by_id(protocol_id)
+    if not protocol or protocol.cabinet_id != auth.cabinet_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Protocole introuvable",
+        )
+
+    await repo.delete(protocol_id)

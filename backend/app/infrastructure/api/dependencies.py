@@ -16,6 +16,7 @@ from app.infrastructure.persistence.models.user_model import (
 from app.infrastructure.persistence.repositories import (
     SQLAlchemyAppointmentRepo,
     SQLAlchemyCabinetRepo,
+    SQLAlchemyDocumentRepo,
     SQLAlchemyPatientRepo,
     SQLAlchemySectorRepo,
     SQLAlchemyUserRepo,
@@ -163,8 +164,15 @@ def get_appointment_repository(
 
 def get_care_protocol_repository(
     db: AsyncSession = Depends(get_db),
+    km: KeyManager = Depends(get_key_manager),
 ) -> SQLAlchemyCareProtocolRepo:
-    return SQLAlchemyCareProtocolRepo(db)
+    return SQLAlchemyCareProtocolRepo(db, km)
+
+
+def get_document_repository(
+    db: AsyncSession = Depends(get_db),
+) -> SQLAlchemyDocumentRepo:
+    return SQLAlchemyDocumentRepo(db)
 
 
 def get_sector_repository(

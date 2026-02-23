@@ -59,6 +59,9 @@ class SQLAlchemyPatientRepo(PatientRepository):
             preferred_time_slot=model.preferred_time_slot or "",
             care_duration_default=model.care_duration_default,
             notes=self._decrypt_field(model.notes_encrypted, cabinet_id),
+            ssn=self._decrypt_field(model.ssn_encrypted, cabinet_id),
+            doctor_name=self._decrypt_field(model.doctor_name_encrypted, cabinet_id),
+            doctor_contact=self._decrypt_field(model.doctor_contact_encrypted, cabinet_id),
             status=model.status,
             archived_reason=model.archived_reason,
             archived_at=model.archived_at,
@@ -108,6 +111,18 @@ class SQLAlchemyPatientRepo(PatientRepository):
         )
         data["notes_encrypted"] = (
             self._encrypt_field(patient.notes, cid) if patient.notes else None
+        )
+        data["ssn_encrypted"] = (
+            self._encrypt_field(patient.ssn, cid) if patient.ssn else None
+        )
+        data["ssn_search_hash"] = (
+            self._search_hash(patient.ssn, cid) if patient.ssn else None
+        )
+        data["doctor_name_encrypted"] = (
+            self._encrypt_field(patient.doctor_name, cid) if patient.doctor_name else None
+        )
+        data["doctor_contact_encrypted"] = (
+            self._encrypt_field(patient.doctor_contact, cid) if patient.doctor_contact else None
         )
         return data
 

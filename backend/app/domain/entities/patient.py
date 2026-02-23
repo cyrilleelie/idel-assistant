@@ -20,6 +20,9 @@ class Patient:
     pathologies: list[str] = field(default_factory=list)
     preferred_time_slot: str = ""  # morning | afternoon | evening
     care_duration_default: int = 30
+    ssn: str = ""               # N° Securite Sociale
+    doctor_name: str = ""       # Medecin traitant
+    doctor_contact: str = ""    # Contact medecin
     notes: str = ""
     status: str = "active"  # active | archived
     archived_reason: str = ""

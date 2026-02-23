@@ -1,5 +1,5 @@
 import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from jose import JWTError, jwt
 
@@ -29,6 +29,7 @@ def create_access_token(
         "cabinet_id": str(cabinet_id),
         "role": role,
         "type": "access",
+        "jti": str(uuid4()),
         "exp": expire,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
@@ -47,6 +48,7 @@ def create_refresh_token(
     payload = {
         "sub": str(user_id),
         "type": "refresh",
+        "jti": str(uuid4()),
         "exp": expire,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)

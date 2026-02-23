@@ -22,6 +22,8 @@ _ENTITY_MAP = {
     "sectors": "sector",
     "invoices": "invoice",
     "transmissions": "transmission",
+    "cabinet-members": "cabinet_member",
+    "documents": "document",
 }
 
 # Mapping method → action
@@ -31,6 +33,9 @@ _ACTION_MAP = {
     "PUT": "update",
     "DELETE": "delete",
 }
+
+# Entités sensibles dont les lectures (GET) doivent être journalisées (HDS)
+_SENSITIVE_ENTITIES = {"patient", "care_protocol", "document"}
 
 
 def _extract_entity_type(path: str) -> str | None:
@@ -56,18 +61,12 @@ def _extract_entity_id(path: str) -> str | None:
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
-    """Log les opérations d'écriture (POST, PATCH, DELETE) dans audit_logs."""
+    """Log les opérations d'écriture et les lectures de données sensibles."""
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         response = await call_next(request)
-
-        # Ne log que les opérations d'écriture réussies
-        if request.method not in _ACTION_MAP:
-            return response
-        if response.status_code >= 400:
-            return response
 
         # Exclut les routes non-API et auth
         path = request.url.path
@@ -80,7 +79,28 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if not entity_type:
             return response
 
-        action = _ACTION_MAP[request.method]
+        # Détermine l'action
+        if request.method in _ACTION_MAP:
+            action = _ACTION_MAP[request.method]
+        elif request.method == "GET":
+            # Ne log les lectures que pour les entités sensibles
+            # et seulement si la réponse est réussie
+            if entity_type not in _SENSITIVE_ENTITIES:
+                return response
+            entity_id = _extract_entity_id(path)
+            if not entity_id:
+                # GET /patients/ (liste) → log "list"
+                action = "list"
+            else:
+                # GET /patients/{id} → log "read"
+                action = "read"
+        else:
+            return response
+
+        # Ne log que les réponses réussies
+        if response.status_code >= 400:
+            return response
+
         entity_id = _extract_entity_id(path)
 
         # Extraire user_id et cabinet_id depuis request.state (posé par les deps)
@@ -90,13 +110,15 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if not user_id or not cabinet_id:
             return response
 
-        # entity_id est optionnel (pas d'ID pour les POST de création)
         entity_uuid = None
         if entity_id:
             try:
                 entity_uuid = UUID(entity_id)
             except ValueError:
                 entity_uuid = None
+
+        # Récupère les changements posés par les route handlers
+        changes = getattr(request.state, "audit_changes", {})
 
         try:
             async with async_session_factory() as session:
@@ -107,7 +129,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     entity_type=entity_type,
                     entity_id=entity_uuid,
                     action=action,
-                    changes={},
+                    changes=changes,
                     ip_address=request.client.host if request.client else "",
                     created_at=datetime.datetime.now(datetime.UTC),
                 )

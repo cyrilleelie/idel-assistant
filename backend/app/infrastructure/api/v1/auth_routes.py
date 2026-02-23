@@ -1,14 +1,16 @@
-"""Routes d'authentification : register, login, refresh."""
+"""Routes d'authentification : register, login, refresh, logout."""
 
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.cabinet import Cabinet
 from app.domain.entities.user import CabinetMember, User
 from app.infrastructure.api.schemas.auth_schemas import (
     LoginRequest,
+    LogoutRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
@@ -26,8 +28,11 @@ from app.infrastructure.security.jwt_handler import (
     verify_token,
 )
 from app.infrastructure.security.password_handler import hash_password, verify_password
+from app.infrastructure.security.token_blacklist import blacklist_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 @router.post(
@@ -199,3 +204,37 @@ async def refresh(
         access_token=access_token,
         refresh_token=new_refresh_token,
     )
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    body: LogoutRequest,
+    token: str = Depends(_oauth2_scheme),
+):
+    """Révoque l'access token courant (et optionnellement le refresh token)."""
+    import datetime as dt
+
+    # Blacklist l'access token
+    try:
+        payload = verify_token(token)
+        jti = payload.get("jti")
+        exp = payload.get("exp")
+        if jti and exp:
+            remaining = int(exp - dt.datetime.now(dt.UTC).timestamp())
+            if remaining > 0:
+                await blacklist_token(jti, remaining)
+    except TokenError:
+        pass  # Token déjà expiré, rien à faire
+
+    # Blacklist le refresh token si fourni
+    if body.refresh_token:
+        try:
+            payload = verify_token(body.refresh_token)
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                remaining = int(exp - dt.datetime.now(dt.UTC).timestamp())
+                if remaining > 0:
+                    await blacklist_token(jti, remaining)
+        except TokenError:
+            pass

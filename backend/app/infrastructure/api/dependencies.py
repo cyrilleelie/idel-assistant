@@ -27,6 +27,7 @@ from app.infrastructure.persistence.repositories.sqlalchemy_care_protocol_repo i
 from app.infrastructure.services.fake_routing_service import FakeRoutingService
 from app.infrastructure.security.jwt_handler import TokenError, verify_token
 from app.infrastructure.security.key_manager import KeyManager
+from app.infrastructure.security.token_blacklist import is_token_blacklisted
 
 from sqlalchemy import select
 
@@ -78,6 +79,22 @@ async def get_current_user(
             detail="Token invalide",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Vérifie que le token n'a pas été révoqué (logout)
+    jti = payload.get("jti")
+    if jti:
+        try:
+            if await is_token_blacklisted(jti):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token révoqué",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            # Si Redis est indisponible, on laisse passer (fail-open)
+            pass
 
     user_id_str = payload.get("sub")
     cabinet_id_str = payload.get("cabinet_id")

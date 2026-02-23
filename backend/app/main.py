@@ -12,6 +12,7 @@ from app.infrastructure.api.middleware import AuditMiddleware
 from app.infrastructure.api.v1 import (
     appointment_routes,
     auth_routes,
+    cabinet_member_routes,
     care_protocol_routes,
     document_routes,
     patient_routes,
@@ -20,6 +21,7 @@ from app.infrastructure.api.v1 import (
     tournee_routes,
 )
 from app.infrastructure.persistence.database import engine
+from app.infrastructure.security.token_blacklist import close_redis
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,8 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown : fermer le pool de connexions
+    # Shutdown : fermer les connexions
+    await close_redis()
     await engine.dispose()
     logger.info("Pool de connexions fermé")
 
@@ -79,6 +82,7 @@ app.include_router(care_protocol_routes.router, prefix="/api/v1")
 app.include_router(sector_routes.router, prefix="/api/v1")
 app.include_router(slot_routes.router, prefix="/api/v1")
 app.include_router(tournee_routes.router, prefix="/api/v1")
+app.include_router(cabinet_member_routes.router, prefix="/api/v1")
 app.include_router(document_routes.router, prefix="/api/v1")
 
 

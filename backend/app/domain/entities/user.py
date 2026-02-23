@@ -31,6 +31,7 @@ class CabinetMember:
     user_id: UUID
     role: str = "member"  # admin | member | replacement
     is_active: bool = True
+    color: str = "#3B82F6"
     joined_at: datetime.date = field(default_factory=datetime.date.today)
     left_at: datetime.date | None = None
     id: UUID = field(default_factory=uuid4)

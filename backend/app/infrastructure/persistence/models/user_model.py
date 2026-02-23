@@ -36,5 +36,6 @@ class CabinetMemberModel(Base):
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    color: Mapped[str] = mapped_column(String(20), nullable=False, server_default="#3B82F6")
     joined_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     left_at = mapped_column(TIMESTAMP(timezone=True), nullable=True)

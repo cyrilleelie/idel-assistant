@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from app.application.frequency_mapper import frequency_display_to_rrule
 from app.domain.entities.care_protocol import CareProtocol
 from app.domain.rules.care_protocol_rules import generate_appointments_from_protocol
 from app.infrastructure.api.dependencies import (
@@ -78,10 +79,24 @@ async def create_care_protocol(
             detail="Patient introuvable",
         )
 
+    # Auto-génère le RRULE depuis frequency_display si non fourni
+    recurrence_rule = body.recurrence_rule
+    if not recurrence_rule:
+        auto_rrule = frequency_display_to_rrule(body.frequency_display)
+        if auto_rrule:
+            recurrence_rule = auto_rrule
+        elif body.frequency_display == "custom" and body.custom_frequency:
+            recurrence_rule = f"FREQ=DAILY;INTERVAL=1"  # fallback for custom
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Veuillez fournir recurrence_rule ou une frequency_display valide",
+            )
+
     # Valide le RRULE
     try:
         from app.domain.value_objects.recurrence import RecurrenceRule
-        RecurrenceRule(body.recurrence_rule)
+        RecurrenceRule(recurrence_rule)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -96,7 +111,7 @@ async def create_care_protocol(
         frequency_display=body.frequency_display,
         custom_frequency=body.custom_frequency,
         duration_minutes=body.duration_minutes,
-        recurrence_rule=body.recurrence_rule,
+        recurrence_rule=recurrence_rule,
         start_date=body.start_date,
         end_date=body.end_date,
         preferred_time=body.preferred_time,
@@ -177,6 +192,13 @@ async def update_care_protocol(
         )
 
     update_data = body.model_dump(exclude_unset=True)
+
+    # Si frequency_display change sans recurrence_rule, auto-générer le RRULE
+    if "frequency_display" in update_data and "recurrence_rule" not in update_data:
+        auto_rrule = frequency_display_to_rrule(update_data["frequency_display"])
+        if auto_rrule:
+            update_data["recurrence_rule"] = auto_rrule
+
     for field_name, value in update_data.items():
         if field_name in CARE_PROTOCOL_UPDATABLE_FIELDS:
             setattr(protocol, field_name, value)

@@ -177,9 +177,19 @@ async def update_patient(
                 detail="Seule la reactivation (archived -> active) est autorisee",
             )
 
+    # Audit diff : capture avant/après pour chaque champ modifié
+    changes = {}
     for field_name, value in update_data.items():
         if field_name in PATIENT_UPDATABLE_FIELDS:
+            old_value = getattr(patient, field_name, None)
+            # Convertir les UUID en str pour JSON
+            old_str = str(old_value) if old_value is not None else None
+            new_str = str(value) if value is not None else None
+            if old_str != new_str:
+                changes[field_name] = {"old": old_str, "new": new_str}
             setattr(patient, field_name, value)
+
+    request.state.audit_changes = changes
 
     # Clear archive fields on reactivation
     if update_data.get("status") == "active":
@@ -208,4 +218,9 @@ async def archive_patient(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Patient introuvable",
         )
+
+    request.state.audit_changes = {
+        "status": {"old": patient.status, "new": "archived"},
+        "reason": reason,
+    }
     await repo.archive(patient_id, reason)

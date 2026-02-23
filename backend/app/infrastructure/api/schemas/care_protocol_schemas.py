@@ -13,7 +13,7 @@ class CareProtocolCreate(BaseModel):
     frequency_display: str = Field(default="daily", pattern=r"^(daily|2xday|3xday|weekly|2xweek|3xweek|custom)$")
     custom_frequency: str = Field(default="", max_length=255)
     duration_minutes: int = Field(ge=5, le=240)
-    recurrence_rule: str = Field(min_length=1, max_length=255)
+    recurrence_rule: str = Field(default="", max_length=255)
     start_date: datetime.date
     end_date: datetime.date | None = None
     preferred_time: datetime.time | None = None

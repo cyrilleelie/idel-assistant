@@ -35,6 +35,7 @@ class SQLAlchemyCabinetRepo(CabinetRepository):
             user_id=model.user_id,
             role=model.role,
             is_active=model.is_active,
+            color=model.color or "#3B82F6",
             joined_at=model.joined_at.date() if model.joined_at else None,
             left_at=model.left_at.date() if model.left_at else None,
         )
@@ -87,9 +88,26 @@ class SQLAlchemyCabinetRepo(CabinetRepository):
             user_id=member.user_id,
             role=member.role,
             is_active=member.is_active,
+            color=member.color,
         )
         self._session.add(model)
         await self._session.flush()
+        return self._member_to_entity(model)
+
+    async def update_member(self, member: CabinetMember) -> CabinetMember:
+        result = await self._session.execute(
+            select(CabinetMemberModel).where(CabinetMemberModel.id == member.id)
+        )
+        model = result.scalar_one_or_none()
+        if model is None:
+            raise ValueError(f"CabinetMember {member.id} not found")
+
+        model.role = member.role
+        model.is_active = member.is_active
+        model.color = member.color
+        model.left_at = member.left_at
+        await self._session.flush()
+        await self._session.refresh(model)
         return self._member_to_entity(model)
 
     async def get_members(self, cabinet_id: UUID) -> list[CabinetMember]:

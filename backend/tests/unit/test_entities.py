@@ -1,4 +1,4 @@
-"""Tests unitaires pour les entités domain (Patient, CareProtocol, Document)."""
+"""Tests unitaires pour les entités domain (Patient, CareProtocol, Document, CabinetMember)."""
 
 import datetime
 from uuid import uuid4
@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.domain.entities.patient import Patient
 from app.domain.entities.care_protocol import CareProtocol
 from app.domain.entities.document import Document
+from app.domain.entities.user import CabinetMember
 
 
 class TestPatientEntity:
@@ -136,3 +137,31 @@ class TestDocumentEntity:
         d1 = Document(**base)
         d2 = Document(**base)
         assert d1.id != d2.id
+
+
+class TestCabinetMemberEntity:
+    def test_create_with_color(self):
+        m = CabinetMember(
+            cabinet_id=uuid4(),
+            user_id=uuid4(),
+            role="admin",
+            color="#FF5733",
+        )
+        assert m.role == "admin"
+        assert m.color == "#FF5733"
+        assert m.is_active is True
+        assert m.id is not None
+
+    def test_defaults(self):
+        m = CabinetMember(cabinet_id=uuid4(), user_id=uuid4())
+        assert m.role == "member"
+        assert m.color == "#3B82F6"
+        assert m.is_active is True
+        assert m.left_at is None
+
+    def test_deactivate(self):
+        m = CabinetMember(cabinet_id=uuid4(), user_id=uuid4())
+        m.is_active = False
+        m.left_at = datetime.date.today()
+        assert m.is_active is False
+        assert m.left_at is not None

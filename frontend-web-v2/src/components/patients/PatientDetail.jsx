@@ -1,0 +1,219 @@
+import {
+  ArrowLeft, UserMinus, UserPlus, Edit, UserCircle, Activity, History,
+  MapPin, Phone, Mail, Stethoscope, FileText, Clock, ClipboardList
+} from 'lucide-react';
+import PrescriptionsTab from './PrescriptionsTab';
+
+export default function PatientDetail({
+  selectedPatientId, patientForm, setPatientForm,
+  isEditingPatient, setIsEditingPatient,
+  patientSubTab, setPatientSubTab,
+  closePatientDetail, handleSavePatient, deactivatePatient, reactivatePatient,
+  appointments, nurses
+}) {
+  const isInactive = patientForm.active === false;
+  return (
+    <div className="animate-in slide-in-from-right-4 duration-300 flex flex-col h-full">
+
+      {/* Header Patient */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-200 pb-4">
+        <div className="flex items-center gap-4">
+          <button onClick={closePatientDetail} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+            <ArrowLeft size={20} />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xl border border-blue-200">
+              {patientForm.firstName?.charAt(0) || '?'}{patientForm.lastName?.charAt(0) || '?'}
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800 uppercase">
+                {patientForm.lastName || 'Nouveau'} <span className="capitalize font-medium">{patientForm.firstName || 'Patient'}</span>
+              </h2>
+              {!isEditingPatient && <span className="text-sm text-slate-500">Dossier N° {selectedPatientId === 'new' ? '---' : selectedPatientId.replace('p_', '')}</span>}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 ml-16 md:ml-0">
+          {!isEditingPatient ? (
+            <>
+              {isInactive ? (
+                <button onClick={() => reactivatePatient(selectedPatientId)} className="text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                  <UserPlus size={16}/> Réactiver
+                </button>
+              ) : (
+                <button onClick={() => deactivatePatient(selectedPatientId)} className="text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                  <UserMinus size={16}/> Désactiver
+                </button>
+              )}
+              <button onClick={() => setIsEditingPatient(true)} className="bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2">
+                <Edit size={16}/> Modifier
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => selectedPatientId === 'new' ? closePatientDetail() : setIsEditingPatient(false)} className="text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-lg font-medium transition-colors">
+                Annuler
+              </button>
+              <button onClick={handleSavePatient} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                Enregistrer
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Sous-onglets */}
+      <div className="flex gap-1 border-b border-slate-200 mb-6">
+        <button onClick={() => setPatientSubTab('info')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'info' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <UserCircle size={16}/> Informations
+        </button>
+        <button onClick={() => setPatientSubTab('medical')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'medical' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <Activity size={16}/> Dossier de soins
+        </button>
+        <button onClick={() => setPatientSubTab('prescriptions')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'prescriptions' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <ClipboardList size={16}/> Ordonnances
+        </button>
+        <button onClick={() => setPatientSubTab('history')} disabled={selectedPatientId === 'new'} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'history' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed'}`}>
+          <History size={16}/> Historique
+        </button>
+      </div>
+
+      {/* Contenu Sous-onglets */}
+      <div className="flex-1 overflow-y-auto pb-8">
+
+        {/* INFO TAB */}
+        {patientSubTab === 'info' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Identité & Contact */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-100 pb-2">Identité & Contact</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Nom *</label>
+                  {isEditingPatient ? <input type="text" value={patientForm.lastName} onChange={e => setPatientForm({...patientForm, lastName: e.target.value.toUpperCase()})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase" placeholder="DUPONT" /> : <div className="text-sm font-medium uppercase">{patientForm.lastName || '-'}</div>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Prénom *</label>
+                  {isEditingPatient ? <input type="text" value={patientForm.firstName} onChange={e => setPatientForm({...patientForm, firstName: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none capitalize" placeholder="Jean" /> : <div className="text-sm font-medium capitalize">{patientForm.firstName || '-'}</div>}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Adresse complète</label>
+                {isEditingPatient ? <input type="text" value={patientForm.address} onChange={e => setPatientForm({...patientForm, address: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="12 rue de la Paix, 75000 Paris" /> : <div className="text-sm text-slate-700 flex items-start gap-2"><MapPin size={16} className="text-slate-400 shrink-0"/> {patientForm.address || '-'}</div>}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Téléphone</label>
+                  {isEditingPatient ? <input type="tel" value={patientForm.phone} onChange={e => setPatientForm({...patientForm, phone: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="06..." /> : <div className="text-sm text-slate-700 flex items-center gap-2"><Phone size={16} className="text-slate-400"/> {patientForm.phone || '-'}</div>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
+                  {isEditingPatient ? <input type="email" value={patientForm.email} onChange={e => setPatientForm({...patientForm, email: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="@" /> : <div className="text-sm text-slate-700 flex items-center gap-2"><Mail size={16} className="text-slate-400"/> {patientForm.email || '-'}</div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Données Médicales */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-100 pb-2">Administratif Médical</h3>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">N° Sécurité Sociale</label>
+                {isEditingPatient ? <input type="text" value={patientForm.ssn} onChange={e => setPatientForm({...patientForm, ssn: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none tracking-widest" placeholder="1 80 12 75..." /> : <div className="text-sm font-mono tracking-widest text-slate-800">{patientForm.ssn || '-'}</div>}
+              </div>
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-4 space-y-3">
+                <h4 className="font-medium text-sm text-slate-700 flex items-center gap-2"><Stethoscope size={16} className="text-blue-600"/> Médecin Traitant</h4>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Nom du médecin</label>
+                  {isEditingPatient ? <input type="text" value={patientForm.doctorName} onChange={e => setPatientForm({...patientForm, doctorName: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white" placeholder="Dr. ..." /> : <div className="text-sm font-medium">{patientForm.doctorName || '-'}</div>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Contact cabinet</label>
+                  {isEditingPatient ? <input type="text" value={patientForm.doctorContact} onChange={e => setPatientForm({...patientForm, doctorContact: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white" placeholder="Tel ou Email..." /> : <div className="text-sm text-slate-600">{patientForm.doctorContact || '-'}</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MEDICAL TAB (Dossier de soins) */}
+        {patientSubTab === 'medical' && (
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-800 mb-2 flex items-center gap-2"><FileText size={18} className="text-blue-600"/> Antécédents médicaux connus</label>
+              {isEditingPatient ? (
+                <textarea value={patientForm.antecedents} onChange={e => setPatientForm({...patientForm, antecedents: e.target.value})} rows={5} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Allergies, pathologies lourdes, opérations récentes..."></textarea>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900 whitespace-pre-wrap min-h-[100px]">
+                  {patientForm.antecedents || <span className="text-amber-700/60 italic">Aucun antécédent renseigné.</span>}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-800 mb-2 flex items-center gap-2"><UserCircle size={18} className="text-blue-600"/> Notes internes cabinet</label>
+              {isEditingPatient ? (
+                <textarea value={patientForm.notes} onChange={e => setPatientForm({...patientForm, notes: e.target.value})} rows={4} className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Codes porte, habitudes du patient, précautions particulières..."></textarea>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm text-slate-700 whitespace-pre-wrap min-h-[80px]">
+                  {patientForm.notes || <span className="text-slate-400 italic">Aucune note.</span>}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* PRESCRIPTIONS TAB */}
+        {patientSubTab === 'prescriptions' && (
+          <PrescriptionsTab
+            patientForm={patientForm}
+            setPatientForm={setPatientForm}
+            isEditingPatient={isEditingPatient}
+            setIsEditingPatient={setIsEditingPatient}
+          />
+        )}
+
+        {/* HISTORY TAB */}
+        {patientSubTab === 'history' && (
+          <div>
+            <h3 className="text-lg font-semibold text-slate-800 mb-4 border-b border-slate-100 pb-2">Historique des passages planifiés</h3>
+
+            {appointments.filter(a => a.patientId === patientForm.id).length > 0 ? (
+              <div className="space-y-3">
+                {appointments
+                  .filter(a => a.patientId === patientForm.id)
+                  .sort((a, b) => new Date(b.dateStr) - new Date(a.dateStr))
+                  .map(rdv => {
+                    const nurse = nurses.find(n => n.id === rdv.nurseId);
+                    return (
+                      <div key={rdv.id} className="bg-white border border-slate-200 rounded-lg p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-sm transition-shadow">
+                        <div className="flex items-center gap-4">
+                          <div className="bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-center font-bold">
+                            <div className="text-xs uppercase opacity-80">{new Date(rdv.dateStr).toLocaleDateString('fr-FR', { weekday: 'short' })}</div>
+                            <div className="text-lg">{new Date(rdv.dateStr).getDate()}</div>
+                          </div>
+                          <div>
+                            <div className="font-medium text-slate-800 capitalize">{new Date(rdv.dateStr).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>
+                            <div className="text-sm text-slate-500 flex items-center gap-1 mt-1">
+                              <Clock size={14}/> {rdv.startTime} - {rdv.endTime}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200">
+                          <div className={`w-2 h-2 rounded-full ${nurse?.color.split(' ')[0] || 'bg-slate-400'}`}></div>
+                          <span className="text-sm font-medium text-slate-700">{nurse ? `${nurse.firstName} ${nurse.lastName}` : 'Infirmier inconnu'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                Aucun rendez-vous trouvé dans l'agenda pour ce patient.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

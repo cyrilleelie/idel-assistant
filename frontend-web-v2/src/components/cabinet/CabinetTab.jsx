@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Building2, MapPin, CreditCard, Globe, Pencil, Save, X } from 'lucide-react';
+import { Building2, MapPin, CreditCard, Pencil, Save, X } from 'lucide-react';
 
 const planLabels = {
   solo: 'Solo',
@@ -63,10 +63,10 @@ export default function CabinetTab({ cabinet, onUpdate, readOnly }) {
     : null;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-screen-md mx-auto">
 
       {/* --- Informations --- */}
-      <section className="bg-white rounded-lg border border-slate-200 p-5">
+      <section className="bg-slate-50 rounded-lg border border-slate-200 p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
@@ -148,7 +148,7 @@ export default function CabinetTab({ cabinet, onUpdate, readOnly }) {
       </section>
 
       {/* --- Abonnement --- */}
-      <section className="bg-white rounded-lg border border-slate-200 p-5">
+      <section className="bg-slate-50 rounded-lg border border-slate-200 p-5">
         <div className="flex items-center gap-2 mb-4">
           <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
             <CreditCard size={16} className="text-emerald-600" />
@@ -175,31 +175,6 @@ export default function CabinetTab({ cabinet, onUpdate, readOnly }) {
         </div>
       </section>
 
-      {/* --- Localisation --- */}
-      <section className="bg-white rounded-lg border border-slate-200 p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
-            <Globe size={16} className="text-violet-600" />
-          </div>
-          <h2 className="text-lg font-semibold text-slate-800">Localisation</h2>
-        </div>
-        <div className="space-y-3 text-sm">
-          {cabinet.lat != null && cabinet.lon != null ? (
-            <>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600">Latitude</span>
-                <span className="text-slate-800 font-mono">{cabinet.lat}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-600">Longitude</span>
-                <span className="text-slate-800 font-mono">{cabinet.lon}</span>
-              </div>
-            </>
-          ) : (
-            <p className="text-slate-400 italic">Non renseign&eacute;</p>
-          )}
-        </div>
-      </section>
     </div>
   );
 }

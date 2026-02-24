@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Building2, Calendar, CalendarDays, UserCircle, Users, Clock } from 'lucide-react';
-import { getDaysInMonth, formatDate, doSlotsOverlap, isTimeWithinSlot } from './utils/dateTime';
+import { Building2, Calendar, Users, Clock } from 'lucide-react';
+import { getDaysInMonth, formatDate, doSlotsOverlap, isTimeWithinSlot, getDayOfWeekMondayBased } from './utils/dateTime';
 import { defaultConfigs, nurseColors } from './data/defaults';
 import { listMembers, inviteMember, updateMember } from './api/cabinet-members';
 import { apiToFrontend, frontendToApiUpdate, frontendToApiInvite } from './utils/memberMapper';
 import { listPatients, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, archivePatient as apiArchivePatient } from './api/patients';
-import { listAppointments, createAppointment as apiCreateAppointment, cancelAppointment as apiCancelAppointment } from './api/appointments';
-import { fetchMonthSchedule, toggleScheduleAssignment } from './api/schedule-assignments';
+import { listAppointments, createAppointment as apiCreateAppointment, cancelAppointment as apiCancelAppointment, updateAppointment as apiUpdateAppointment, completeAppointment as apiCompleteAppointment } from './api/appointments';
+import { listCareProtocols, createCareProtocol, updateCareProtocol, deleteCareProtocol } from './api/care-protocols';
+import { fetchMonthSchedule as fetchMonthScheduleApi, toggleScheduleAssignment } from './api/schedule-assignments';
 import { patientApiToFrontend, patientFrontendToApiCreate, patientFrontendToApiUpdate } from './utils/patientMapper';
-import { apptApiToFrontend, assignSlotIds, frontendToApiCreate as apptFrontendToApiCreate } from './utils/appointmentMapper';
+import { protocolApiToFrontend, prescriptionFrontendToApiCreate, prescriptionFrontendToApiUpdate } from './utils/prescriptionMapper';
+import { apptApiToFrontend, assignSlotIds, frontendToApiCreate as apptFrontendToApiCreate, frontendToApiUpdate as apptFrontendToApiUpdate } from './utils/appointmentMapper';
 import { getUserRole, getUserEmail } from './utils/auth';
 import { fetchMe } from './api/auth';
 import { fetchCabinet, updateCabinet } from './api/cabinet';
 import Header from './components/Header';
 import InfoBanner from './components/InfoBanner';
-import TabNav from './components/TabNav';
 import LoginPage from './components/LoginPage';
 import PatientsTab from './components/patients/PatientsTab';
 import PlanningTab from './components/planning/PlanningTab';
@@ -26,21 +27,16 @@ import FacturationTab from './components/facturation/FacturationTab';
 import RdvModal from './components/modals/RdvModal';
 
 // --- Sub-tab definitions per screen ---
-const soinsTabs = [
-  { id: 'patients', label: 'Patients', icon: UserCircle },
-  { id: 'agendas', label: 'Agenda', icon: CalendarDays },
-];
-
 const cabinetTabs = [
   { id: 'cabinet-info', label: 'Cabinet', icon: Building2 },
-  { id: 'equipe', label: 'Équipe', icon: Users },
   { id: 'creneaux', label: 'Administration', icon: Clock },
   { id: 'planning', label: 'Planning', icon: Calendar },
 ];
 
 const defaultTabForScreen = {
-  soins: 'patients',
   cabinet: 'cabinet-info',
+  patients: null,
+  agendas: null,
   facturation: null,
 };
 
@@ -149,8 +145,10 @@ export default function App() {
   const [appointments, setAppointments] = useState([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [rdvModalParams, setRdvModalParams] = useState(null);
-  const [rdvForm, setRdvForm] = useState({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '' });
+  const [rdvForm, setRdvForm] = useState({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home' });
   const [rdvError, setRdvError] = useState('');
+  const [rdvPrescriptions, setRdvPrescriptions] = useState([]);
+  const [rdvPrescriptionsLoading, setRdvPrescriptionsLoading] = useState(false);
 
   // Infirmiers
   const [selectedNurseId, setSelectedNurseId] = useState(null);
@@ -173,6 +171,21 @@ export default function App() {
   const [patientSubTab, setPatientSubTab] = useState('info');
   const [isEditingPatient, setIsEditingPatient] = useState(false);
   const [patientForm, setPatientForm] = useState({});
+  const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
+
+  // --- PRESCRIPTIONS (Care Protocols) ---
+  const loadPrescriptionsForPatient = useCallback(async (patientId) => {
+    setPrescriptionsLoading(true);
+    try {
+      const data = await listCareProtocols({ patient_id: patientId });
+      const mapped = data.items.map(protocolApiToFrontend);
+      setPatientForm(prev => ({ ...prev, prescriptions: mapped }));
+    } catch (err) {
+      console.error('Failed to fetch prescriptions:', err);
+    } finally {
+      setPrescriptionsLoading(false);
+    }
+  }, []);
 
   // --- SORT NURSES BY ROLE: Titulaire → Collaborateur → Remplaçant(e) ---
   const roleOrder = { 'Titulaire': 0, 'Collaborateur': 1, 'Remplaçant(e)': 2 };
@@ -223,7 +236,7 @@ export default function App() {
   // --- FETCH SCHEDULE FROM API ---
   const fetchAndSetSchedule = useCallback(async (year, month) => {
     try {
-      const data = await fetchMonthSchedule(year, month + 1); // API months are 1-based
+      const data = await fetchMonthScheduleApi(year, month + 1); // API months are 1-based
       setSchedule(prev => ({ ...prev, ...data.schedule }));
     } catch (err) {
       console.error('Failed to fetch schedule:', err);
@@ -253,7 +266,7 @@ export default function App() {
   const fetchAppointments = useCallback(async () => {
     setAppointmentsLoading(true);
     try {
-      const data = await listAppointments({ status: 'scheduled', limit: 200 });
+      const data = await listAppointments({ limit: 100 });
       const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
       const mapped = data.items.map(a => apptApiToFrontend(a, pMap));
       assignSlotIds(mapped, getActiveConfigForDate);
@@ -285,6 +298,42 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configs]);
 
+  // --- PRESCRIPTIONS: save & delete (needs fetchAppointments) ---
+  const savePrescription = useCallback(async (rx, patientId) => {
+    if (rx._apiId) {
+      // Update existing protocol
+      const payload = prescriptionFrontendToApiUpdate(rx);
+      const updated = await updateCareProtocol(rx._apiId, payload);
+      const mapped = protocolApiToFrontend(updated);
+      // Preserve soin-level documents (blob URLs) from the original data
+      if (rx.soins && mapped.soins) {
+        for (let i = 0; i < mapped.soins.length && i < rx.soins.length; i++) {
+          mapped.soins[i].documents = rx.soins[i].documents || [];
+        }
+      }
+      return mapped;
+    } else {
+      // Create new protocol
+      const payload = prescriptionFrontendToApiCreate(rx, patientId);
+      const created = await createCareProtocol(payload);
+      const mapped = protocolApiToFrontend(created);
+      // Preserve soin-level documents (blob URLs) from the original data
+      if (rx.soins && mapped.soins) {
+        for (let i = 0; i < mapped.soins.length && i < rx.soins.length; i++) {
+          mapped.soins[i].documents = rx.soins[i].documents || [];
+        }
+      }
+      return mapped;
+    }
+  }, []);
+
+  const deletePrescriptionApi = useCallback(async (rxId) => {
+    const backendId = rxId.startsWith('rx_') ? rxId.slice(3) : rxId;
+    if (backendId.includes('-')) {
+      await deleteCareProtocol(backendId);
+    }
+  }, []);
+
   // --- LISTES ACTIVES ---
   const activeNurses = nurses.filter(n => n.active !== false);
   const activePatients = patients.filter(p => p.active !== false);
@@ -301,6 +350,7 @@ export default function App() {
     setPatientForm({ ...patient });
     setIsEditingPatient(false);
     setPatientSubTab('info');
+    loadPrescriptionsForPatient(patient.id);
   };
 
   const closePatientDetail = () => {
@@ -311,6 +361,8 @@ export default function App() {
   const handleSavePatient = async (e) => {
     e.preventDefault();
     if (!patientForm.lastName.trim() || !patientForm.firstName.trim()) return;
+    // Preserve prescriptions — patientApiToFrontend resets them to []
+    const currentPrescriptions = patientForm.prescriptions || [];
     if (selectedPatientId === 'new') {
       try {
         const payload = patientFrontendToApiCreate(patientForm);
@@ -318,7 +370,7 @@ export default function App() {
         const mapped = patientApiToFrontend(created);
         setPatients(prev => [...prev, mapped]);
         setSelectedPatientId(mapped.id);
-        setPatientForm(mapped);
+        setPatientForm({ ...mapped, prescriptions: currentPrescriptions });
       } catch (err) {
         alert(err.response?.data?.detail || 'Erreur lors de la création du patient.');
         return;
@@ -329,7 +381,7 @@ export default function App() {
         const updated = await apiUpdatePatient(selectedPatientId, payload);
         const mapped = patientApiToFrontend(updated);
         setPatients(prev => prev.map(p => p.id === selectedPatientId ? mapped : p));
-        setPatientForm(mapped);
+        setPatientForm({ ...mapped, prescriptions: currentPrescriptions });
         // Update patient names in existing appointments
         setAppointments(prev => prev.map(a =>
           a.patientId === selectedPatientId
@@ -478,16 +530,248 @@ export default function App() {
     });
   };
 
+  // --- APPLIQUER UNE TRAME ---
+  const trames = cabinetData?.settings?.trames || [];
+
+  const applyTrame = useCallback(async ({ trameId, startDate, cycleCount, personMap }) => {
+    // Re-fetch cabinet to get absolute latest trame data (avoids stale state from out-of-order responses)
+    let currentTrames = cabinetData?.settings?.trames || [];
+    try {
+      const freshCabinet = await fetchCabinet();
+      setCabinetData(freshCabinet);
+      currentTrames = freshCabinet?.settings?.trames || [];
+    } catch { /* use cached */ }
+    const trame = currentTrames.find(t => t.id === trameId);
+    if (!trame) return { added: 0, skipped: 0, errors: 0 };
+
+    const totalWeeks = cycleCount * trame.weekCount;
+    // Parse date parts manually to avoid UTC timezone shift from ISO date strings
+    const [sy, sm, sd] = startDate.split('-').map(Number);
+    const start = new Date(sy, sm - 1, sd);
+    // Align to Monday
+    const startDay = start.getDay();
+    const mondayOffset = startDay === 0 ? -6 : 1 - startDay;
+    const monday = new Date(start.getFullYear(), start.getMonth(), start.getDate() + mondayOffset);
+
+    // 1. Refresh schedule for affected months to get accurate backend state
+    const affectedMonths = new Set();
+    for (let week = 0; week < totalWeeks; week++) {
+      for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+        const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + week * 7 + dayIdx);
+        affectedMonths.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+      }
+    }
+    // Fetch fresh schedule data
+    const freshSchedule = { ...schedule };
+    for (const mk of affectedMonths) {
+      const [y, m] = mk.split('-').map(Number);
+      try {
+        const data = await fetchMonthScheduleApi(y, m);
+        Object.assign(freshSchedule, data.schedule);
+      } catch { /* ignore, use local state */ }
+    }
+
+    // 2. Build assignments list using fresh schedule data
+    const assignments = [];
+    for (let week = 0; week < totalWeeks; week++) {
+      const weekInCycle = week % trame.weekCount;
+      for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+        const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + week * 7 + dayIdx);
+        const dateStr = formatDate(date);
+        const dayPattern = trame.pattern?.[weekInCycle]?.[dayIdx];
+        if (!dayPattern) continue;
+
+        for (const [slotId, personIndices] of Object.entries(dayPattern)) {
+          if (!personIndices || personIndices.length === 0) continue;
+          for (const pIdx of personIndices) {
+            const nurseUserId = personMap[pIdx];
+            if (!nurseUserId) continue;
+            const alreadyAssigned = freshSchedule[dateStr]?.[slotId]?.includes(nurseUserId);
+            if (!alreadyAssigned) {
+              assignments.push({ dateStr, slotId, nurseUserId });
+            }
+          }
+        }
+      }
+    }
+
+    const result = { added: 0, skipped: assignments.length === 0 ? 1 : 0, errors: 0 };
+    if (assignments.length === 0) return result;
+
+    // 3. Optimistic local update
+    setSchedule(prev => {
+      const next = { ...prev };
+      for (const { dateStr, slotId, nurseUserId } of assignments) {
+        const daySchedule = next[dateStr] ? { ...next[dateStr] } : {};
+        const slotSchedule = daySchedule[slotId] ? [...daySchedule[slotId]] : [];
+        if (!slotSchedule.includes(nurseUserId)) {
+          slotSchedule.push(nurseUserId);
+        }
+        daySchedule[slotId] = slotSchedule;
+        next[dateStr] = daySchedule;
+      }
+      return next;
+    });
+
+    // 4. Persist each assignment — verify response, re-toggle if accidentally removed
+    for (const { dateStr, slotId, nurseUserId } of assignments) {
+      try {
+        const resp = await toggleScheduleAssignment(nurseUserId, slotId, dateStr);
+        if (resp.action === 'removed') {
+          // Toggle removed an existing assignment — re-toggle to add it back
+          await toggleScheduleAssignment(nurseUserId, slotId, dateStr);
+        }
+        result.added++;
+      } catch {
+        result.errors++;
+      }
+    }
+
+    // 5. Always refresh affected months to sync local state with backend
+    for (const mk of affectedMonths) {
+      const [y, m] = mk.split('-').map(Number);
+      await fetchAndSetSchedule(y, m - 1);
+    }
+
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cabinetData, schedule, fetchAndSetSchedule]);
+
+  // --- RÉINITIALISER LE PLANNING ---
+  const resetPlanning = useCallback(async (datesToReset) => {
+    if (datesToReset.length === 0) return { removed: 0 };
+
+    // Collect all current assignments for the given dates
+    const toRemove = [];
+    for (const date of datesToReset) {
+      const dateStr = formatDate(date);
+      const daySchedule = schedule[dateStr];
+      if (!daySchedule) continue;
+      for (const [slotId, nurseIds] of Object.entries(daySchedule)) {
+        for (const nurseId of nurseIds) {
+          toRemove.push({ dateStr, slotId, nurseId });
+        }
+      }
+    }
+
+    if (toRemove.length === 0) return { removed: 0 };
+
+    // Optimistic local clear
+    setSchedule(prev => {
+      const next = { ...prev };
+      for (const date of datesToReset) {
+        const dateStr = formatDate(date);
+        next[dateStr] = {};
+      }
+      return next;
+    });
+
+    // Persist removals
+    let removed = 0;
+    for (const { dateStr, slotId, nurseId } of toRemove) {
+      try {
+        const resp = await toggleScheduleAssignment(nurseId, slotId, dateStr);
+        if (resp.action === 'removed') removed++;
+        else {
+          // Toggle re-added it — toggle again to remove
+          await toggleScheduleAssignment(nurseId, slotId, dateStr);
+          removed++;
+        }
+      } catch {
+        // ignore individual failures
+      }
+    }
+
+    // Refresh affected months
+    const months = new Set(datesToReset.map(d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`));
+    for (const mk of months) {
+      const [y, m] = mk.split('-').map(Number);
+      await fetchAndSetSchedule(y, m - 1);
+    }
+
+    return { removed };
+  }, [schedule, fetchAndSetSchedule]);
+
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   const goToCurrentMonth = () => setCurrentDate(new Date());
   const daysInMonth = getDaysInMonth(currentDate.getFullYear(), currentDate.getMonth());
 
   // --- LOGIQUE RDV ---
+  const loadRdvPrescriptions = useCallback(async (patientId) => {
+    if (!patientId) { setRdvPrescriptions([]); return; }
+    setRdvPrescriptionsLoading(true);
+    try {
+      const data = await listCareProtocols({ patient_id: patientId });
+      setRdvPrescriptions(data.items.map(protocolApiToFrontend));
+    } catch {
+      setRdvPrescriptions([]);
+    } finally {
+      setRdvPrescriptionsLoading(false);
+    }
+  }, []);
+
   const openRdvModal = (dateStr, slotId, nurseId) => {
     setRdvModalParams({ dateStr, slotId, nurseId });
-    setRdvForm({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '' });
+    setRdvForm({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home' });
+    setRdvPrescriptions([]);
     setRdvError('');
+  };
+
+  const editRdv = (appt) => {
+    setRdvModalParams({ dateStr: appt.dateStr, slotId: appt.slotId, nurseId: appt.nurseId, editAppt: appt });
+    setRdvForm({ mode: 'select', patientId: appt.patientId, newFirstName: '', newLastName: '', startTime: appt.startTime, endTime: appt.endTime, careProtocolId: appt.careProtocolId || '', locationType: appt._apiLocationType || 'home', status: appt.status || 'scheduled' });
+    setRdvError('');
+    loadRdvPrescriptions(appt.patientId);
+  };
+
+  const handleUpdateRdv = async (e) => {
+    e.preventDefault();
+    setRdvError('');
+    const editAppt = rdvModalParams.editAppt;
+
+    if (!rdvForm.startTime || !rdvForm.endTime) { setRdvError("Les horaires sont requis."); return; }
+    if (rdvForm.startTime === rdvForm.endTime) { setRdvError("Heures identiques."); return; }
+
+    const config = getActiveConfigForDate(new Date(rdvModalParams.dateStr));
+    const slot = config.slots.find(s => s.id === rdvModalParams.slotId);
+    if (!slot) return;
+
+    if (!isTimeWithinSlot(rdvForm.startTime, rdvForm.endTime, slot.startTime, slot.endTime)) {
+      setRdvError(`Hors créneau (${slot.startTime}-${slot.endTime}).`); return;
+    }
+
+    const slotAppts = appointments.filter(a =>
+      a.dateStr === rdvModalParams.dateStr && a.slotId === rdvModalParams.slotId
+      && a.nurseId === rdvModalParams.nurseId && a.id !== editAppt.id
+    );
+    if (slotAppts.some(a => doSlotsOverlap(rdvForm.startTime, rdvForm.endTime, a.startTime, a.endTime))) {
+      setRdvError("Chevauchement avec un autre RDV."); return;
+    }
+
+    try {
+      const payload = apptFrontendToApiUpdate({
+        dateStr: rdvModalParams.dateStr,
+        startTime: rdvForm.startTime,
+        endTime: rdvForm.endTime,
+        careProtocolId: rdvForm.careProtocolId,
+        locationType: rdvForm.locationType,
+        status: rdvForm.status,
+      });
+      const updated = await apiUpdateAppointment(editAppt.id, payload);
+      const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
+      const mappedAppt = apptApiToFrontend(updated, pMap);
+      assignSlotIds([mappedAppt], getActiveConfigForDate);
+      setAppointments(prev => prev.map(a => a.id === editAppt.id ? mappedAppt : a));
+      setRdvModalParams(null);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      if (err.response?.status === 409) {
+        setRdvError(detail || 'Conflit horaire avec un autre RDV.');
+      } else {
+        setRdvError(detail || 'Erreur lors de la modification du RDV.');
+      }
+    }
   };
 
   const handleSaveRdv = async (e) => {
@@ -544,6 +828,8 @@ export default function App() {
         endTime: rdvForm.endTime,
         nurseId: rdvModalParams.nurseId,
         patientId: finalPatientId,
+        careProtocolId: rdvForm.careProtocolId || undefined,
+        locationType: rdvForm.locationType,
       });
       const createdAppt = await apiCreateAppointment(apptPayload);
       const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
@@ -566,8 +852,8 @@ export default function App() {
   };
 
   // Generic appointment creation callable from PrescriptionsTab
-  const createAppointmentForPrescription = useCallback(async ({ dateStr, startTime, endTime, nurseId, patientId }) => {
-    const apptPayload = apptFrontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId });
+  const createAppointmentForPrescription = useCallback(async ({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId }) => {
+    const apptPayload = apptFrontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId });
     const createdAppt = await apiCreateAppointment(apptPayload);
     const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
     const mappedAppt = apptApiToFrontend(createdAppt, pMap);
@@ -579,10 +865,25 @@ export default function App() {
 
   const deleteRdv = async (id) => {
     try {
-      await apiCancelAppointment(id, 'Annulé depuis le planning');
-      setAppointments(prev => prev.filter(a => a.id !== id));
+      const updated = await apiCancelAppointment(id, 'Annulé depuis le planning');
+      const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
+      const mappedAppt = apptApiToFrontend(updated, pMap);
+      assignSlotIds([mappedAppt], getActiveConfigForDate);
+      setAppointments(prev => prev.map(a => a.id === id ? mappedAppt : a));
     } catch (err) {
       alert(err.response?.data?.detail || 'Erreur lors de l\'annulation du RDV.');
+    }
+  };
+
+  const completeRdv = async (id) => {
+    try {
+      const updated = await apiCompleteAppointment(id);
+      const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
+      const mappedAppt = apptApiToFrontend(updated, pMap);
+      assignSlotIds([mappedAppt], getActiveConfigForDate);
+      setAppointments(prev => prev.map(a => a.id === id ? mappedAppt : a));
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Erreur lors de la complétion du RDV.');
     }
   };
 
@@ -621,8 +922,7 @@ export default function App() {
     }
   });
 
-  // --- Tabs & readOnly ---
-  const visibleTabs = activeScreen === 'cabinet' ? cabinetTabs : activeScreen === 'soins' ? soinsTabs : [];
+  // --- readOnly ---
   const isReadOnly = userRole !== 'admin';
 
   // --- AUTH GUARD ---
@@ -632,19 +932,34 @@ export default function App() {
 
   // --- RENDU ---
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 p-4 md:p-8 font-sans">
-      <div className="max-w-screen-2xl mx-auto">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-3 md:px-4 md:py-4">
+      <div>
 
         <Header activeScreen={activeScreen} onScreenChange={handleScreenChange} onLogout={handleLogout} />
         <InfoBanner cabinet={meData?.cabinet} user={meData?.user} />
-        {visibleTabs.length > 0 && (
-          <TabNav tabs={visibleTabs} activeTab={activeTab} setActiveTab={setActiveTab} />
-        )}
 
-        <main className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 min-h-[600px]">
+        <main className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[600px] p-4">
 
-          {/* --- Soins --- */}
-          {activeScreen === 'soins' && activeTab === 'patients' && (
+          {activeScreen === 'cabinet' && (
+            <nav className="flex justify-center gap-6 border-b border-slate-200 mb-6 -mt-1">
+              {cabinetTabs.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === id
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  <Icon size={16} /> {label}
+                </button>
+              ))}
+            </nav>
+          )}
+
+          {/* --- Patients --- */}
+          {activeScreen === 'patients' && (
             <>
               {patientsLoading && (
                 <div className="text-center py-12 text-slate-500">Chargement des patients...</div>
@@ -680,12 +995,17 @@ export default function App() {
               getActiveConfigForDate={getActiveConfigForDate}
               onCreateAppointment={createAppointmentForPrescription}
               onCancelAppointment={deleteRdv}
+              onSavePrescription={savePrescription}
+              onDeletePrescription={deletePrescriptionApi}
+              prescriptionsLoading={prescriptionsLoading}
+              careLabels={cabinetData?.settings?.care_labels || []}
             />
               )}
             </>
           )}
 
-          {activeScreen === 'soins' && activeTab === 'agendas' && (
+          {/* --- Agenda --- */}
+          {activeScreen === 'agendas' && (
             <AgendasTab
               nurses={nurses}
               workingNurses={workingNurses}
@@ -700,12 +1020,16 @@ export default function App() {
               getActiveConfigForDate={getActiveConfigForDate}
               openRdvModal={openRdvModal}
               deleteRdv={deleteRdv}
+              editRdv={editRdv}
+              completeRdv={completeRdv}
+              patients={patients}
+              cabinetData={cabinetData}
             />
           )}
 
-          {/* --- Cabinet --- */}
+          {/* --- Cabinet (info + équipe) --- */}
           {activeScreen === 'cabinet' && activeTab === 'cabinet-info' && (
-            <>
+            <div className="space-y-8">
               {cabinetLoading && (
                 <div className="text-center py-12 text-slate-500">Chargement des informations...</div>
               )}
@@ -716,30 +1040,7 @@ export default function App() {
                   readOnly={isReadOnly}
                 />
               )}
-            </>
-          )}
 
-          {activeScreen === 'cabinet' && activeTab === 'planning' && (
-            <PlanningTab
-              nurses={activeNurses}
-              configs={configs}
-              schedule={schedule}
-              daysInMonth={daysInMonth}
-              currentDate={currentDate}
-              currentPlanningStatus={currentPlanningStatus}
-              prevMonth={prevMonth}
-              nextMonth={nextMonth}
-              goToCurrentMonth={goToCurrentMonth}
-              togglePlanningStatus={togglePlanningStatus}
-              getActiveConfigForDate={getActiveConfigForDate}
-              toggleNurseSlot={toggleNurseSlot}
-              appointments={appointments}
-              readOnly={isReadOnly}
-            />
-          )}
-
-          {activeScreen === 'cabinet' && activeTab === 'equipe' && (
-            <>
               {nursesLoading && (
                 <div className="text-center py-12 text-slate-500">Chargement des membres...</div>
               )}
@@ -766,7 +1067,29 @@ export default function App() {
                   readOnly={isReadOnly}
                 />
               )}
-            </>
+            </div>
+          )}
+
+          {activeScreen === 'cabinet' && activeTab === 'planning' && (
+            <PlanningTab
+              nurses={activeNurses}
+              configs={configs}
+              schedule={schedule}
+              daysInMonth={daysInMonth}
+              currentDate={currentDate}
+              currentPlanningStatus={currentPlanningStatus}
+              prevMonth={prevMonth}
+              nextMonth={nextMonth}
+              goToCurrentMonth={goToCurrentMonth}
+              togglePlanningStatus={togglePlanningStatus}
+              getActiveConfigForDate={getActiveConfigForDate}
+              toggleNurseSlot={toggleNurseSlot}
+              appointments={appointments}
+              readOnly={isReadOnly}
+              trames={trames}
+              onApplyTrame={applyTrame}
+              onResetPlanning={resetPlanning}
+            />
           )}
 
           {activeScreen === 'cabinet' && activeTab === 'creneaux' && (
@@ -786,6 +1109,8 @@ export default function App() {
               addSlotToConfig={addSlotToConfig}
               removeSlotFromConfig={removeSlotFromConfig}
               readOnly={isReadOnly}
+              cabinetData={cabinetData}
+              onCabinetUpdate={handleCabinetUpdate}
             />
           )}
 
@@ -805,7 +1130,12 @@ export default function App() {
         setRdvForm={setRdvForm}
         rdvError={rdvError}
         patients={activePatients}
+        nurses={nurses}
         handleSaveRdv={handleSaveRdv}
+        handleUpdateRdv={handleUpdateRdv}
+        rdvPrescriptions={rdvPrescriptions}
+        rdvPrescriptionsLoading={rdvPrescriptionsLoading}
+        onPatientChange={loadRdvPrescriptions}
       />
 
     </div>

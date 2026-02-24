@@ -10,7 +10,9 @@ export default function PatientDetail({
   patientSubTab, setPatientSubTab,
   closePatientDetail, handleSavePatient, deactivatePatient, reactivatePatient,
   appointments, nurses, schedule, configs, getActiveConfigForDate,
-  onCreateAppointment, onCancelAppointment
+  onCreateAppointment, onCancelAppointment,
+  onSavePrescription, onDeletePrescription, prescriptionsLoading,
+  careLabels
 }) {
   const isInactive = patientForm.active === false;
   return (
@@ -73,7 +75,7 @@ export default function PatientDetail({
           <Activity size={16}/> Dossier de soins
         </button>
         <button onClick={() => setPatientSubTab('prescriptions')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'prescriptions' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          <ClipboardList size={16}/> Ordonnances
+          <ClipboardList size={16}/> Plans de soins
         </button>
       </div>
 
@@ -174,6 +176,10 @@ export default function PatientDetail({
             getActiveConfigForDate={getActiveConfigForDate}
             onCreateAppointment={onCreateAppointment}
             onCancelAppointment={onCancelAppointment}
+            onSavePrescription={onSavePrescription}
+            onDeletePrescription={onDeletePrescription}
+            prescriptionsLoading={prescriptionsLoading}
+            careLabels={careLabels}
           />
         )}
 

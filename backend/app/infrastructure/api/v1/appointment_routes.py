@@ -27,7 +27,7 @@ from app.infrastructure.persistence.repositories import (
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
 APPOINTMENT_UPDATABLE_FIELDS = frozenset({
-    "scheduled_at", "duration_minutes", "care_type",
+    "scheduled_at", "duration_minutes", "care_type", "care_protocol_id", "location_type", "status",
 })
 
 
@@ -63,7 +63,7 @@ async def list_appointments(
     patient_id: UUID | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
     skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=50, ge=1, le=200),
 ):
     """Liste les rendez-vous avec filtres optionnels."""
     request.state.user_id = auth.user_id
@@ -185,10 +185,10 @@ async def update_appointment(
             detail="Rendez-vous introuvable",
         )
 
-    if appt.status != "scheduled":
+    if appt.status not in ("scheduled", "completed"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Seuls les rendez-vous planifiés peuvent être modifiés",
+            detail="Seuls les rendez-vous planifiés ou réalisés peuvent être modifiés",
         )
 
     update_data = body.model_dump(exclude_unset=True)

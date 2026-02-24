@@ -19,7 +19,7 @@ export function patientApiToFrontend(p) {
     antecedents: (p.pathologies || []).join('\n'),
     notes: p.notes || '',
     active: p.status === 'active',
-    prescriptions: [], // no backend equivalent yet
+    prescriptions: [], // loaded separately via care-protocols API
     // Preserve backend-only fields for round-trip
     _apiBirthDate: p.birth_date ?? null,
     _apiSectorId: p.sector_id ?? null,
@@ -27,6 +27,8 @@ export function patientApiToFrontend(p) {
     _apiCity: p.city || '',
     _apiPreferredTimeSlot: p.preferred_time_slot || '',
     _apiCareDurationDefault: p.care_duration_default ?? 30,
+    _apiLat: p.lat ?? null,
+    _apiLon: p.lon ?? null,
   };
 }
 

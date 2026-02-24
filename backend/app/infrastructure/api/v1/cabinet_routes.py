@@ -25,6 +25,7 @@ def _cabinet_to_response(cabinet) -> CabinetResponse:
         subscription_status=cabinet.subscription_status,
         lat=cabinet.lat,
         lon=cabinet.lon,
+        settings=cabinet.settings,
         trial_ends_at=cabinet.trial_ends_at,
         created_at=cabinet.created_at,
         updated_at=cabinet.updated_at,
@@ -76,6 +77,12 @@ async def update_cabinet(
         )
 
     update_data = body.model_dump(exclude_unset=True)
+
+    # Shallow-merge settings: incoming keys override existing ones
+    if "settings" in update_data and update_data["settings"] is not None:
+        merged = {**cabinet.settings, **update_data.pop("settings")}
+        cabinet.settings = merged
+
     for field_name, value in update_data.items():
         setattr(cabinet, field_name, value)
 

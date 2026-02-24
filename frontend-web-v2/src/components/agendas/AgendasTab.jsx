@@ -1,6 +1,20 @@
-import { useState, useCallback, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, CalendarDays, CalendarClock, Clock, Plus, X, Check, Locate, Users } from 'lucide-react';
+import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
+import { ChevronLeft, ChevronRight, CalendarDays, CalendarClock, Clock, Plus, X, Check, Locate, Users, Pencil, CheckCircle2, Filter, XCircle, CircleDot, Route } from 'lucide-react';
 import { formatDate, getWeekDays, getWeekNumber } from '../../utils/dateTime';
+
+const TourneeMap = lazy(() => import('./TourneeMap'));
+
+const STATUS_FILTERS = [
+  { key: 'scheduled', label: 'Planifiés', activeClass: 'bg-blue-50 text-blue-700 border-blue-300 shadow-sm' },
+  { key: 'completed', label: 'Réalisés', activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-sm' },
+  { key: 'canceled', label: 'Annulés', activeClass: 'bg-red-50 text-red-600 border-red-300 shadow-sm' },
+];
+
+const STATUS_CONFIG = {
+  scheduled: { label: 'Planifié', badge: 'bg-blue-100 text-blue-700', card: 'bg-white border-blue-100', icon: CircleDot },
+  completed: { label: 'Réalisé', badge: 'bg-emerald-100 text-emerald-700', card: 'bg-emerald-50/60 border-emerald-200', icon: CheckCircle2 },
+  canceled: { label: 'Annulé', badge: 'bg-red-100 text-red-600', card: 'bg-red-50/40 border-red-200 opacity-60', icon: XCircle },
+};
 
 const viewModes = [
   { id: 'week', label: 'Semaine', icon: CalendarDays },
@@ -12,11 +26,27 @@ export default function AgendasTab({
   schedule, daysInMonth, currentDate,
   selectedAgendaNurseIds, setSelectedAgendaNurseIds,
   prevMonth, nextMonth,
-  getActiveConfigForDate, openRdvModal, deleteRdv
+  getActiveConfigForDate, openRdvModal, deleteRdv, editRdv, completeRdv,
+  patients, cabinetData,
 }) {
   const [viewMode, setViewMode] = useState('week');
   const [weekRef, setWeekRef] = useState(() => new Date());
   const [dayRef, setDayRef] = useState(() => new Date());
+  const [activeStatuses, setActiveStatuses] = useState(() => new Set(['scheduled', 'completed']));
+
+  const toggleStatus = (key) => {
+    setActiveStatuses(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) { if (next.size > 1) next.delete(key); } // keep at least 1
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const filteredAppointments = useMemo(
+    () => appointments.filter(a => activeStatuses.has(a.status)),
+    [appointments, activeStatuses],
+  );
 
   const weekDays = getWeekDays(weekRef);
   const weekNumber = getWeekNumber(weekDays[0]);
@@ -90,16 +120,32 @@ export default function AgendasTab({
           </button>
         </div>
 
-        <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-          {viewModes.map(m => (
-            <button
-              key={m.id}
-              onClick={() => handleViewChange(m.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === m.id ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              <m.icon size={14} /> {m.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+            {STATUS_FILTERS.map(f => {
+              const on = activeStatuses.has(f.key);
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => toggleStatus(f.key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors ${on ? f.activeClass : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                >
+                  {on && <Check size={12} />} {f.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+            {viewModes.map(m => (
+              <button
+                key={m.id}
+                onClick={() => handleViewChange(m.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${viewMode === m.id ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <m.icon size={14} /> {m.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -141,7 +187,9 @@ export default function AgendasTab({
 
           {/* Agendas empilés */}
           <div className="space-y-6">
-            {selectedAgendaNurseIds.map(nurseId => {
+            {selectedAgendaNurseIds
+              .filter(id => nursesWorkingDisplayDays.some(n => n.userId === id))
+              .map(nurseId => {
               const nurse = nurses.find(n => n.userId === nurseId);
               if (!nurse) return null;
               return (
@@ -151,10 +199,14 @@ export default function AgendasTab({
                   displayDays={displayDays}
                   viewMode={viewMode}
                   schedule={schedule}
-                  appointments={appointments}
+                  appointments={filteredAppointments}
                   getActiveConfigForDate={getActiveConfigForDate}
                   openRdvModal={openRdvModal}
                   deleteRdv={deleteRdv}
+                  editRdv={editRdv}
+                  completeRdv={completeRdv}
+                  patients={patients || []}
+                  cabinetData={cabinetData}
                 />
               );
             })}
@@ -166,9 +218,16 @@ export default function AgendasTab({
 }
 
 /* ---- Agenda d'un infirmier ---- */
-function NurseAgenda({ nurse, displayDays, viewMode, schedule, appointments, getActiveConfigForDate, openRdvModal, deleteRdv }) {
+function NurseAgenda({ nurse, displayDays, viewMode, schedule, appointments, getActiveConfigForDate, openRdvModal, deleteRdv, editRdv, completeRdv, patients, cabinetData }) {
   const isDay = viewMode === 'day';
   const isWeek = viewMode === 'week';
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  // In day view, compute working slots for the map panel
+  const dayDate = isDay ? displayDays[0] : null;
+  const dayDateStr = dayDate ? formatDate(dayDate) : null;
+  const dayConfig = dayDate ? getActiveConfigForDate(dayDate) : null;
+  const dayWorkingSlots = dayConfig ? dayConfig.slots.filter(slot => schedule[dayDateStr]?.[slot.id]?.includes(nurse.userId)) : [];
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col">
@@ -177,75 +236,129 @@ function NurseAgenda({ nurse, displayDays, viewMode, schedule, appointments, get
         <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
           <div className={`w-4 h-4 rounded-full ${nurse.color.split(' ')[0]}`}></div>
           {nurse.firstName} {nurse.lastName}
+          {isDay && dayWorkingSlots.length > 0 && (
+            <span className="ml-auto text-xs font-medium text-slate-400 flex items-center gap-1"><Route size={14} /> Itinéraire</span>
+          )}
         </h3>
       </div>
 
-      {/* Grille des jours */}
-      <div className={`flex ${isDay ? '' : 'overflow-x-auto'}`}>
-        {displayDays.map(date => {
-          const dateStr = formatDate(date);
-          const activeConfig = getActiveConfigForDate(date);
-          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-          const isToday = formatDate(date) === formatDate(new Date());
-          const workingSlots = activeConfig.slots.filter(slot => schedule[dateStr]?.[slot.id]?.includes(nurse.userId));
-          const worksToday = workingSlots.length > 0;
+      {/* Content */}
+      <div className="flex flex-col">
+        {/* Agenda column (week) / Day header + slot rows (day) */}
+        <div className={`${isWeek ? 'flex overflow-x-auto flex-1' : 'flex flex-col'}`}>
+          {displayDays.map(date => {
+            const dateStr = formatDate(date);
+            const activeConfig = getActiveConfigForDate(date);
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+            const isToday = formatDate(date) === formatDate(new Date());
+            const workingSlots = activeConfig.slots.filter(slot => schedule[dateStr]?.[slot.id]?.includes(nurse.userId));
+            const worksToday = workingSlots.length > 0;
 
-          return (
-            <div
-              key={dateStr}
-              className={`${isDay ? 'flex-1' : isWeek ? 'min-w-[180px] flex-1' : 'min-w-[240px]'} border-r last:border-r-0 border-slate-200 flex flex-col ${isWeekend ? 'bg-slate-50/50' : 'bg-white'}`}
-            >
-              {/* En-tête du jour */}
-              <div className={`p-3 border-b border-slate-200 text-center ${worksToday ? 'bg-blue-50/80 border-blue-100' : 'bg-slate-50'}`}>
-                <div className={`text-xs font-medium uppercase ${worksToday ? 'text-blue-600' : 'text-slate-500'}`}>
-                  {date.toLocaleDateString('fr-FR', { weekday: isDay ? 'long' : isWeek ? 'short' : 'short' })}
+            return (
+              <div
+                key={dateStr}
+                className={`${isDay ? '' : isWeek ? 'min-w-[180px] flex-1' : 'min-w-[240px]'} ${isWeek ? 'border-r last:border-r-0 border-slate-200' : ''} flex flex-col ${isWeekend ? 'bg-slate-50/50' : 'bg-white'}`}
+              >
+                {/* En-tête du jour */}
+                <div className={`p-3 border-b border-slate-200 text-center ${worksToday ? 'bg-blue-50/80 border-blue-100' : 'bg-slate-50'}`}>
+                  <div className={`text-xs font-medium uppercase ${worksToday ? 'text-blue-600' : 'text-slate-500'}`}>
+                    {date.toLocaleDateString('fr-FR', { weekday: isDay ? 'long' : isWeek ? 'short' : 'short' })}
+                  </div>
+                  <div className={`text-2xl font-bold ${isToday ? 'text-blue-600' : worksToday ? 'text-blue-700' : 'text-slate-700'}`}>{date.getDate()}</div>
+                  {isDay && <div className="text-xs text-slate-400 capitalize">{date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>}
                 </div>
-                <div className={`text-2xl font-bold ${isToday ? 'text-blue-600' : worksToday ? 'text-blue-700' : 'text-slate-700'}`}>{date.getDate()}</div>
-                {isDay && <div className="text-xs text-slate-400 capitalize">{date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</div>}
-              </div>
 
-              {/* Créneaux */}
-              <div className="flex-1 p-3 space-y-4 overflow-y-auto">
-                {worksToday ? (
-                  workingSlots.map(slot => {
-                    const slotAppts = appointments.filter(a => a.dateStr === dateStr && a.slotId === slot.id && a.nurseId === nurse.userId);
-                    return (
-                      <div key={slot.id} className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex flex-col gap-2 shadow-sm min-h-[140px]">
-                        <div className="text-xs font-semibold text-blue-800 flex items-center gap-1">
-                          <Clock size={12} /> {slot.name} ({slot.startTime}-{slot.endTime})
-                        </div>
+                {/* Créneaux */}
+                <div className="flex-1 p-3 space-y-4 overflow-y-auto">
+                  {worksToday ? (
+                    workingSlots.map(slot => {
+                      const slotAppts = appointments.filter(a => a.dateStr === dateStr && a.slotId === slot.id && a.nurseId === nurse.userId);
 
-                        <div className="flex-1 overflow-y-auto flex flex-col gap-1 min-h-[60px]">
-                          {slotAppts.length > 0 ? (
-                            slotAppts.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(rdv => (
-                              <div key={rdv.id} className="bg-white rounded border border-blue-100 p-2 text-xs shadow-sm group relative">
-                                <div className="font-semibold text-slate-700 flex flex-col gap-0.5">
-                                  <span className="text-blue-600 shrink-0 font-bold">{rdv.startTime} - {rdv.endTime}</span>
-                                  <span className="truncate">{rdv.patient}</span>
+                      const slotCard = (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex flex-col gap-2 shadow-sm min-h-[140px]">
+                          <div className="text-xs font-semibold text-blue-800 flex items-center gap-1">
+                            <Clock size={12} /> {slot.name} ({slot.startTime}-{slot.endTime})
+                          </div>
+
+                          <div className="flex-1 overflow-y-auto flex flex-col gap-1 min-h-[60px]">
+                            {slotAppts.length > 0 ? (
+                              slotAppts.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(rdv => {
+                                const sc = STATUS_CONFIG[rdv.status] || STATUS_CONFIG.scheduled;
+                                const isScheduled = rdv.status === 'scheduled';
+                                const isCanceled = rdv.status === 'canceled';
+                                return (
+                                <div key={rdv.id} className={`rounded border p-2 text-xs shadow-sm group relative ${sc.card}`}>
+                                  {confirmDeleteId === rdv.id ? (
+                                    <div className="flex flex-col gap-1.5">
+                                      <p className="text-slate-600 font-medium">Annuler ce RDV ?</p>
+                                      <p className="text-slate-400">{rdv.startTime}-{rdv.endTime} — {rdv.patient}</p>
+                                      <div className="flex gap-1.5">
+                                        <button onClick={() => { deleteRdv(rdv.id); setConfirmDeleteId(null); }} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded py-1 font-medium transition-colors">Confirmer</button>
+                                        <button onClick={() => setConfirmDeleteId(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded py-1 font-medium transition-colors">Retour</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div className={`font-semibold flex flex-col gap-0.5 ${isCanceled ? 'text-slate-400' : 'text-slate-700'}`}>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className={`shrink-0 font-bold ${isCanceled ? 'text-slate-400 line-through' : 'text-blue-600'}`}>{rdv.startTime} - {rdv.endTime}</span>
+                                          <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded ${sc.badge}`}>{sc.label}</span>
+                                        </div>
+                                        <span className={`truncate ${isCanceled ? 'line-through' : ''}`}>{rdv.patient}</span>
+                                      </div>
+                                      {!isCanceled && (
+                                        <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">
+                                          {isScheduled && <button onClick={() => completeRdv(rdv.id)} title="Marquer réalisé" className="text-slate-300 hover:text-emerald-500 transition-colors"><CheckCircle2 size={14}/></button>}
+                                          <button onClick={() => editRdv(rdv)} title="Modifier" className="text-slate-300 hover:text-blue-500 transition-colors"><Pencil size={14}/></button>
+                                          {isScheduled && <button onClick={() => setConfirmDeleteId(rdv.id)} title="Annuler" className="text-slate-300 hover:text-red-500 transition-colors"><X size={14}/></button>}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
                                 </div>
-                                <button onClick={() => deleteRdv(rdv.id)} className="absolute top-1 right-1 text-slate-300 hover:text-red-500 hidden group-hover:block transition-colors"><X size={14}/></button>
+                                );
+                              })
+                            ) : (
+                              <div className="h-full flex flex-col justify-center items-center border border-dashed border-blue-200 rounded bg-white/50">
+                                <span className="text-[10px] text-blue-400/80 uppercase font-medium tracking-wider">Créneau libre</span>
                               </div>
-                            ))
-                          ) : (
-                            <div className="h-full flex flex-col justify-center items-center border border-dashed border-blue-200 rounded bg-white/50">
-                              <span className="text-[10px] text-blue-400/80 uppercase font-medium tracking-wider">Créneau libre</span>
-                            </div>
-                          )}
-                        </div>
+                            )}
+                          </div>
 
-                        <button onClick={() => openRdvModal(dateStr, slot.id, nurse.userId)} className="w-full bg-white hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded text-xs py-1.5 font-medium transition-colors flex items-center justify-center gap-1">
-                          <Plus size={14} /> Ajouter RDV
-                        </button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="h-full flex items-center justify-center min-h-[100px]"><span className="text-xs text-slate-400 italic">Non travaillé</span></div>
-                )}
+                          <button onClick={() => openRdvModal(dateStr, slot.id, nurse.userId)} className="w-full bg-white hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded text-xs py-1.5 font-medium transition-colors flex items-center justify-center gap-1">
+                            <Plus size={14} /> Ajouter RDV
+                          </button>
+                        </div>
+                      );
+
+                      if (isDay) {
+                        return (
+                          <div key={slot.id} className="flex flex-col lg:flex-row gap-3 items-stretch">
+                            <div className="lg:w-[30%] shrink-0">{slotCard}</div>
+                            <div className="flex-1">
+                              <Suspense fallback={<div className="flex items-center justify-center aspect-square text-sm text-slate-400">Chargement carte...</div>}>
+                                <TourneeMap
+                                  appointments={slotAppts}
+                                  patients={patients}
+                                  cabinetData={cabinetData}
+                                  slotName={`${slot.name} (${slot.startTime}-${slot.endTime})`}
+                                />
+                              </Suspense>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return <div key={slot.id}>{slotCard}</div>;
+                    })
+                  ) : (
+                    <div className="h-full flex items-center justify-center min-h-[100px]"><span className="text-xs text-slate-400 italic">Non travaillé</span></div>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

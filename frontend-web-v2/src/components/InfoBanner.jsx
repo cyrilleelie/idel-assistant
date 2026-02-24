@@ -34,7 +34,7 @@ export default function InfoBanner({ cabinet, user }) {
   if (!cabinet && !user) return null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-screen-md mx-auto mb-6">
 
       {/* Cabinet card */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">

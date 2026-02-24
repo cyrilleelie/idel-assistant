@@ -10,7 +10,9 @@ export default function PatientsTab({
   handleSavePatient, deactivatePatient, reactivatePatient,
   appointments, nurses,
   schedule, configs, getActiveConfigForDate,
-  onCreateAppointment, onCancelAppointment
+  onCreateAppointment, onCancelAppointment,
+  onSavePrescription, onDeletePrescription, prescriptionsLoading,
+  careLabels
 }) {
   return (
     <div className="max-w-screen-xl mx-auto">
@@ -44,6 +46,10 @@ export default function PatientsTab({
           getActiveConfigForDate={getActiveConfigForDate}
           onCreateAppointment={onCreateAppointment}
           onCancelAppointment={onCancelAppointment}
+          onSavePrescription={onSavePrescription}
+          onDeletePrescription={onDeletePrescription}
+          prescriptionsLoading={prescriptionsLoading}
+          careLabels={careLabels}
         />
       )}
     </div>

@@ -23,6 +23,7 @@ class SQLAlchemyCabinetRepo(CabinetRepository):
             lon=float(model.lon) if model.lon is not None else None,
             plan=model.plan,
             subscription_status=model.subscription_status,
+            settings=model.settings or {},
             trial_ends_at=model.trial_ends_at,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -56,6 +57,7 @@ class SQLAlchemyCabinetRepo(CabinetRepository):
             lon=cabinet.lon,
             plan=cabinet.plan,
             subscription_status=cabinet.subscription_status,
+            settings=cabinet.settings,
             trial_ends_at=cabinet.trial_ends_at,
         )
         self._session.add(model)
@@ -76,6 +78,7 @@ class SQLAlchemyCabinetRepo(CabinetRepository):
         model.lon = cabinet.lon
         model.plan = cabinet.plan
         model.subscription_status = cabinet.subscription_status
+        model.settings = cabinet.settings
         model.trial_ends_at = cabinet.trial_ends_at
         await self._session.flush()
         await self._session.refresh(model)

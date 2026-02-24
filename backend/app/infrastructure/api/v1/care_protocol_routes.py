@@ -1,16 +1,13 @@
 """Routes pour les protocoles de soins."""
 
-import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.application.frequency_mapper import frequency_display_to_rrule
 from app.domain.entities.care_protocol import CareProtocol
-from app.domain.rules.care_protocol_rules import generate_appointments_from_protocol
 from app.infrastructure.api.dependencies import (
     AuthContext,
-    get_appointment_repository,
     get_care_protocol_repository,
     get_current_user,
     get_patient_repository,
@@ -22,7 +19,6 @@ from app.infrastructure.api.schemas.care_protocol_schemas import (
     CareProtocolUpdate,
 )
 from app.infrastructure.persistence.repositories import (
-    SQLAlchemyAppointmentRepo,
     SQLAlchemyPatientRepo,
 )
 from app.infrastructure.persistence.repositories.sqlalchemy_care_protocol_repo import (
@@ -64,10 +60,9 @@ async def create_care_protocol(
     request: Request,
     auth: AuthContext = Depends(get_current_user),
     protocol_repo: SQLAlchemyCareProtocolRepo = Depends(get_care_protocol_repository),
-    appointment_repo: SQLAlchemyAppointmentRepo = Depends(get_appointment_repository),
     patient_repo: SQLAlchemyPatientRepo = Depends(get_patient_repository),
 ):
-    """Crée un protocole de soins et génère les RDV des 4 prochaines semaines."""
+    """Crée un protocole de soins."""
     request.state.user_id = auth.user_id
     request.state.cabinet_id = auth.cabinet_id
 
@@ -120,18 +115,11 @@ async def create_care_protocol(
     )
     protocol = await protocol_repo.create(protocol)
 
-    # Génère les RDV sur 4 semaines
-    idel_id = body.idel_id or auth.user_id
-    from_date = body.start_date
-    to_date = from_date + datetime.timedelta(weeks=4)
-    if body.end_date and body.end_date < to_date:
-        to_date = body.end_date
-
-    appointments = generate_appointments_from_protocol(
-        protocol, idel_id, from_date, to_date
-    )
-    if appointments:
-        await appointment_repo.create_many(appointments)
+    # NOTE: L'auto-génération de RDV est désactivée.
+    # Le frontend gère la planification manuellement via la PlanningSection
+    # qui permet de choisir l'infirmière pour chaque occurrence.
+    # L'ancien code créait des RDV avec idel_id=auth.user_id (l'admin),
+    # ce qui provoquait des conflits fantômes.
 
     return _entity_to_response(protocol)
 

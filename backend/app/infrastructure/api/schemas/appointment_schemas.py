@@ -22,6 +22,9 @@ class AppointmentUpdate(BaseModel):
     scheduled_at: datetime.datetime | None = None
     duration_minutes: int | None = Field(default=None, ge=5, le=240)
     care_type: str | None = Field(default=None, min_length=1, max_length=50)
+    care_protocol_id: UUID | None = None
+    location_type: str | None = Field(default=None, pattern=r"^(home|office|hospital)$")
+    status: str | None = Field(default=None, pattern=r"^(scheduled|completed|canceled)$")
 
 
 class CancelRequest(BaseModel):

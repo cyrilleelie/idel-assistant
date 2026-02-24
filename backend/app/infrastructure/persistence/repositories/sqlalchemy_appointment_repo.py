@@ -114,7 +114,7 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
         if exclude_id:
             query = query.where(AppointmentModel.id != exclude_id)
 
-        result = await self._session.execute(query)
+        result = await self._session.execute(query.limit(1))
         return result.scalar_one_or_none() is not None
 
     async def create(self, appointment: Appointment) -> Appointment:

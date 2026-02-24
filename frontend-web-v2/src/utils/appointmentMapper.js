@@ -38,6 +38,8 @@ export function apptApiToFrontend(appt, patientsMap) {
     nurseId: appt.idel_id,
     patientId: appt.patient_id,
     patient: patientName,
+    status: appt.status || 'scheduled',
+    careProtocolId: appt.care_protocol_id || null,
     slotId: null, // assigned separately via assignSlotIds
     // Preserve backend-only fields
     _apiCareType: appt.care_type || 'soins_infirmiers',
@@ -70,14 +72,40 @@ export function assignSlotIds(appts, getActiveConfigForDate) {
  * Convert frontend RDV creation data to backend AppointmentCreate payload.
  * @param {object} params - { dateStr, startTime, endTime, nurseId, patientId }
  */
-export function frontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId }) {
+/**
+ * Convert frontend RDV update data to backend AppointmentUpdate payload.
+ * @param {object} params - { dateStr, startTime, endTime }
+ */
+export function frontendToApiUpdate({ dateStr, startTime, endTime, careProtocolId, locationType, status }) {
   const scheduled_at = `${dateStr}T${startTime}:00`;
   const duration_minutes = timeToMinutes(endTime) - timeToMinutes(startTime);
-  return {
+  const payload = {
+    scheduled_at,
+    duration_minutes: duration_minutes > 0 ? duration_minutes : duration_minutes + 1440,
+    care_protocol_id: careProtocolId || null,
+    location_type: locationType || 'home',
+  };
+  if (status) payload.status = status;
+  return payload;
+}
+
+/**
+ * Convert frontend RDV creation data to backend AppointmentCreate payload.
+ * @param {object} params - { dateStr, startTime, endTime, nurseId, patientId }
+ */
+export function frontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId, locationType }) {
+  const scheduled_at = `${dateStr}T${startTime}:00`;
+  const duration_minutes = timeToMinutes(endTime) - timeToMinutes(startTime);
+  const payload = {
     patient_id: patientId,
     scheduled_at,
     duration_minutes: duration_minutes > 0 ? duration_minutes : duration_minutes + 1440,
     care_type: 'soins_infirmiers',
+    location_type: locationType || 'home',
     idel_id: nurseId,
   };
+  if (careProtocolId) {
+    payload.care_protocol_id = careProtocolId;
+  }
+  return payload;
 }

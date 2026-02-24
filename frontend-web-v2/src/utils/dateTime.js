@@ -68,6 +68,12 @@ export const getWeekDays = (referenceDate) => {
   return days;
 };
 
+/** Returns 0=Mon, 1=Tue, ..., 6=Sun (ISO weekday) */
+export const getDayOfWeekMondayBased = (date) => {
+  const day = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  return day === 0 ? 6 : day - 1;
+};
+
 export const isTimeWithinSlot = (start, end, boundStart, boundEnd) => {
   const s = timeToMinutes(start);
   const e = timeToMinutes(end);

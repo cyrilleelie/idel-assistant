@@ -11,6 +11,7 @@ class Cabinet:
     subscription_status: str = "trial"  # trial | active | canceled
     lat: float | None = None
     lon: float | None = None
+    settings: dict = field(default_factory=dict)
     trial_ends_at: datetime.datetime | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime.datetime = field(default_factory=lambda: datetime.datetime.now(datetime.UTC))

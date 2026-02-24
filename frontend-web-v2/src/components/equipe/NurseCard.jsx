@@ -4,7 +4,7 @@ export default function NurseCard({ nurse, onClick }) {
   const isInactive = nurse.active === false;
 
   return (
-    <div onClick={onClick} className={`border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col group ${isInactive ? 'bg-slate-50 border-slate-200 opacity-70' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
+    <div onClick={onClick} className={`w-72 border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col group ${isInactive ? 'bg-slate-50 border-slate-200 opacity-70' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
       <div className={`h-2 ${isInactive ? 'bg-slate-300' : nurse.color.split(' ')[0]}`}></div>
       <div className="p-5 flex-1 flex flex-col">
         <div className="flex items-center gap-3 mb-4">

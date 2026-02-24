@@ -24,6 +24,7 @@ import EquipeTab from './components/equipe/EquipeTab';
 import CabinetTab from './components/cabinet/CabinetTab';
 import CreneauxTab from './components/creneaux/CreneauxTab';
 import FacturationTab from './components/facturation/FacturationTab';
+import MaTourneeTab from './components/tournee/MaTourneeTab';
 import RdvModal from './components/modals/RdvModal';
 
 // --- Sub-tab definitions per screen ---
@@ -36,6 +37,7 @@ const cabinetTabs = [
 const defaultTabForScreen = {
   cabinet: 'cabinet-info',
   patients: null,
+  tournee: null,
   agendas: null,
   facturation: null,
 };
@@ -942,7 +944,7 @@ export default function App() {
 
           {activeScreen === 'cabinet' && (
             <nav className="flex justify-center gap-6 border-b border-slate-200 mb-6 -mt-1">
-              {cabinetTabs.map(({ id, label, icon: Icon }) => (
+              {cabinetTabs.filter(t => t.id !== 'creneaux' || !isReadOnly).map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
                   onClick={() => setActiveTab(id)}
@@ -1002,6 +1004,23 @@ export default function App() {
             />
               )}
             </>
+          )}
+
+          {/* --- Ma Tournée --- */}
+          {activeScreen === 'tournee' && (
+            <MaTourneeTab
+              nurses={nurses}
+              appointments={appointments}
+              schedule={schedule}
+              getActiveConfigForDate={getActiveConfigForDate}
+              openRdvModal={openRdvModal}
+              deleteRdv={deleteRdv}
+              editRdv={editRdv}
+              completeRdv={completeRdv}
+              patients={patients}
+              cabinetData={cabinetData}
+              meUserId={meData?.user?.id}
+            />
           )}
 
           {/* --- Agenda --- */}

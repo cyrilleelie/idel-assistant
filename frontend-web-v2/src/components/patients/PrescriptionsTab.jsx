@@ -361,7 +361,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
       {planned.length > 0 && (
         <div className="space-y-1.5">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">RDV planifiés</div>
-          <div className="max-h-48 overflow-y-auto space-y-1">
+          <div className="space-y-1">
             {planned.map(({ dateStr, dateObj, nurse }) => (
               <div key={dateStr} className="flex items-center gap-3 bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-200 text-sm">
                 <Check size={14} className="text-emerald-600 shrink-0" />
@@ -387,7 +387,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
       {toPlan.length > 0 && (
         <div className="space-y-1.5">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Séances à planifier</div>
-          <div className="max-h-72 overflow-y-auto space-y-1">
+          <div className="space-y-1">
             {toPlan.map(({ dateStr, dateObj, availableNurses }) => {
               const isBooking = bookingInProgress === dateStr || isBulkBooking;
               const error = bookingError?.dateStr === dateStr ? bookingError.message : null;

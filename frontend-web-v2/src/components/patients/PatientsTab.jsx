@@ -12,7 +12,8 @@ export default function PatientsTab({
   schedule, configs, getActiveConfigForDate,
   onCreateAppointment, onCancelAppointment,
   onSavePrescription, onDeletePrescription, prescriptionsLoading,
-  careLabels
+  careLabels, careDurations,
+  cabinetData
 }) {
   return (
     <div className="max-w-screen-xl mx-auto">
@@ -50,6 +51,9 @@ export default function PatientsTab({
           onDeletePrescription={onDeletePrescription}
           prescriptionsLoading={prescriptionsLoading}
           careLabels={careLabels}
+          careDurations={careDurations}
+          cabinetData={cabinetData}
+          patients={patients}
         />
       )}
     </div>

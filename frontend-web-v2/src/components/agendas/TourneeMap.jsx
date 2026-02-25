@@ -11,7 +11,7 @@ const CARE_TYPE_LABELS = {
   autre: 'Autre',
 };
 
-export default function TourneeMap({ appointments, patients, cabinetData, slotName }) {
+export default function TourneeMap({ appointments, patients, cabinetData, slotName, onLegsReady }) {
   const [mapEl, setMapEl] = useState(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
@@ -255,10 +255,22 @@ export default function TourneeMap({ appointments, patients, cabinetData, slotNa
           waypoints,
           travelMode: google.maps.TravelMode.DRIVING,
         }).then(result => {
-          if (!cancelled) directionsRenderer.setDirections(result);
+          if (!cancelled) {
+            directionsRenderer.setDirections(result);
+            if (onLegsReady && result.routes[0]?.legs) {
+              const legs = result.routes[0].legs;
+              const hasCab = !!effectiveCabinetCoords;
+              const between = hasCab ? legs.slice(1, legs.length - 1) : legs;
+              onLegsReady(between.map(l => ({
+                distanceText: l.distance.text,
+                durationText: l.duration.text,
+              })));
+            }
+          }
         }).catch(() => {
           // Fallback: straight polyline if Directions API fails
           if (cancelled) return;
+          if (onLegsReady) onLegsReady(null);
           const polyline = new google.maps.Polyline({
             path: allStops,
             strokeColor: '#3b82f6',

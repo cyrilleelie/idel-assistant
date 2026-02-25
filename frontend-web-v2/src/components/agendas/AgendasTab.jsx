@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Plus, X, Check, Locate, Users, Pencil, CheckCircle2, XCircle, CircleDot } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Plus, X, Check, Locate, Users, User, Pencil, CheckCircle2, XCircle, CircleDot } from 'lucide-react';
 import { formatDate, getWeekDays, getWeekNumber } from '../../utils/dateTime';
 
 const STATUS_FILTERS = [
@@ -21,6 +21,8 @@ export default function AgendasTab({
   prevMonth, nextMonth,
   getActiveConfigForDate, openRdvModal, deleteRdv, editRdv, completeRdv,
   patients, cabinetData,
+  fetchScheduleForMonth,
+  meUserId,
 }) {
   const [weekRef, setWeekRef] = useState(() => new Date());
   const [activeStatuses, setActiveStatuses] = useState(() => new Set(['scheduled', 'completed']));
@@ -42,6 +44,17 @@ export default function AgendasTab({
   const weekDays = getWeekDays(weekRef);
   const weekNumber = getWeekNumber(weekDays[0]);
 
+  // Fetch schedule for all months covered by the displayed week
+  useEffect(() => {
+    if (!fetchScheduleForMonth) return;
+    const months = new Set();
+    weekDays.forEach(d => months.add(`${d.getFullYear()}-${d.getMonth()}`));
+    months.forEach(key => {
+      const [year, month] = key.split('-').map(Number);
+      fetchScheduleForMonth(year, month);
+    });
+  }, [weekDays[0].getTime(), fetchScheduleForMonth]);
+
   const prevWeek = useCallback(() => setWeekRef(w => new Date(w.getFullYear(), w.getMonth(), w.getDate() - 7)), []);
   const nextWeek = useCallback(() => setWeekRef(w => new Date(w.getFullYear(), w.getMonth(), w.getDate() + 7)), []);
 
@@ -59,6 +72,12 @@ export default function AgendasTab({
     const ids = nursesWorkingDisplayDays.map(n => n.userId);
     if (ids.length > 0) setSelectedAgendaNurseIds(ids);
   };
+
+  // Auto-select all working nurses on every week change
+  useEffect(() => {
+    const ids = nursesWorkingDisplayDays.map(n => n.userId);
+    if (ids.length > 0) setSelectedAgendaNurseIds(ids);
+  }, [weekDays[0].getTime(), nursesWorkingDisplayDays.length]);
 
   const toggleNurseSelection = (nurseId) => {
     setSelectedAgendaNurseIds(prev =>
@@ -101,7 +120,10 @@ export default function AgendasTab({
         {/* Navigation semaine centrée */}
         <div className="flex-1 flex items-center justify-center gap-4">
           <button onClick={prevWeek} className="p-2 hover:bg-white rounded shadow-sm border border-transparent hover:border-slate-200 transition-all"><ChevronLeft size={20} /></button>
-          <h2 className="text-xl font-semibold capitalize w-48 text-center">Semaine {weekNumber}</h2>
+          <div className="flex flex-col items-center w-48">
+            <h2 className="text-xl font-semibold capitalize">Semaine {weekNumber}</h2>
+            <span className="text-xs text-slate-500">du {weekDays[0].toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} au {weekDays[6].toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>
+          </div>
           <button onClick={nextWeek} className="p-2 hover:bg-white rounded shadow-sm border border-transparent hover:border-slate-200 transition-all"><ChevronRight size={20} /></button>
         </div>
 
@@ -124,6 +146,18 @@ export default function AgendasTab({
           {/* Sélection des agendas */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-slate-500 mr-1">Agendas :</span>
+            {meUserId && nursesWorkingDisplayDays.some(n => n.userId === meUserId) && (
+              <button
+                onClick={() => setSelectedAgendaNurseIds([meUserId])}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
+                  selectedAgendaNurseIds.length === 1 && selectedAgendaNurseIds[0] === meUserId
+                    ? 'bg-violet-50 text-violet-700 border-violet-200 shadow-sm'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                <User size={14} /> Mon agenda
+              </button>
+            )}
             {nursesWorkingDisplayDays.length > 1 && (
               <button
                 onClick={selectAllWorking}
@@ -249,15 +283,12 @@ function NurseAgenda({ nurse, displayDays, schedule, appointments, getActiveConf
                                   ) : (
                                     <>
                                       <div className={`font-semibold flex flex-col gap-0.5 ${isCanceled ? 'text-slate-400' : 'text-slate-700'}`}>
-                                        <div className="flex items-center gap-1.5">
-                                          <span className={`shrink-0 font-bold ${isCanceled ? 'text-slate-400 line-through' : 'text-blue-600'}`}>{rdv.startTime} - {rdv.endTime}</span>
-                                          <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded ${sc.badge}`}>{sc.label}</span>
-                                        </div>
+                                        <span className={`shrink-0 font-bold ${isCanceled ? 'text-slate-400 line-through' : 'text-blue-600'}`}>{rdv.startTime} - {rdv.endTime}</span>
                                         <span className={`truncate ${isCanceled ? 'line-through' : ''}`}>{rdv.patient}</span>
+                                        <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded self-start ${sc.badge}`}>{sc.label}</span>
                                       </div>
                                       {!isCanceled && (
                                         <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">
-                                          {isScheduled && <button onClick={() => completeRdv(rdv.id)} title="Marquer réalisé" className="text-slate-300 hover:text-emerald-500 transition-colors"><CheckCircle2 size={14}/></button>}
                                           <button onClick={() => editRdv(rdv)} title="Modifier" className="text-slate-300 hover:text-blue-500 transition-colors"><Pencil size={14}/></button>
                                           {isScheduled && <button onClick={() => setConfirmDeleteId(rdv.id)} title="Annuler" className="text-slate-300 hover:text-red-500 transition-colors"><X size={14}/></button>}
                                         </div>

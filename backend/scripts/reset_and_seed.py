@@ -1,7 +1,8 @@
-"""Reset la base et la recharge avec les donnees du frontend-web-v2.
+"""Reset la base et la recharge avec des donnees de demo.
 
-Cree 1 cabinet, 3 infirmieres (Alice, Benoit, Claire), 10 patients
-et 12 RDV (aujourd'hui + demain), calques sur les mocks de defaults.js.
+Cree 1 cabinet a Damvix (Vendee), 3 infirmieres (Alice, Benoit, Claire),
+20 patients repartis sur 4 communes du Marais Poitevin (Damvix, Le Mazeau,
+Saint-Sigismond, Maille) et 12 RDV (aujourd'hui + demain).
 
 Usage: cd backend && uv run python scripts/reset_and_seed.py
 """
@@ -54,12 +55,12 @@ async def main():
 
     async with async_session_factory() as session:
 
-        # ===== 2. Cabinet =====
+        # ===== 2. Cabinet (Damvix, Marais Poitevin) =====
         cabinet_id = uuid4()
         session.add(CabinetModel(
             id=cabinet_id,
-            name="Cabinet IDEL Paris",
-            address="12 Rue de la Paix, 75002 Paris",
+            name="Cabinet IDEL Damvix",
+            address="5 Rue du Centre, 85420 Damvix",
         ))
 
         # ===== 3. Trois infirmieres (users + cabinet_members) =====
@@ -98,86 +99,160 @@ async def main():
 
         await session.flush()
 
-        # ===== 4. Dix patients (chiffres) =====
+        # ===== 4. Vingt patients (Marais Poitevin — 4 communes) =====
         cab_key = km.get_cabinet_key(cabinet_id)
 
         # (first, last, phone, email, address, ssn, doctor_name, doctor_contact,
-        #  antecedents, notes, postal_code, city)
+        #  antecedents, notes, postal_code, city, lat, lon)
         patients_raw = [
-            ("Jean", "DUPONT", "06 11 22 33 44", "jean.dupont@email.com",
-             "12 Rue de la Paix, 75002 Paris", "1 80 12 75 123 456 78",
-             "Dr. Michel Lefevre", "01 45 67 89 00",
-             "Diabète de type 2 (diagnostiqué en 2018)\nHypertension artérielle sous traitement.",
-             "Patient parfois anxieux lors des prises de sang. Prévoir un peu de temps pour rassurer.",
-             "75002", "Paris"),
+            # --- Damvix (6 patients) ---
+            ("Lucienne", "MOREAU", "06 11 11 11 11", "",
+             "8 Rue de la Garnauderie, 85420 Damvix", "2 41 03 85 123 456 78",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Diabète de type 2 (diagnostiqué en 2015).\nHypertension artérielle sous traitement.",
+             "Patiente autonome, vit seule. Clé sous le pot à gauche de la porte.",
+             "85420", "Damvix", 46.3150, -0.7340),
 
-            ("Marie", "BERNARD", "06 22 33 44 55", "",
-             "8 Avenue Victor Hugo, 75016 Paris", "2 55 03 75 234 567 89",
-             "Dr. Sophie Garnier", "01 42 56 78 90",
-             "Insuffisance cardiaque chronique.\nAnticoagulants (AVK) — INR à surveiller.",
-             "Code porte : 4521B. Habite au 3e sans ascenseur.",
-             "75016", "Paris"),
+            ("Marcel", "GAUTHIER", "06 11 22 22 22", "",
+             "17 Rue du Centre, 85420 Damvix", "1 48 07 85 234 567 89",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Pansement chronique ulcère veineux jambe gauche.\nInsuffisance veineuse sévère.",
+             "Pansement à changer tous les 2 jours. Patient coopérant.",
+             "85420", "Damvix", 46.3155, -0.7335),
 
-            ("Robert", "MOREAU", "06 33 44 55 66", "r.moreau@free.fr",
-             "45 Boulevard Haussmann, 75009 Paris", "1 42 07 75 345 678 90",
-             "Dr. Michel Lefevre", "01 45 67 89 00",
-             "BPCO stade 3.\nOxygénothérapie à domicile.",
-             "Passage infirmier matin impératif avant 9h (oxygène). Clé sous le pot de fleurs.",
-             "75009", "Paris"),
+            ("Yvette", "ROBIN", "06 11 33 33 33", "",
+             "17 Rue du Cloucq, 85420 Damvix", "2 35 11 85 345 678 90",
+             "Dr. Isabelle Morin", "02 51 87 45 67",
+             "Alzheimer stade modéré (diagnostiqué 2022).\nChutes fréquentes.",
+             "Aidante : sa fille Nathalie (06 77 88 99 00). Patiente désorientée le matin.",
+             "85420", "Damvix", 46.3140, -0.7350),
 
-            ("Françoise", "PETIT", "06 44 55 66 77", "",
-             "3 Rue des Lilas, 75020 Paris", "2 38 11 75 456 789 01",
-             "Dr. Anne Dubois", "01 43 78 90 12",
-             "Alzheimer stade modéré (diagnostiqué 2021).\nChutes fréquentes — prothèse hanche droite 2023.",
-             "Aidante principale : sa fille Nathalie (06 77 88 99 00). Patiente désorientée le matin.",
-             "75020", "Paris"),
+            ("Henri", "BARDIN", "06 11 44 44 44", "henri.bardin@orange.fr",
+             "37 Rue des Petites Cabanes, 85420 Damvix", "1 54 01 85 456 789 01",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Cancer prostate — hormonothérapie en cours.\nSurveillance PSA.",
+             "Injection sous-cutanée mensuelle. Patient anxieux, prévoir du temps.",
+             "85420", "Damvix", 46.3160, -0.7330),
 
-            ("Pierre", "LEROY", "06 55 66 77 88", "pierre.leroy@gmail.com",
-             "22 Rue du Faubourg Saint-Antoine, 75012 Paris", "1 65 04 75 567 890 12",
-             "Dr. Sophie Garnier", "01 42 56 78 90",
-             "Diabète de type 1 insulino-dépendant.\nNeuropathie périphérique — soins de pieds.",
-             "Insuline au réfrigérateur, 2e étagère. Patient autonome et coopérant.",
-             "75012", "Paris"),
+            ("Paulette", "GUERIN", "06 11 55 55 55", "",
+             "24 Chemin du Halage, 85420 Damvix", "2 38 09 85 567 890 12",
+             "Dr. Isabelle Morin", "02 51 87 45 67",
+             "Hypertension artérielle.\nInsuffisance cardiaque chronique (NYHA II).",
+             "Surveillance tension à chaque passage. Vit avec son mari (autonome).",
+             "85420", "Damvix", 46.3180, -0.7360),
 
-            ("Simone", "ROUX", "01 45 67 00 11", "",
-             "17 Rue Monge, 75005 Paris", "2 30 09 75 678 901 23",
-             "Dr. Michel Lefevre", "01 45 67 89 00",
-             "AVC ischémique (2022) — hémiparésie gauche.\nPansement escarre sacrée.",
-             "Lit médicalisé au salon. Mari présent mais très âgé, ne pas compter sur lui pour la mobilisation.",
-             "75005", "Paris"),
+            ("André", "BLANCHARD", "06 11 66 66 66", "a.blanchard@free.fr",
+             "12 Rue du Centre, 85420 Damvix", "1 57 05 85 678 901 23",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Post-opératoire prothèse hanche gauche (février 2026).\nAnticoagulant préventif.",
+             "Injection Lovenox quotidienne. Patient mobile avec déambulateur.",
+             "85420", "Damvix", 46.3148, -0.7338),
 
-            ("Ahmed", "BENALI", "06 66 77 88 99", "a.benali@outlook.fr",
-             "5 Place de la République, 75003 Paris", "1 72 06 75 789 012 34",
-             "Dr. Anne Dubois", "01 43 78 90 12",
-             "Chirurgie genou droit (LCA) — rééducation en cours.\nPas d'allergie connue.",
-             "Pansement post-opératoire à changer tous les 2 jours. Très sportif, surveiller la reprise.",
-             "75003", "Paris"),
+            # --- Le Mazeau (5 patients) ---
+            ("Germaine", "PAILLAT", "06 22 11 11 11", "",
+             "11 Rue Principale, 85420 Le Mazeau", "2 34 08 85 789 012 34",
+             "Dr. Isabelle Morin", "02 51 87 45 67",
+             "Dépendance — toilette et habillage.\nArthrose sévère genoux + hanches.",
+             "Passage matin impératif avant 9h. Auxiliaire de vie l'après-midi.",
+             "85420", "Le Mazeau", 46.3360, -0.6750),
 
-            ("Hélène", "GARCIA", "06 77 88 99 00", "",
-             "60 Rue de Rivoli, 75004 Paris", "2 48 12 75 890 123 45",
-             "Dr. Sophie Garnier", "01 42 56 78 90",
-             "Cancer du sein — chimiothérapie en cours.\nPort-à-cath posé en janvier 2026.",
+            ("Roger", "MERLET", "06 22 22 22 22", "",
+             "7 Rue du Port, 85420 Le Mazeau", "1 53 11 85 890 123 45",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Pansement post-opératoire genou droit.\nDiabète de type 2.",
+             "Réfection pansement + glycémie capillaire. Clé chez la voisine Mme Botton.",
+             "85420", "Le Mazeau", 46.3370, -0.6745),
+
+            ("Thérèse", "BONNIN", "06 22 33 33 33", "",
+             "10 Rue Principale, 85420 Le Mazeau", "2 40 07 85 901 234 56",
+             "Dr. Isabelle Morin", "02 51 87 45 67",
+             "Diabète de type 2 insulino-requérant.\nRétinopathie diabétique.",
+             "Injection insuline matin et soir. Patiente malvoyante, préparer le pilulier.",
+             "85420", "Le Mazeau", 46.3355, -0.6755),
+
+            ("Michel", "COUTANT", "06 22 44 44 44", "m.coutant@wanadoo.fr",
+             "68 Chemin de l'Ancienne Laiterie, 85420 Le Mazeau", "1 58 02 85 012 345 67",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Post-AVC ischémique (2024) — hémiparésie gauche.\nAnticoagulant (Eliquis).",
+             "Lit médicalisé au rez-de-chaussée. Épouse présente mais fatiguée.",
+             "85420", "Le Mazeau", 46.3375, -0.6740),
+
+            ("Monique", "AIRAULT", "06 22 55 55 55", "",
+             "4 Rue André Lucas, 85420 Le Mazeau", "2 45 06 85 123 456 01",
+             "Dr. Isabelle Morin", "02 51 87 45 67",
+             "BPCO stade 3.\nOxygénothérapie à domicile 16h/24.",
+             "Vérifier débit O2 et saturation. Passage matin avant 9h impératif.",
+             "85420", "Le Mazeau", 46.3350, -0.6740),
+
+            # --- Saint-Sigismond (4 patients) ---
+            ("Madeleine", "GIRARD", "06 33 11 11 11", "",
+             "1 Rue de la Mairie, 85420 Saint-Sigismond", "2 39 04 85 234 567 01",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Alzheimer stade léger.\nHypertension artérielle.",
+             "Préparation pilulier hebdomadaire. Voisine alerte si besoin (Mme Giraud, 06 33 00 00 01).",
+             "85420", "Saint-Sigismond", 46.3490, -0.6890),
+
+            ("René", "ARNAULT", "06 33 22 22 22", "rene.arnault@orange.fr",
+             "3 Grande Rue, 85420 Saint-Sigismond", "1 46 10 85 345 678 01",
+             "Dr. Isabelle Morin", "02 51 87 45 67",
+             "Diabète de type 2.\nInsuffisance rénale chronique stade 3.",
+             "Glycémie + injection insuline matin. Surveiller œdèmes des membres inférieurs.",
+             "85420", "Saint-Sigismond", 46.3492, -0.6885),
+
+            ("Colette", "BAUDRY", "06 33 33 33 33", "",
+             "8 Rue de l'Église, 85420 Saint-Sigismond", "2 52 03 85 456 789 01",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Cancer sein — chimiothérapie en cours.\nPort-à-cath posé en décembre 2025.",
              "Rinçage PAC toutes les 4 semaines. Patiente fatiguée, prévoir passage calme.",
-             "75004", "Paris"),
+             "85420", "Saint-Sigismond", 46.3500, -0.6892),
 
-            ("Michel", "THOMAS", "06 88 99 00 11", "michel.thomas@wanadoo.fr",
-             "33 Rue de Vaugirard, 75006 Paris", "1 50 02 75 901 234 56",
-             "Dr. Michel Lefevre", "01 45 67 89 00",
-             "Insuffisance rénale chronique stade 4.\nDialyse péritonéale à domicile.",
-             "Matériel de dialyse dans la chambre du fond. Surveiller poids et tension à chaque passage.",
-             "75006", "Paris"),
+            ("Jean-Claude", "TEXIER", "06 33 44 44 44", "",
+             "12 Chemin du Halage de Courdault, 85420 Saint-Sigismond", "1 50 08 85 567 890 01",
+             "Dr. Isabelle Morin", "02 51 87 45 67",
+             "Insuffisance cardiaque chronique (NYHA III).\nAnticoagulant (AVK) — INR à surveiller.",
+             "Prise de sang INR chaque semaine. Résultats à faxer au Dr. Morin.",
+             "85420", "Saint-Sigismond", 46.3510, -0.6880),
 
-            ("Lucie", "LAMBERT", "06 99 00 11 22", "lucie.lambert@gmail.com",
-             "14 Rue Oberkampf, 75011 Paris", "2 85 08 75 012 345 67",
-             "Dr. Anne Dubois", "01 43 78 90 12",
-             "Grossesse à risque (jumeaux) — repos strict.\nDiabète gestationnel.",
-             "Glycémie capillaire + injection insuline matin et soir. Conjoint souvent présent le soir.",
-             "75011", "Paris"),
+            # --- Maillé (5 patients) ---
+            ("Jeannine", "BOUCHET", "06 44 11 11 11", "",
+             "3 Rue de la Mairie, 85420 Maillé", "2 43 02 85 678 901 01",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Diabète de type 2.\nArthrose cervicale.",
+             "Injection insuline matin. Patiente sourde d'une oreille, parler fort.",
+             "85420", "Maillé", 46.3420, -0.7870),
+
+            ("Raymond", "PINEAU", "06 44 22 22 22", "",
+             "15 Grand Rue, 85420 Maillé", "1 55 12 85 789 012 01",
+             "Dr. Isabelle Morin", "02 51 87 45 67",
+             "BPCO stade 2.\nSyndrome d'apnée du sommeil appareillé.",
+             "Surveillance respiratoire. Appareil PPC à vérifier lors des passages.",
+             "85420", "Maillé", 46.3430, -0.7860),
+
+            ("Simone", "DUPUIS", "06 44 33 33 33", "",
+             "9 Rue Saint Nicolas, 85420 Maillé", "2 36 06 85 890 123 01",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Escarres sacrée et talonnière gauche (stade 3).\nAlitée suite fracture col fémur.",
+             "Pansements à changer tous les jours. Lit médicalisé. Mari aidant mais fatigué.",
+             "85420", "Maillé", 46.3410, -0.7875),
+
+            ("Bernard", "CHAUVEAU", "06 44 44 44 44", "b.chauveau@gmail.com",
+             "6 Rue de la Mairie, 85420 Maillé", "1 49 06 85 901 234 01",
+             "Dr. Isabelle Morin", "02 51 87 45 67",
+             "Anticoagulant (Préviscan) — surveillance INR.\nFibrillation auriculaire permanente.",
+             "Prise de sang hebdomadaire. Patient coopérant et autonome.",
+             "85420", "Maillé", 46.3425, -0.7868),
+
+            ("Odette", "VRIGNAUD", "06 44 55 55 55", "",
+             "4 Rue de l'Autize, 85420 Maillé", "2 37 12 85 012 345 01",
+             "Dr. Philippe Renaud", "02 51 87 12 34",
+             "Hypertension artérielle sévère.\nDiabète de type 2.",
+             "Surveillance tension + glycémie. Clé dans la boîte aux lettres.",
+             "85420", "Maillé", 46.3415, -0.7880),
         ]
 
         patient_models = []
         for (fn, ln, phone, email, addr, ssn, doc_name, doc_contact,
-             antecedents, notes, pc, city) in patients_raw:
+             antecedents, notes, pc, city, lat, lon) in patients_raw:
             p = PatientModel(
                 id=uuid4(),
                 cabinet_id=cabinet_id,
@@ -197,6 +272,8 @@ async def main():
                 notes_encrypted=_enc(notes, cab_key) if notes else None,
                 postal_code=pc,
                 city=city,
+                lat=lat,
+                lon=lon,
                 care_duration_default=30,
                 status="active",
             )
@@ -210,27 +287,29 @@ async def main():
             return datetime.datetime(day.year, day.month, day.day,
                                      hour, minute, tzinfo=datetime.UTC)
 
-        # p[0]=Jean, p[1]=Marie, p[2]=Robert, p[3]=Françoise, p[4]=Pierre,
-        # p[5]=Simone, p[6]=Ahmed, p[7]=Hélène, p[8]=Michel, p[9]=Lucie
+        # Damvix: 0=Lucienne 1=Marcel 2=Yvette 3=Henri 4=Paulette 5=André
+        # Le Mazeau: 6=Germaine 7=Roger 8=Thérèse 9=Michel 10=Monique
+        # St-Sigismond: 11=Madeleine 12=René 13=Colette 14=Jean-Claude
+        # Maillé: 15=Jeannine 16=Raymond 17=Simone 18=Bernard 19=Odette
         p = patient_models
 
         appts = [
-            # Today — Matin
-            (alice_id,  p[0], dt(TODAY, 7, 0),   30, "injection_insuline"),   # Jean DUPONT
-            (alice_id,  p[3], dt(TODAY, 8, 0),   45, "soins_hygiene"),        # Françoise PETIT
-            (alice_id,  p[5], dt(TODAY, 9, 0),   30, "pansement"),            # Simone ROUX
-            (benoit_id, p[1], dt(TODAY, 7, 30),  30, "surveillance_tension"), # Marie BERNARD
-            (benoit_id, p[4], dt(TODAY, 8, 30),  30, "injection_insuline"),   # Pierre LEROY
-            (benoit_id, p[8], dt(TODAY, 9, 30),  30, "surveillance_dialyse"), # Michel THOMAS
-            # Today — Soir
-            (alice_id,  p[7], dt(TODAY, 17, 0),  30, "perfusion"),            # Hélène GARCIA
-            (alice_id,  p[9], dt(TODAY, 18, 0),  30, "injection_insuline"),   # Lucie LAMBERT
+            # Today — Matin (secteur Damvix + Le Mazeau)
+            (alice_id,  p[0],  dt(TODAY, 7, 0),   20, "injection_insuline"),   # Lucienne MOREAU (Damvix)
+            (alice_id,  p[1],  dt(TODAY, 7, 30),  30, "pansement"),            # Marcel GAUTHIER (Damvix)
+            (alice_id,  p[4],  dt(TODAY, 8, 15),  15, "surveillance_tension"), # Paulette GUERIN (Damvix)
+            (benoit_id, p[6],  dt(TODAY, 7, 0),   30, "soins_hygiene"),        # Germaine PAILLAT (Le Mazeau)
+            (benoit_id, p[8],  dt(TODAY, 7, 45),  20, "injection_insuline"),   # Thérèse BONNIN (Le Mazeau)
+            (benoit_id, p[10], dt(TODAY, 8, 15),  30, "soins_respiratoire"),   # Monique AIRAULT (Le Mazeau)
+            # Today — Après-midi (secteur Maillé + St-Sigismond)
+            (alice_id,  p[15], dt(TODAY, 16, 30), 20, "injection_insuline"),   # Jeannine BOUCHET (Maillé)
+            (alice_id,  p[17], dt(TODAY, 17, 0),  45, "pansement"),            # Simone DUPUIS (Maillé)
             # Tomorrow — Matin
-            (alice_id,  p[0], dt(TOMORROW, 7, 0),  30, "injection_insuline"), # Jean DUPONT
-            (claire_id, p[2], dt(TOMORROW, 7, 30), 30, "soins_respiratoire"), # Robert MOREAU
-            (claire_id, p[6], dt(TOMORROW, 8, 30), 30, "pansement"),          # Ahmed BENALI
-            # Tomorrow — Soir
-            (benoit_id, p[9], dt(TOMORROW, 18, 0), 30, "injection_insuline"), # Lucie LAMBERT
+            (alice_id,  p[0],  dt(TOMORROW, 7, 0),  20, "injection_insuline"), # Lucienne MOREAU (Damvix)
+            (claire_id, p[12], dt(TOMORROW, 7, 30), 20, "injection_insuline"), # René ARNAULT (St-Sigismond)
+            (claire_id, p[14], dt(TOMORROW, 8, 0),  15, "prise_de_sang"),      # Jean-Claude TEXIER (St-Sigismond)
+            # Tomorrow — Après-midi
+            (benoit_id, p[8],  dt(TOMORROW, 17, 0), 20, "injection_insuline"), # Thérèse BONNIN (Le Mazeau)
         ]
 
         for idel_id, patient, scheduled, dur, care in appts:
@@ -250,20 +329,21 @@ async def main():
         await session.commit()
 
     # ===== Résumé =====
-    print("=" * 55)
+    print("=" * 60)
     print("  Base nettoyee et rechargee avec succes !")
-    print("=" * 55)
+    print("=" * 60)
     print()
-    print("  Cabinet : Cabinet IDEL Paris")
+    print("  Cabinet : Cabinet IDEL Damvix (5 Rue du Centre, 85420)")
     print()
     print("  Comptes :")
-    print(f"    alice.dupont@cabinet.fr   / {PASSWORD}  (admin)")
-    print(f"    benoit.martin@cabinet.fr  / {PASSWORD}  (member)")
-    print(f"    claire.rousseau@cabinet.fr/ {PASSWORD}  (replacement)")
+    print(f"    alice.dupont@cabinet.fr    / {PASSWORD}  (admin)")
+    print(f"    benoit.martin@cabinet.fr   / {PASSWORD}  (member)")
+    print(f"    claire.rousseau@cabinet.fr / {PASSWORD}  (replacement)")
     print()
-    print(f"  Patients : {len(patients_raw)}")
+    print(f"  Patients : {len(patients_raw)} (4 communes)")
+    print("    Damvix (6), Le Mazeau (5), Saint-Sigismond (4), Maillé (5)")
     print(f"  RDV      : {len(appts)} (aujourd'hui + demain)")
-    print("=" * 55)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

@@ -151,6 +151,7 @@ export default function App() {
   const [rdvError, setRdvError] = useState('');
   const [rdvPrescriptions, setRdvPrescriptions] = useState([]);
   const [rdvPrescriptionsLoading, setRdvPrescriptionsLoading] = useState(false);
+  const [patientsWithActivePlans, setPatientsWithActivePlans] = useState(null); // null = loading, Set = loaded
 
   // Infirmiers
   const [selectedNurseId, setSelectedNurseId] = useState(null);
@@ -253,6 +254,16 @@ export default function App() {
       fetchAndSetSchedule(scheduleYear, scheduleMonth);
     }
   }, [isAuthenticated, scheduleYear, scheduleMonth, fetchAndSetSchedule]);
+
+  // Pre-load schedule for current + next 3 months (for prescription planning)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const now = new Date();
+    for (let i = 0; i < 4; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      fetchAndSetSchedule(d.getFullYear(), d.getMonth());
+    }
+  }, [isAuthenticated, fetchAndSetSchedule]);
 
   // --- LOGIQUE PLANNING (defined early — used by fetchAppointments) ---
   const getActiveConfigForDate = (date) => {
@@ -718,6 +729,37 @@ export default function App() {
     setRdvForm({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home' });
     setRdvPrescriptions([]);
     setRdvError('');
+    // Fetch care protocols to determine which patients have active plans (en cours)
+    // Backend limit max = 100, so paginate if needed
+    setPatientsWithActivePlans(null);
+    (async () => {
+      try {
+        const ids = new Set();
+        let skip = 0;
+        const pageSize = 100;
+        let hasMore = true;
+        while (hasMore) {
+          const data = await listCareProtocols({ skip, limit: pageSize });
+          for (const raw of data.items) {
+            if (raw.status !== 'active') continue;
+            const rx = protocolApiToFrontend(raw);
+            const startDates = rx.soins?.map(s => s.startDate).filter(Boolean).sort() || [];
+            const endDates = rx.soins?.map(s => s.endDate).filter(Boolean).sort() || [];
+            const minStart = startDates[0];
+            const maxEnd = endDates[endDates.length - 1];
+            // dateStr (date du RDV) doit être dans [minStart, maxEnd]
+            if (minStart && minStart > dateStr) continue;
+            if (maxEnd && maxEnd < dateStr) continue;
+            ids.add(raw.patient_id);
+          }
+          skip += pageSize;
+          hasMore = skip < data.total;
+        }
+        setPatientsWithActivePlans(ids);
+      } catch {
+        setPatientsWithActivePlans(new Set());
+      }
+    })();
   };
 
   const editRdv = (appt) => {
@@ -806,6 +848,7 @@ export default function App() {
       finalPatientName = `${p.firstName} ${p.lastName.toUpperCase()}`;
     }
 
+    if (!rdvForm.careProtocolId) { setRdvError("Un plan de soins est requis."); return; }
     if (!rdvForm.startTime || !rdvForm.endTime) { setRdvError("Les horaires sont requis."); return; }
     if (rdvForm.startTime === rdvForm.endTime) { setRdvError("Heures identiques."); return; }
 
@@ -1001,6 +1044,8 @@ export default function App() {
               onDeletePrescription={deletePrescriptionApi}
               prescriptionsLoading={prescriptionsLoading}
               careLabels={cabinetData?.settings?.care_labels || []}
+              careDurations={cabinetData?.settings?.care_durations || {}}
+              cabinetData={cabinetData}
             />
               )}
             </>
@@ -1043,6 +1088,8 @@ export default function App() {
               completeRdv={completeRdv}
               patients={patients}
               cabinetData={cabinetData}
+              fetchScheduleForMonth={fetchAndSetSchedule}
+              meUserId={meData?.user?.id}
             />
           )}
 
@@ -1155,6 +1202,7 @@ export default function App() {
         rdvPrescriptions={rdvPrescriptions}
         rdvPrescriptionsLoading={rdvPrescriptionsLoading}
         onPatientChange={loadRdvPrescriptions}
+        patientsWithActivePlans={patientsWithActivePlans}
       />
 
     </div>

@@ -16,7 +16,8 @@ export default function RdvModal({
   handleUpdateRdv,
   rdvPrescriptions,
   rdvPrescriptionsLoading,
-  onPatientChange
+  onPatientChange,
+  patientsWithActivePlans,
 }) {
   if (!rdvModalParams) return null;
 
@@ -88,12 +89,23 @@ export default function RdvModal({
           ) : (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Patient</label>
-              <select value={rdvForm.patientId} onChange={handlePatientSelect} className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                <option value="" disabled>-- Choisir dans le répertoire --</option>
-                {patients.map(p => (
-                  <option key={p.id} value={p.id}>{p.lastName} {p.firstName}</option>
-                ))}
-              </select>
+              {patientsWithActivePlans === null ? (
+                <div className="flex items-center gap-2 text-sm text-slate-400 py-2">
+                  <Loader2 size={14} className="animate-spin" /> Chargement des patients...
+                </div>
+              ) : (
+                <select value={rdvForm.patientId} onChange={handlePatientSelect} className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                  <option value="" disabled>-- Choisir un patient --</option>
+                  {patients
+                    .filter(p => patientsWithActivePlans.has(p.id))
+                    .map(p => (
+                      <option key={p.id} value={p.id}>{p.lastName} {p.firstName}</option>
+                    ))}
+                </select>
+              )}
+              {patientsWithActivePlans instanceof Set && patientsWithActivePlans.size === 0 && (
+                <p className="text-xs text-amber-600 mt-1">Aucun patient n'a de plan de soins en cours. Créez d'abord un plan de soins depuis la fiche patient.</p>
+              )}
             </div>
           )}
 
@@ -136,53 +148,58 @@ export default function RdvModal({
             )}
           </div>
 
-          {/* Plan de soins */}
+          {/* Plan de soins (requis) */}
           {(isEditMode || rdvForm.patientId) && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1.5">
-                <FileText size={14} className="text-slate-400" /> Plan de soins
+                <FileText size={14} className="text-slate-400" /> Plan de soins <span className="text-red-400">*</span>
               </label>
               {rdvPrescriptionsLoading ? (
                 <div className="flex items-center gap-2 text-sm text-slate-400 py-2">
                   <Loader2 size={14} className="animate-spin" /> Chargement...
                 </div>
-              ) : rdvPrescriptions.length === 0 ? (
-                <p className="text-sm text-slate-400 italic py-1">Aucun plan de soins pour ce patient</p>
-              ) : (
-                <select
-                  value={rdvForm.careProtocolId}
-                  onChange={e => setRdvForm({ ...rdvForm, careProtocolId: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                >
-                  <option value="">-- Aucun plan de soins --</option>
-                  {rdvPrescriptions
-                    .filter(rx => {
-                      // Only show "En cours" plans (max endDate of soins >= today)
-                      const endDates = rx.soins?.map(s => s.endDate).filter(Boolean).sort() || [];
-                      const maxEnd = endDates[endDates.length - 1] || rx.endDate;
-                      if (!maxEnd) return true;
-                      const today = new Date().toISOString().split('T')[0];
-                      return maxEnd >= today;
-                    })
-                    .map(rx => {
-                    // Build display label from soins list
-                    const soinsLabel = rx.soins?.length > 0
-                      ? rx.soins.map(s => s.label).filter(Boolean).join(', ')
-                      : (rx.label || 'Plan de soins');
-                    const minStart = rx.soins?.length > 0
-                      ? rx.soins.map(s => s.startDate).filter(Boolean).sort()[0]
-                      : rx.startDate;
-                    const maxEnd = rx.soins?.length > 0
-                      ? rx.soins.map(s => s.endDate).filter(Boolean).sort().pop()
-                      : rx.endDate;
-                    return (
-                      <option key={rx._apiId} value={rx._apiId}>
-                        {soinsLabel}{minStart ? ` (${minStart}` : ''}{maxEnd ? ` → ${maxEnd})` : minStart ? ')' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-              )}
+              ) : (() => {
+                const rdvDate = rdvModalParams.dateStr;
+                const activePlans = rdvPrescriptions.filter(rx => {
+                  const startDates = rx.soins?.map(s => s.startDate).filter(Boolean).sort() || [];
+                  const endDates = rx.soins?.map(s => s.endDate).filter(Boolean).sort() || [];
+                  const minStart = startDates[0];
+                  const maxEnd = endDates[endDates.length - 1];
+                  if (minStart && minStart > rdvDate) return false;
+                  if (maxEnd && maxEnd < rdvDate) return false;
+                  return true;
+                });
+                if (activePlans.length === 0) {
+                  return <p className="text-sm text-amber-600 italic py-1">Aucun plan de soins en cours pour ce patient.</p>;
+                }
+                return (
+                  <select
+                    value={rdvForm.careProtocolId}
+                    onChange={e => setRdvForm({ ...rdvForm, careProtocolId: e.target.value })}
+                    className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white ${
+                      !rdvForm.careProtocolId ? 'border-red-300' : 'border-slate-300'
+                    }`}
+                  >
+                    <option value="" disabled>-- Choisir un plan de soins --</option>
+                    {activePlans.map(rx => {
+                      const soinsLabel = rx.soins?.length > 0
+                        ? rx.soins.map(s => s.label).filter(Boolean).join(', ')
+                        : (rx.label || 'Plan de soins');
+                      const minStart = rx.soins?.length > 0
+                        ? rx.soins.map(s => s.startDate).filter(Boolean).sort()[0]
+                        : rx.startDate;
+                      const maxEnd = rx.soins?.length > 0
+                        ? rx.soins.map(s => s.endDate).filter(Boolean).sort().pop()
+                        : rx.endDate;
+                      return (
+                        <option key={rx._apiId} value={rx._apiId}>
+                          {soinsLabel}{minStart ? ` (${minStart}` : ''}{maxEnd ? ` → ${maxEnd})` : minStart ? ')' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                );
+              })()}
             </div>
           )}
 
@@ -200,7 +217,17 @@ export default function RdvModal({
 
           <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
             <button type="button" onClick={() => setRdvModalParams(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Annuler</button>
-            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium">{isEditMode ? 'Modifier' : 'Enregistrer'}</button>
+            <button
+              type="submit"
+              disabled={!isEditMode && !rdvForm.careProtocolId}
+              className={`px-5 py-2 rounded-lg font-medium ${
+                !isEditMode && !rdvForm.careProtocolId
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {isEditMode ? 'Modifier' : 'Enregistrer'}
+            </button>
           </div>
         </form>
       </div>

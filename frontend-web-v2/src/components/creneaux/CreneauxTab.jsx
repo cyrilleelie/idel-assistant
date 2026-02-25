@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, X, Clock, Lock, AlertCircle, Tag, Repeat, Save } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, Trash2, X, Clock, Lock, AlertCircle, Tag, Repeat, Save, MapPin, Search, ChevronDown } from 'lucide-react';
 
 export default function CreneauxTab({
   configs, lockedConfigIds,
@@ -15,25 +15,35 @@ export default function CreneauxTab({
   onCabinetUpdate,
 }) {
   const careLabels = cabinetData?.settings?.care_labels || [];
-  const serverTrames = cabinetData?.settings?.trames || [];
+  const careDurations = cabinetData?.settings?.care_durations || {};
+  const serverTrames = cabinetData?.settings?.trames;
   const [newLabel, setNewLabel] = useState('');
+  const [newDuration, setNewDuration] = useState('');
   const [labelError, setLabelError] = useState('');
 
   // --- Trames: local state + explicit save ---
-  const [localTrames, setLocalTrames] = useState(serverTrames);
-  const [tramesDirty, setTramesDirty] = useState(false);
+  const [localTrames, setLocalTrames] = useState(serverTrames || []);
+  const [dirtyTrameIds, setDirtyTrameIds] = useState(new Set());
 
   // Sync from server when serverTrames changes (initial load, external changes)
   // but NOT when we have unsaved local changes
+  const serverTramRef = useRef(serverTrames);
   useEffect(() => {
-    if (!tramesDirty) {
-      setLocalTrames(serverTrames);
+    if (serverTrames !== serverTramRef.current) {
+      serverTramRef.current = serverTrames;
+      if (dirtyTrameIds.size === 0 && serverTrames) {
+        setLocalTrames(serverTrames);
+      }
     }
-  }, [serverTrames, tramesDirty]);
+  }, [serverTrames, dirtyTrameIds]);
 
-  const saveTrames = useCallback(() => {
+  const saveTrame = useCallback((trameId) => {
     onCabinetUpdate({ settings: { trames: localTrames } });
-    setTramesDirty(false);
+    setDirtyTrameIds(prev => {
+      const next = new Set(prev);
+      next.delete(trameId);
+      return next;
+    });
   }, [onCabinetUpdate, localTrames]);
 
   const [newTrameName, setNewTrameName] = useState('');
@@ -47,6 +57,211 @@ export default function CreneauxTab({
     '#06b6d4', '#f97316', '#14b8a6', '#ec4899', '#6366f1',
   ];
   const getPersonCssColor = (idx) => personCssColors[idx % personCssColors.length];
+
+  // --- Secteurs géographiques (nouvelle version) ---
+  const sectors = cabinetData?.settings?.sectors || [];
+  const slotSubdivisions = cabinetData?.settings?.slot_subdivisions || {};
+
+  // Sector creation
+  const [newSectorName, setNewSectorName] = useState('');
+  const [newSectorColor, setNewSectorColor] = useState('#3b82f6');
+
+  // Commune autocomplete per sector
+  const [communeSearch, setCommuneSearch] = useState({});   // { sectorId: query }
+  const [communeResults, setCommuneResults] = useState({}); // { sectorId: results[] }
+  const [communeFocused, setCommuneFocused] = useState(null); // sectorId or null
+  const communeDebounceRef = useRef({});
+
+  // Subdivision section
+  const [subdivConfigId, setSubdivConfigId] = useState('');
+
+  const sectorColors = [
+    '#3b82f6', '#10b981', '#f59e0b', '#f43f5e', '#a855f7',
+    '#06b6d4', '#f97316', '#14b8a6', '#ec4899', '#6366f1',
+  ];
+
+  // --- Sector CRUD ---
+  const addSector = () => {
+    const trimmed = newSectorName.trim();
+    if (!trimmed) return;
+    if (sectors.some(s => s.name.toLowerCase() === trimmed.toLowerCase())) return;
+    const newSec = {
+      id: 'sec_' + Date.now(),
+      name: trimmed,
+      color: newSectorColor,
+      communes: [],
+    };
+    onCabinetUpdate({ settings: { sectors: [...sectors, newSec] } });
+    setNewSectorName('');
+    // Cycle to next color
+    const currentIdx = sectorColors.indexOf(newSectorColor);
+    setNewSectorColor(sectorColors[(currentIdx + 1) % sectorColors.length]);
+  };
+
+  const removeSector = (sectorId) => {
+    const updatedSectors = sectors.filter(s => s.id !== sectorId);
+    // Clean up subdivisions referencing this sector
+    const updatedSubdivisions = JSON.parse(JSON.stringify(slotSubdivisions));
+    for (const configId of Object.keys(updatedSubdivisions)) {
+      for (const slotId of Object.keys(updatedSubdivisions[configId])) {
+        updatedSubdivisions[configId][slotId] = updatedSubdivisions[configId][slotId].map(sub =>
+          sub.sectorId === sectorId ? { ...sub, sectorId: '' } : sub
+        );
+      }
+    }
+    onCabinetUpdate({ settings: { sectors: updatedSectors, slot_subdivisions: updatedSubdivisions } });
+  };
+
+  // --- Commune autocomplete ---
+  const searchCommunes = useCallback((sectorId, query) => {
+    setCommuneSearch(prev => ({ ...prev, [sectorId]: query }));
+    if (communeDebounceRef.current[sectorId]) {
+      clearTimeout(communeDebounceRef.current[sectorId]);
+    }
+    if (!query || query.length < 2) {
+      setCommuneResults(prev => ({ ...prev, [sectorId]: [] }));
+      return;
+    }
+    communeDebounceRef.current[sectorId] = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(query)}&boost=population&limit=7&fields=nom,code,codesPostaux`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setCommuneResults(prev => ({ ...prev, [sectorId]: data }));
+        }
+      } catch {
+        // Silently fail - user can retry
+      }
+    }, 300);
+  }, []);
+
+  const addCommuneToSector = (sectorId, commune) => {
+    const updatedSectors = sectors.map(s => {
+      if (s.id !== sectorId) return s;
+      if (s.communes.some(c => c.code === commune.code)) return s;
+      return { ...s, communes: [...s.communes, { nom: commune.nom, code: commune.code, codesPostaux: commune.codesPostaux || [] }] };
+    });
+    onCabinetUpdate({ settings: { sectors: updatedSectors } });
+    setCommuneSearch(prev => ({ ...prev, [sectorId]: '' }));
+    setCommuneResults(prev => ({ ...prev, [sectorId]: [] }));
+  };
+
+  const removeCommuneFromSector = (sectorId, communeCode) => {
+    const updatedSectors = sectors.map(s => {
+      if (s.id !== sectorId) return s;
+      return { ...s, communes: s.communes.filter(c => c.code !== communeCode) };
+    });
+    onCabinetUpdate({ settings: { sectors: updatedSectors } });
+  };
+
+  // --- Subdivision CRUD ---
+  const addSubdivision = (configId, slotId, slot) => {
+    const updated = JSON.parse(JSON.stringify(slotSubdivisions));
+    if (!updated[configId]) updated[configId] = {};
+    if (!updated[configId][slotId]) updated[configId][slotId] = [];
+    updated[configId][slotId].push({
+      id: 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      sectorId: '',
+    });
+    onCabinetUpdate({ settings: { slot_subdivisions: updated } });
+  };
+
+  const updateSubdivision = (configId, slotId, subId, field, value) => {
+    const updated = JSON.parse(JSON.stringify(slotSubdivisions));
+    const subs = updated[configId]?.[slotId];
+    if (!subs) return;
+    const sub = subs.find(s => s.id === subId);
+    if (!sub) return;
+    sub[field] = value;
+    onCabinetUpdate({ settings: { slot_subdivisions: updated } });
+  };
+
+  const removeSubdivision = (configId, slotId, subId) => {
+    const updated = JSON.parse(JSON.stringify(slotSubdivisions));
+    if (!updated[configId]?.[slotId]) return;
+    updated[configId][slotId] = updated[configId][slotId].filter(s => s.id !== subId);
+    if (updated[configId][slotId].length === 0) delete updated[configId][slotId];
+    if (updated[configId] && Object.keys(updated[configId]).length === 0) delete updated[configId];
+    onCabinetUpdate({ settings: { slot_subdivisions: updated } });
+  };
+
+  // --- Coverage calculation ---
+  const timeToMinutes = (t) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const minutesToTime = (m) => {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  };
+
+  const getSlotCoverage = (configId, slotId, slot) => {
+    const subs = slotSubdivisions[configId]?.[slotId] || [];
+    if (subs.length === 0) return { status: 'empty', gaps: [{ start: slot.startTime, end: slot.endTime }], overlaps: [], percent: 0 };
+
+    const slotStart = timeToMinutes(slot.startTime);
+    const slotEnd = timeToMinutes(slot.endTime);
+    const slotDuration = slotEnd - slotStart;
+    if (slotDuration <= 0) return { status: 'empty', gaps: [], overlaps: [], percent: 0 };
+
+    // Sort subs by start time
+    const sorted = [...subs]
+      .map(s => ({ start: timeToMinutes(s.startTime), end: timeToMinutes(s.endTime) }))
+      .filter(s => s.end > s.start)
+      .sort((a, b) => a.start - b.start);
+
+    // Detect overlaps
+    const overlaps = [];
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (sorted[j].start < sorted[i].end) {
+          overlaps.push({
+            start: minutesToTime(sorted[j].start),
+            end: minutesToTime(Math.min(sorted[i].end, sorted[j].end)),
+          });
+        }
+      }
+    }
+
+    // Merge intervals and find gaps
+    const merged = [];
+    for (const s of sorted) {
+      const cStart = Math.max(s.start, slotStart);
+      const cEnd = Math.min(s.end, slotEnd);
+      if (cEnd <= cStart) continue;
+      if (merged.length > 0 && cStart <= merged[merged.length - 1].end) {
+        merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, cEnd);
+      } else {
+        merged.push({ start: cStart, end: cEnd });
+      }
+    }
+
+    const gaps = [];
+    let cursor = slotStart;
+    for (const m of merged) {
+      if (m.start > cursor) {
+        gaps.push({ start: minutesToTime(cursor), end: minutesToTime(m.start) });
+      }
+      cursor = m.end;
+    }
+    if (cursor < slotEnd) {
+      gaps.push({ start: minutesToTime(cursor), end: minutesToTime(slotEnd) });
+    }
+
+    const coveredMinutes = merged.reduce((sum, m) => sum + (m.end - m.start), 0);
+    const percent = Math.round((coveredMinutes / slotDuration) * 100);
+
+    let status = 'complete';
+    if (overlaps.length > 0) status = 'overlap';
+    else if (gaps.length > 0) status = 'gaps';
+
+    return { status, gaps, overlaps, percent };
+  };
 
   const createTrame = () => {
     const trimmed = newTrameName.trim();
@@ -84,7 +299,11 @@ export default function CreneauxTab({
   const deleteTrame = (trameId) => {
     const newList = localTrames.filter(t => t.id !== trameId);
     setLocalTrames(newList);
-    setTramesDirty(false);
+    setDirtyTrameIds(prev => {
+      const next = new Set(prev);
+      next.delete(trameId);
+      return next;
+    });
     // Save deletion immediately
     onCabinetUpdate({ settings: { trames: newList } });
   };
@@ -104,7 +323,7 @@ export default function CreneauxTab({
       newPattern[weekIdx][dayIdx] = daySlots;
       return { ...t, pattern: newPattern };
     }));
-    setTramesDirty(true);
+    setDirtyTrameIds(prev => new Set(prev).add(trameId));
   };
 
   const addLabel = () => {
@@ -114,14 +333,31 @@ export default function CreneauxTab({
     if (trimmed.length > 100) { setLabelError('Maximum 100 caractères.'); return; }
     if (careLabels.includes(trimmed)) { setLabelError('Ce libellé existe déjà.'); return; }
     if (careLabels.length >= 50) { setLabelError('Maximum 50 libellés.'); return; }
-    const updated = [...careLabels, trimmed];
-    onCabinetUpdate({ settings: { care_labels: updated } });
+    const updatedLabels = [...careLabels, trimmed];
+    const updatedDurations = { ...careDurations };
+    if (newDuration && Number(newDuration) > 0) {
+      updatedDurations[trimmed] = Number(newDuration);
+    }
+    onCabinetUpdate({ settings: { care_labels: updatedLabels, care_durations: updatedDurations } });
     setNewLabel('');
+    setNewDuration('');
   };
 
   const removeLabel = (label) => {
-    const updated = careLabels.filter(l => l !== label);
-    onCabinetUpdate({ settings: { care_labels: updated } });
+    const updatedLabels = careLabels.filter(l => l !== label);
+    const updatedDurations = { ...careDurations };
+    delete updatedDurations[label];
+    onCabinetUpdate({ settings: { care_labels: updatedLabels, care_durations: updatedDurations } });
+  };
+
+  const updateDuration = (label, minutes) => {
+    const updatedDurations = { ...careDurations };
+    if (minutes && Number(minutes) > 0) {
+      updatedDurations[label] = Number(minutes);
+    } else {
+      delete updatedDurations[label];
+    }
+    onCabinetUpdate({ settings: { care_durations: updatedDurations } });
   };
 
   return (
@@ -199,14 +435,6 @@ export default function CreneauxTab({
       {/* ═══════ Trames (patterns de planning) ═══════ */}
       <h2 className="text-xl font-semibold mt-10 mb-6 border-b pb-2 flex items-center gap-2">
         <Repeat size={20} className="text-blue-600" /> Trames
-        {tramesDirty && (
-          <button
-            onClick={saveTrames}
-            className="flex items-center gap-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-full transition-colors"
-          >
-            <Save size={12} /> Enregistrer
-          </button>
-        )}
       </h2>
 
       <p className="text-sm text-slate-500 mb-4">
@@ -294,7 +522,17 @@ export default function CreneauxTab({
             <div key={trame.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
               <div className="bg-slate-50 p-3 border-b border-slate-200 flex justify-between items-center">
                 <div>
-                  <h4 className="font-semibold text-slate-800">{trame.name}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-slate-800">{trame.name}</h4>
+                    {dirtyTrameIds.has(trame.id) && (
+                      <button
+                        onClick={() => saveTrame(trame.id)}
+                        className="flex items-center gap-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 px-2.5 py-0.5 rounded-full transition-colors"
+                      >
+                        <Save size={12} /> Enregistrer
+                      </button>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500">
                     {trame.personCount} personne(s) · {trame.weekCount} semaine(s)
                     {linkedConfig ? ` · ${linkedConfig.name}` : ' · (organisation supprimée)'}
@@ -393,34 +631,374 @@ export default function CreneauxTab({
         })}
       </div>
 
+      {/* ═══════ Secteurs géographiques ═══════ */}
+      <h2 className="text-xl font-semibold mt-10 mb-6 border-b pb-2 flex items-center gap-2">
+        <MapPin size={20} className="text-blue-600" /> Secteurs géographiques
+      </h2>
+
+      <p className="text-sm text-slate-500 mb-4">
+        Définissez vos secteurs géographiques, puis découpez vos créneaux horaires pour les associer à ces secteurs.
+      </p>
+
+      {/* ── Partie A : Définition des secteurs ── */}
+      <div className="mb-8">
+        <h3 className="font-medium text-slate-700 mb-3">Secteurs existants</h3>
+
+        {sectors.length === 0 && (
+          <p className="text-sm text-slate-400 italic mb-4">Aucun secteur défini.</p>
+        )}
+
+        <div className="space-y-3 mb-4">
+          {sectors.map(sector => (
+            <div key={sector.id} className="border border-slate-200 rounded-lg p-3 bg-white">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: sector.color }} />
+                  <span className="font-medium text-slate-800">{sector.name}</span>
+                  <span className="text-xs text-slate-400">({sector.communes.length} commune{sector.communes.length !== 1 ? 's' : ''})</span>
+                </div>
+                {!readOnly && (
+                  <button
+                    onClick={() => removeSector(sector.id)}
+                    className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                    title="Supprimer ce secteur"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* Commune chips */}
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {sector.communes.map(commune => (
+                  <span
+                    key={commune.code}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700"
+                  >
+                    {commune.nom} ({commune.codesPostaux?.[0] || commune.code})
+                    {!readOnly && (
+                      <button
+                        onClick={() => removeCommuneFromSector(sector.id, commune.code)}
+                        className="text-slate-400 hover:text-red-600 transition-colors"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+                {sector.communes.length === 0 && (
+                  <span className="text-xs text-slate-400 italic">Aucune commune</span>
+                )}
+              </div>
+
+              {/* Commune autocomplete input */}
+              {!readOnly && (
+                <div className="relative">
+                  <div className="flex items-center gap-1.5">
+                    <Search size={14} className="text-slate-400" />
+                    <input
+                      type="text"
+                      value={communeSearch[sector.id] || ''}
+                      onChange={e => searchCommunes(sector.id, e.target.value)}
+                      onFocus={() => setCommuneFocused(sector.id)}
+                      onBlur={() => setTimeout(() => setCommuneFocused(null), 200)}
+                      placeholder="Ajouter une commune..."
+                      className="flex-1 border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                  {communeFocused === sector.id && (communeResults[sector.id] || []).length > 0 && (
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {(communeResults[sector.id] || [])
+                        .filter(c => !sector.communes.some(sc => sc.code === c.code))
+                        .map(commune => (
+                          <button
+                            key={commune.code}
+                            type="button"
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              addCommuneToSector(sector.id, commune);
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors flex justify-between items-center"
+                          >
+                            <span>{commune.nom}</span>
+                            <span className="text-xs text-slate-400">{commune.codesPostaux?.[0] || commune.code}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* New sector form */}
+        {!readOnly && (
+          <div className="flex flex-wrap gap-2 items-end">
+            <div className="flex-1 min-w-[160px]">
+              <label className="block text-xs text-slate-600 mb-1">Nom du secteur</label>
+              <input
+                type="text"
+                value={newSectorName}
+                onChange={e => setNewSectorName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSector(); } }}
+                placeholder="Ex: Secteur Nord..."
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                maxLength={50}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-600 mb-1">Couleur</label>
+              <div className="flex gap-1">
+                {sectorColors.map(color => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setNewSectorColor(color)}
+                    className={`w-7 h-7 rounded-full border-2 transition-all ${newSectorColor === color ? 'border-slate-800 scale-110' : 'border-transparent hover:border-slate-300'}`}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={addSector}
+              disabled={!newSectorName.trim()}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Créer
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Partie B : Découpage temporel des créneaux ── */}
+      <div className="mb-8">
+        <h3 className="font-medium text-slate-700 mb-3 flex items-center gap-2">
+          <Clock size={16} className="text-slate-500" /> Découpage des créneaux par secteur
+        </h3>
+
+        {configs.length === 0 ? (
+          <p className="text-sm text-slate-400 italic">Créez d'abord une organisation horaire.</p>
+        ) : (
+          <>
+            <div className="mb-4">
+              <label className="block text-xs text-slate-600 mb-1 font-medium">Organisation horaire</label>
+              <select
+                value={subdivConfigId}
+                onChange={e => setSubdivConfigId(e.target.value)}
+                className="w-full sm:w-auto min-w-[280px] border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              >
+                <option value="">-- Sélectionner --</option>
+                {configs.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.slots.length} créneau{c.slots.length > 1 ? 'x' : ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {subdivConfigId && (() => {
+              const selectedConfig = configs.find(c => c.id === subdivConfigId);
+              if (!selectedConfig) return null;
+              const slots = selectedConfig.slots;
+              if (slots.length === 0) return <p className="text-sm text-slate-400 italic">Cette organisation n'a aucun créneau.</p>;
+
+              return (
+                <div className="space-y-4">
+                  {slots.map(slot => {
+                    const subs = slotSubdivisions[subdivConfigId]?.[slot.id] || [];
+                    const coverage = getSlotCoverage(subdivConfigId, slot.id, slot);
+
+                    return (
+                      <div key={slot.id} className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                        {/* Slot header */}
+                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+                          <div>
+                            <span className="font-medium text-slate-700">{slot.name}</span>
+                            <span className="text-xs text-slate-400 ml-2">({slot.startTime} – {slot.endTime})</span>
+                          </div>
+                        </div>
+
+                        {/* Subdivisions table */}
+                        {subs.length > 0 && (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-slate-100">
+                                  <th className="text-left px-4 py-1.5 text-xs font-medium text-slate-500">De</th>
+                                  <th className="text-left px-4 py-1.5 text-xs font-medium text-slate-500">À</th>
+                                  <th className="text-left px-4 py-1.5 text-xs font-medium text-slate-500">Secteur</th>
+                                  {!readOnly && <th className="w-10"></th>}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {subs.map(sub => {
+                                  const linkedSector = sectors.find(s => s.id === sub.sectorId);
+                                  return (
+                                    <tr key={sub.id} className="border-b last:border-b-0 border-slate-50">
+                                      <td className="px-4 py-1.5">
+                                        {readOnly ? (
+                                          <span className="text-slate-700">{sub.startTime}</span>
+                                        ) : (
+                                          <input
+                                            type="time"
+                                            value={sub.startTime}
+                                            onChange={e => updateSubdivision(subdivConfigId, slot.id, sub.id, 'startTime', e.target.value)}
+                                            className="border border-slate-200 rounded px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-blue-500 w-[100px]"
+                                          />
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-1.5">
+                                        {readOnly ? (
+                                          <span className="text-slate-700">{sub.endTime}</span>
+                                        ) : (
+                                          <input
+                                            type="time"
+                                            value={sub.endTime}
+                                            onChange={e => updateSubdivision(subdivConfigId, slot.id, sub.id, 'endTime', e.target.value)}
+                                            className="border border-slate-200 rounded px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-blue-500 w-[100px]"
+                                          />
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-1.5">
+                                        {readOnly ? (
+                                          <span className="flex items-center gap-1.5">
+                                            {linkedSector && <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: linkedSector.color }} />}
+                                            <span className={linkedSector ? 'text-slate-700' : 'text-slate-400'}>
+                                              {linkedSector?.name || '—'}
+                                            </span>
+                                          </span>
+                                        ) : (
+                                          <select
+                                            value={sub.sectorId}
+                                            onChange={e => updateSubdivision(subdivConfigId, slot.id, sub.id, 'sectorId', e.target.value)}
+                                            className="border border-slate-200 rounded px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[160px]"
+                                          >
+                                            <option value="">-- Secteur --</option>
+                                            {sectors.map(s => (
+                                              <option key={s.id} value={s.id}>{s.name}</option>
+                                            ))}
+                                          </select>
+                                        )}
+                                      </td>
+                                      {!readOnly && (
+                                        <td className="px-2 py-1.5 text-center">
+                                          <button
+                                            onClick={() => removeSubdivision(subdivConfigId, slot.id, sub.id)}
+                                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                          >
+                                            <X size={14} />
+                                          </button>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Add subdivision button */}
+                        {!readOnly && (
+                          <div className="px-4 py-2 border-t border-slate-100">
+                            <button
+                              onClick={() => addSubdivision(subdivConfigId, slot.id, slot)}
+                              className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 transition-colors"
+                            >
+                              <Plus size={14} /> Ajouter un sous-créneau
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Coverage bar */}
+                        <div className={`px-4 py-2 text-xs font-medium flex items-center gap-2 border-t ${
+                          coverage.status === 'complete' ? 'bg-green-50 text-green-700 border-green-100' :
+                          coverage.status === 'overlap' ? 'bg-red-50 text-red-700 border-red-100' :
+                          'bg-amber-50 text-amber-700 border-amber-100'
+                        }`}>
+                          {coverage.status === 'complete' && (
+                            <>Couverture complète ({slot.startTime}–{slot.endTime})</>
+                          )}
+                          {coverage.status === 'overlap' && (
+                            <>Chevauchement{coverage.overlaps.length > 1 ? 's' : ''} détecté{coverage.overlaps.length > 1 ? 's' : ''} : {coverage.overlaps.map(o => `${o.start}–${o.end}`).join(', ')}</>
+                          )}
+                          {coverage.status === 'gaps' && (
+                            <>Non couvert : {coverage.gaps.map(g => `${g.start}–${g.end}`).join(', ')} ({coverage.percent}% couvert)</>
+                          )}
+                          {coverage.status === 'empty' && (
+                            <>Aucun sous-créneau défini ({slot.startTime}–{slot.endTime})</>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </>
+        )}
+      </div>
+
       {/* ═══════ Libellés de soins ═══════ */}
       <h2 className="text-xl font-semibold mt-10 mb-6 border-b pb-2 flex items-center gap-2">
         <Tag size={20} className="text-blue-600" /> Libellés de soins
       </h2>
 
       <p className="text-sm text-slate-500 mb-4">
-        Définissez les libellés proposés lors de la création d'une ordonnance (ex: Pansement, Injection insuline...).
+        Définissez les libellés et durées par défaut proposés lors de la création d'un plan de soins.
       </p>
 
-      {/* Tags list */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {careLabels.length === 0 && (
-          <span className="text-sm text-slate-400 italic">Aucun libellé configuré.</span>
-        )}
-        {careLabels.map(label => (
-          <span key={label} className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1.5 rounded-full text-sm font-medium">
-            {label}
-            {!readOnly && (
-              <button
-                onClick={() => removeLabel(label)}
-                className="text-blue-400 hover:text-red-600 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </span>
-        ))}
-      </div>
+      {/* Labels table */}
+      {careLabels.length === 0 ? (
+        <p className="text-sm text-slate-400 italic mb-4">Aucun libellé configuré.</p>
+      ) : (
+        <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="text-left px-4 py-2 font-medium text-slate-600">Libellé</th>
+                <th className="text-left px-4 py-2 font-medium text-slate-600 w-40">Durée (min)</th>
+                {!readOnly && <th className="w-12"></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {careLabels.map(label => (
+                <tr key={label} className="border-b last:border-b-0 border-slate-100 hover:bg-slate-50">
+                  <td className="px-4 py-2 font-medium text-slate-800">{label}</td>
+                  <td className="px-4 py-2">
+                    {readOnly ? (
+                      <span className="text-slate-600">{careDurations[label] || '-'}</span>
+                    ) : (
+                      <input
+                        type="number"
+                        min="1"
+                        max="480"
+                        value={careDurations[label] || ''}
+                        onChange={e => updateDuration(label, e.target.value)}
+                        placeholder="—"
+                        className="w-24 border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      />
+                    )}
+                  </td>
+                  {!readOnly && (
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        onClick={() => removeLabel(label)}
+                        className="text-slate-400 hover:text-red-600 transition-colors p-1"
+                        title="Supprimer"
+                      >
+                        <X size={14} />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Add label form */}
       {!readOnly && (
@@ -434,6 +1012,16 @@ export default function CreneauxTab({
               placeholder="Nouveau libellé..."
               className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               maxLength={100}
+            />
+            <input
+              type="number"
+              min="1"
+              max="480"
+              value={newDuration}
+              onChange={e => setNewDuration(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLabel(); } }}
+              placeholder="Durée (min)"
+              className="w-32 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
             <button
               onClick={addLabel}

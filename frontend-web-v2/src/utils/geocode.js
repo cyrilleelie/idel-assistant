@@ -66,5 +66,28 @@ export async function geocodeBatch(items) {
   return results;
 }
 
+/**
+ * Compute travel times between origins and destinations via Distance Matrix API.
+ * @param {Array<{lat: number, lng: number}>} origins
+ * @param {Array<{lat: number, lng: number}>} destinations
+ * @returns {Promise<Array<Array<number|null>>>} rows[i][j] = duration in seconds (or null)
+ */
+export async function getDistanceMatrix(origins, destinations) {
+  try {
+    const { DistanceMatrixService } = await loader.importLibrary('routes');
+    const service = new DistanceMatrixService();
+    const response = await service.getDistanceMatrix({
+      origins,
+      destinations,
+      travelMode: 'DRIVING',
+    });
+    return response.rows.map(row =>
+      row.elements.map(el => el.status === 'OK' ? el.duration.value : null)
+    );
+  } catch {
+    return origins.map(() => destinations.map(() => null));
+  }
+}
+
 /** Expose the loader so the map component can reuse it. */
 export { loader };

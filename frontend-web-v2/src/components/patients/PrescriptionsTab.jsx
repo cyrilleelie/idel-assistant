@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Plus, Trash2, ChevronDown, ChevronUp, FileUp, X, File,
   Calendar, Clock, RefreshCw, MessageSquare, Pencil, Users,
-  ClipboardList, CalendarDays, Check, Loader2
+  ClipboardList, CalendarDays, Check, Loader2, Lightbulb, MapPin
 } from 'lucide-react';
+import { getDistanceMatrix } from '../../utils/geocode';
 
 const FREQUENCY_OPTIONS = [
   { value: 'daily', label: '1x / jour' },
@@ -25,12 +26,20 @@ function formatDateFr(dateStr) {
   return `${d}/${m}/${y}`;
 }
 
+function tomorrowStr() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function emptySoin() {
+  const tomorrow = tomorrowStr();
   return {
     id: 'soin_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     label: '',
-    startDate: '',
-    endDate: '',
+    startDate: tomorrow,
+    endDate: tomorrow,
+    durationMinutes: '',
     frequency: 'daily',
     customFrequency: '',
     notes: '',
@@ -121,6 +130,12 @@ function timeToMinutes(t) {
   return h * 60 + m;
 }
 
+function minutesToTime(m) {
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
 function slotsOverlap(s1, e1, s2, e2) {
   return timeToMinutes(s1) < timeToMinutes(e2) && timeToMinutes(s2) < timeToMinutes(e1);
 }
@@ -163,13 +178,36 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
     }));
   };
 
+  // Compute per-date end time based on soins active that day
+  const endTimeByDate = useMemo(() => {
+    if (!startTime || !soins || soins.length === 0) return {};
+    const validSoins = soins.filter(s => s.startDate && s.endDate && s.frequency && s.frequency !== 'custom');
+    if (validSoins.length === 0) return {};
+
+    const soinOccSets = validSoins.map(soin => ({
+      dates: new Set(generateOccurrences(soin.startDate, soin.endDate, soin.frequency)),
+      duration: Number(soin.durationMinutes) || 0,
+    }));
+
+    const allDates = generateUnionOccurrences(validSoins).slice(0, 90);
+    const map = {};
+    const startMin = timeToMinutes(startTime);
+    for (const dateStr of allDates) {
+      let dayTotal = 0;
+      for (const s of soinOccSets) {
+        if (s.dates.has(dateStr)) dayTotal += s.duration;
+      }
+      if (dayTotal > 0) map[dateStr] = minutesToTime(startMin + dayTotal);
+    }
+    return map;
+  }, [soins, startTime]);
+
   // Build occurrences from union of all soins + classify each as planned or to-plan
   const { planned, toPlan, totalOccurrences } = useMemo(() => {
-    if (!startTime || !endTime || !soins || soins.length === 0) {
+    if (!soins || soins.length === 0) {
       return { planned: [], toPlan: [], totalOccurrences: 0 };
     }
 
-    // Check if all soins are custom frequency (can't generate occurrences)
     const allCustom = soins.every(s => s.frequency === 'custom' || !s.startDate || !s.endDate);
     if (allCustom) {
       return { planned: [], toPlan: [], totalOccurrences: 0 };
@@ -185,14 +223,21 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
     for (const dateStr of limited) {
       const dateObj = new Date(dateStr + 'T00:00:00');
 
-      const existingAppt = patientAppts.find(a =>
-        a.dateStr === dateStr && a.startTime === startTime && a.endTime === endTime
-      );
+      // Match booked RDVs by careProtocolId first, then by times
+      const existingAppt = patientAppts.find(a => {
+        if (a.dateStr !== dateStr) return false;
+        if (a.careProtocolId && plan._apiId && a.careProtocolId === plan._apiId) return true;
+        if (!startTime) return false;
+        const dateEnd = endTimeByDate[dateStr] || endTime;
+        return a.startTime === startTime && a.endTime === dateEnd;
+      });
 
       if (existingAppt) {
         const nurse = (nurses || []).find(n => n.userId === existingAppt.nurseId);
-        plannedList.push({ dateStr, dateObj, appointment: existingAppt, nurse });
-      } else {
+        plannedList.push({ dateStr, dateObj, dateEnd: existingAppt.endTime, appointment: existingAppt, nurse });
+      } else if (startTime && endTime) {
+        // Only compute toPlan when times are set
+        const dateEnd = endTimeByDate[dateStr] || endTime;
         const config = getActiveConfigForDate ? getActiveConfigForDate(dateObj) : null;
         const daySchedule = schedule?.[dateStr] || {};
         const availableNurses = [];
@@ -200,7 +245,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
         if (config?.slots && nurses) {
           for (const slot of config.slots) {
             if (timeToMinutes(slot.startTime) <= timeToMinutes(startTime) &&
-                timeToMinutes(slot.endTime) >= timeToMinutes(endTime)) {
+                timeToMinutes(slot.endTime) >= timeToMinutes(dateEnd)) {
               const assignedIds = daySchedule[slot.id] || [];
               for (const userId of assignedIds) {
                 const nurse = nurses.find(n => n.userId === userId && n.active !== false);
@@ -208,7 +253,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
                 const nurseAppts = (appointments || []).filter(
                   a => a.dateStr === dateStr && a.nurseId === nurse.userId && a.status === 'scheduled'
                 );
-                const hasConflict = nurseAppts.some(a => slotsOverlap(startTime, endTime, a.startTime, a.endTime));
+                const hasConflict = nurseAppts.some(a => slotsOverlap(startTime, dateEnd, a.startTime, a.endTime));
                 if (!hasConflict && !availableNurses.find(n => n.userId === nurse.userId)) {
                   availableNurses.push(nurse);
                 }
@@ -217,12 +262,15 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
           }
         }
 
-        toPlanList.push({ dateStr, dateObj, availableNurses });
+        toPlanList.push({ dateStr, dateObj, dateEnd, availableNurses });
+      } else {
+        // No times set — show date as pending (no nurse info available yet)
+        toPlanList.push({ dateStr, dateObj, dateEnd: null, availableNurses: [] });
       }
     }
 
     return { planned: plannedList, toPlan: toPlanList, totalOccurrences: occurrences.length };
-  }, [soins, startTime, endTime, patientId, nurses, appointments, schedule, configs, getActiveConfigForDate]);
+  }, [soins, startTime, endTime, endTimeByDate, plan._apiId, patientId, nurses, appointments, schedule, configs, getActiveConfigForDate]);
 
   // Auto-select first available nurse for each slot
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,6 +290,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
     const nurseId = selectedNurseByDate[dateStr];
     if (!nurseId || !onCreateAppointment || !patientId) return;
 
+    const dateEnd = endTimeByDate[dateStr] || endTime;
     setBookingInProgress(dateStr);
     setBookingError(null);
     try {
@@ -249,7 +298,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
       if (!protocolId && onEnsureSaved) {
         protocolId = await onEnsureSaved();
       }
-      await onCreateAppointment({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId: protocolId });
+      await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId });
       setSelectedNurseByDate(prev => { const next = { ...prev }; delete next[dateStr]; return next; });
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -287,10 +336,10 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
 
     const errors = [];
     let done = 0;
-    for (const { dateStr } of bookable) {
+    for (const { dateStr, dateEnd } of bookable) {
       const nurseId = selectedNurseByDate[dateStr];
       try {
-        await onCreateAppointment({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId: protocolId });
+        await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId });
         setSelectedNurseByDate(prev => { const next = { ...prev }; delete next[dateStr]; return next; });
       } catch (err) {
         const detail = err.response?.data?.detail;
@@ -362,14 +411,14 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
         <div className="space-y-1.5">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">RDV planifiés</div>
           <div className="space-y-1">
-            {planned.map(({ dateStr, dateObj, nurse }) => (
+            {planned.map(({ dateStr, dateObj, dateEnd, appointment, nurse }) => (
               <div key={dateStr} className="flex items-center gap-3 bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-200 text-sm">
                 <Check size={14} className="text-emerald-600 shrink-0" />
                 <div className="w-24 shrink-0 font-medium text-slate-700 capitalize">
                   {dayName(dateObj)} {dayMonth(dateObj)}
                 </div>
                 <div className="text-slate-500 shrink-0">
-                  {startTime}–{endTime}
+                  {appointment?.startTime || startTime}–{dateEnd}
                 </div>
                 {nurse && (
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${nurse.color?.split(' ').slice(0, 2).join(' ') || 'bg-slate-100 text-slate-700'}`}>
@@ -388,7 +437,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
         <div className="space-y-1.5">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Séances à planifier</div>
           <div className="space-y-1">
-            {toPlan.map(({ dateStr, dateObj, availableNurses }) => {
+            {toPlan.map(({ dateStr, dateObj, dateEnd, availableNurses }) => {
               const isBooking = bookingInProgress === dateStr || isBulkBooking;
               const error = bookingError?.dateStr === dateStr ? bookingError.message : null;
               const selectedNurse = selectedNurseByDate[dateStr] || '';
@@ -399,9 +448,13 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
                     <div className="w-24 shrink-0 font-medium text-slate-700 capitalize">
                       {dayName(dateObj)} {dayMonth(dateObj)}
                     </div>
-                    <div className="text-slate-500 shrink-0">
-                      {startTime}–{endTime}
-                    </div>
+                    {startTime && dateEnd ? (
+                      <div className="text-slate-500 shrink-0">
+                        {startTime}–{dateEnd}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400 italic">Horaire à définir</span>
+                    )}
 
                     {availableNurses.length > 0 ? (
                       <>
@@ -463,12 +516,30 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
 
 // --- SoinFormItem: individual soin inside CarePlanForm ---
 
-function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels = [] }) {
+function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels = [], careDurations = {} }) {
   const [dragOver, setDragOver] = useState(false);
   const [showLabelSuggestions, setShowLabelSuggestions] = useState(false);
 
   const update = (field, value) => {
-    onChange({ ...soin, [field]: value });
+    const updated = { ...soin, [field]: value };
+    // When startDate changes, sync endDate to the same value
+    if (field === 'startDate' && value) {
+      if (!soin.endDate || soin.endDate < value) {
+        updated.endDate = value;
+      }
+    }
+    onChange(updated);
+  };
+
+  const selectLabel = (label) => {
+    const updated = { ...soin, label };
+    // Auto-fill duration from configured durations
+    const duration = careDurations[label];
+    if (duration) {
+      updated.durationMinutes = duration;
+    }
+    onChange(updated);
+    setShowLabelSuggestions(false);
   };
 
   const handleFiles = (files) => {
@@ -531,7 +602,7 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
               {filtered.map(label => (
                 <li
                   key={label}
-                  onMouseDown={() => { update('label', label); setShowLabelSuggestions(false); }}
+                  onMouseDown={() => selectLabel(label)}
                   className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700 transition-colors"
                 >
                   {label}
@@ -563,6 +634,20 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
           />
         </div>
+      </div>
+
+      {/* Durée du soin */}
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1">Durée du soin (minutes)</label>
+        <input
+          type="number"
+          min="1"
+          max="480"
+          value={soin.durationMinutes || ''}
+          onChange={e => update('durationMinutes', e.target.value ? Number(e.target.value) : '')}
+          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+          placeholder="Ex: 15, 30, 45..."
+        />
       </div>
 
       {/* Fréquence */}
@@ -648,9 +733,396 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
   );
 }
 
+// --- SlotSuggestions component ---
+
+function SlotSuggestions({ patient, plan, cabinetData, patients, appointments, nurses, schedule, configs, getActiveConfigForDate, onSelect, refreshKey }) {
+  const [suggestions, setSuggestions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Get UNBOOKED occurrence dates (up to 90) and compute per-date durations
+  const { allOccurrences, durationByDate, durationMinutes, minDuration } = useMemo(() => {
+    const validSoins = plan.soins.filter(s => s.startDate && s.endDate && s.frequency && s.frequency !== 'custom');
+    if (validSoins.length === 0) return { allOccurrences: [], durationByDate: {}, durationMinutes: 0, minDuration: 0 };
+
+    const soinOccSets = validSoins.map(soin => ({
+      dates: new Set(generateOccurrences(soin.startDate, soin.endDate, soin.frequency)),
+      duration: Number(soin.durationMinutes) || 0,
+    }));
+
+    const allDatesSet = new Set();
+    for (const s of soinOccSets) for (const d of s.dates) allDatesSet.add(d);
+    let allOccs = [...allDatesSet].sort().slice(0, 90);
+
+    // Exclude dates already booked for this plan
+    if (plan._apiId && patient?.id) {
+      const bookedDates = new Set(
+        (appointments || [])
+          .filter(a => a.patientId === patient.id && a.careProtocolId === plan._apiId && a.status === 'scheduled')
+          .map(a => a.dateStr)
+      );
+      allOccs = allOccs.filter(d => !bookedDates.has(d));
+    }
+
+    const durByDate = {};
+    let maxDur = 0;
+    let minDur = Infinity;
+    for (const dateStr of allOccs) {
+      let dayTotal = 0;
+      for (const s of soinOccSets) {
+        if (s.dates.has(dateStr)) dayTotal += s.duration;
+      }
+      durByDate[dateStr] = dayTotal;
+      if (dayTotal > maxDur) maxDur = dayTotal;
+      if (dayTotal < minDur) minDur = dayTotal;
+    }
+    if (minDur === Infinity) minDur = 0;
+
+    return { allOccurrences: allOccs, durationByDate: durByDate, durationMinutes: maxDur, minDuration: minDur };
+  }, [plan.soins, plan._apiId, patient?.id, appointments]);
+
+  const firstDate = allOccurrences[0] || null;
+
+  // Stable key to track when we need to recompute suggestions
+  const computeKey = `${patient?.id || ''}_${durationMinutes}_${firstDate}_${allOccurrences.length}_${allOccurrences[allOccurrences.length - 1] || ''}_${refreshKey || 0}`;
+
+  useEffect(() => {
+    if (!firstDate || durationMinutes <= 0) {
+      setSuggestions([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function computeSuggestions() {
+      setLoading(true);
+      setError(null);
+      setSuggestions([]);
+
+      try {
+        // Step 1: Find patient sector
+        const currentPatient = (patients || []).find(p => p.id === patient?.id);
+        const patientSectorId = currentPatient?._apiSectorId || null;
+
+        // Step 2: Find eligible sub-slots
+        const dateObj = new Date(firstDate + 'T00:00:00');
+        const config = getActiveConfigForDate ? getActiveConfigForDate(dateObj) : null;
+        if (!config?.slots || !config.id) {
+          if (cancelled) return;
+          setError('Aucune configuration de créneaux trouvée.');
+          setLoading(false);
+          return;
+        }
+
+        const slotSubdivisions = cabinetData?.settings?.slot_subdivisions || {};
+        const configSubs = slotSubdivisions[config.id] || {};
+
+        // Collect eligible time ranges
+        const eligibleRanges = [];
+
+        for (const slot of config.slots) {
+          const subs = configSubs[slot.id] || [];
+
+          if (subs.length > 0) {
+            // Filter subdivisions by patient sector
+            const matching = patientSectorId
+              ? subs.filter(s => s.sectorId === patientSectorId || !s.sectorId)
+              : subs; // No sector → all subs are eligible
+
+            for (const sub of matching) {
+              eligibleRanges.push({
+                startTime: sub.startTime,
+                endTime: sub.endTime,
+                slotName: slot.label || `${slot.startTime}–${slot.endTime}`,
+                slotId: slot.id,
+              });
+            }
+          } else {
+            // No subdivisions configured → use the full slot
+            eligibleRanges.push({
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              slotName: slot.label || `${slot.startTime}–${slot.endTime}`,
+              slotId: slot.id,
+            });
+          }
+        }
+
+        if (eligibleRanges.length === 0) {
+          if (cancelled) return;
+          setError('Aucun créneau sectoriel trouvé.');
+          setLoading(false);
+          return;
+        }
+
+        // Step 3: Generate candidate time windows (use minDuration to be inclusive)
+        const candidates = [];
+        for (const range of eligibleRanges) {
+          const rangeStartMin = timeToMinutes(range.startTime);
+          const rangeEndMin = timeToMinutes(range.endTime);
+
+          for (let startMin = rangeStartMin; startMin + minDuration <= rangeEndMin; startMin += 15) {
+            candidates.push({
+              startTime: minutesToTime(startMin),
+              endTime: minutesToTime(Math.min(startMin + durationMinutes, rangeEndMin)),
+              slotName: range.slotName,
+              slotId: range.slotId,
+              rangeEndMin,
+            });
+          }
+        }
+
+        if (candidates.length === 0) {
+          if (cancelled) return;
+          setError('Aucun créneau disponible pour la durée demandée.');
+          setLoading(false);
+          return;
+        }
+
+        // Step 4: Filter by availability across ALL occurrences
+        const nursesMap = new Map((nurses || []).filter(n => n.active !== false).map(n => [n.userId, n]));
+        const occurrencesSet = new Set(allOccurrences);
+        const allScheduledAppts = (appointments || []).filter(
+          a => occurrencesSet.has(a.dateStr) && a.status === 'scheduled'
+        );
+
+        const availableCandidates = [];
+        for (const cand of candidates) {
+          let availableDates = 0;
+          const nurseAvailabilityCount = {};
+          const candStartMin = timeToMinutes(cand.startTime);
+
+          for (const dateStr of allOccurrences) {
+            // Per-date duration: does the appointment fit within the range?
+            const dateDuration = durationByDate[dateStr] || minDuration;
+            if (candStartMin + dateDuration > cand.rangeEndMin) continue;
+            const dateEndTime = minutesToTime(candStartMin + dateDuration);
+
+            const daySchedule = schedule?.[dateStr] || {};
+            const assignedIds = daySchedule[cand.slotId] || [];
+            const dayAppts = allScheduledAppts.filter(a => a.dateStr === dateStr);
+            let anyAvailable = false;
+
+            for (const userId of assignedIds) {
+              if (!nursesMap.has(userId)) continue;
+              const hasConflict = dayAppts.some(a =>
+                a.nurseId === userId && slotsOverlap(cand.startTime, dateEndTime, a.startTime, a.endTime)
+              );
+              if (!hasConflict) {
+                nurseAvailabilityCount[userId] = (nurseAvailabilityCount[userId] || 0) + 1;
+                anyAvailable = true;
+              }
+            }
+            if (anyAvailable) availableDates++;
+          }
+
+          if (availableDates > 0) {
+            const rankedNurses = Object.entries(nurseAvailabilityCount)
+              .sort((a, b) => b[1] - a[1])
+              .map(([id]) => nursesMap.get(id));
+            availableCandidates.push({
+              ...cand,
+              availableDates,
+              totalDates: allOccurrences.length,
+              availableNurses: rankedNurses,
+            });
+          }
+        }
+
+        if (availableCandidates.length === 0) {
+          if (cancelled) return;
+          setError('Aucun créneau disponible (tous les infirmiers sont occupés).');
+          setLoading(false);
+          return;
+        }
+
+        // Step 5: Score — coverage first, then travel time
+        // Sort by coverage (descending) and take top 10 for distance scoring
+        availableCandidates.sort((a, b) => b.availableDates - a.availableDates);
+        const topCandidates = availableCandidates.slice(0, 10);
+
+        const patientLat = currentPatient?._apiLat;
+        const patientLon = currentPatient?._apiLon;
+
+        // Use firstDate appointments for travel scoring
+        const firstDateAppts = (appointments || []).filter(
+          a => a.dateStr === firstDate && a.status === 'scheduled'
+        );
+
+        if (patientLat != null && patientLon != null) {
+          try {
+            const scored = [];
+            for (const cand of topCandidates) {
+              let bestTravelSec = null;
+              let bestNurse = cand.availableNurses[0];
+              let bestTravelScore = Infinity;
+
+              for (const nurse of cand.availableNurses) {
+                const nurseAppts = firstDateAppts
+                  .filter(a => a.nurseId === nurse.userId)
+                  .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+
+                const candStartMin = timeToMinutes(cand.startTime);
+                const prevAppt = [...nurseAppts].reverse().find(a => timeToMinutes(a.endTime) <= candStartMin);
+                const nextAppt = nurseAppts.find(a => timeToMinutes(a.startTime) >= timeToMinutes(cand.endTime));
+
+                const origins = [];
+                const destinations = [];
+
+                if (prevAppt) {
+                  const prevPatient = (patients || []).find(p => p.id === prevAppt.patientId);
+                  if (prevPatient?._apiLat != null && prevPatient?._apiLon != null) {
+                    origins.push({ lat: prevPatient._apiLat, lng: prevPatient._apiLon });
+                    destinations.push({ lat: patientLat, lng: patientLon });
+                  }
+                }
+                if (nextAppt) {
+                  const nextPatient = (patients || []).find(p => p.id === nextAppt.patientId);
+                  if (nextPatient?._apiLat != null && nextPatient?._apiLon != null) {
+                    origins.push({ lat: patientLat, lng: patientLon });
+                    destinations.push({ lat: nextPatient._apiLat, lng: nextPatient._apiLon });
+                  }
+                }
+
+                if (origins.length > 0) {
+                  const matrix = await getDistanceMatrix(origins, destinations);
+                  let totalTravel = 0;
+                  for (let i = 0; i < matrix.length; i++) {
+                    if (matrix[i][i] != null) totalTravel += matrix[i][i];
+                  }
+                  if (totalTravel < bestTravelScore) {
+                    bestTravelScore = totalTravel;
+                    bestNurse = nurse;
+                    bestTravelSec = totalTravel;
+                  }
+                } else {
+                  if (0 < bestTravelScore) {
+                    bestTravelScore = 0;
+                    bestNurse = nurse;
+                    bestTravelSec = null;
+                  }
+                }
+              }
+
+              // Composite score: coverage dominates, travel breaks ties
+              const travelPart = bestTravelSec != null ? bestTravelSec : 0;
+              scored.push({
+                ...cand,
+                nurse: bestNurse,
+                travelSeconds: bestTravelSec,
+                score: -(cand.availableDates * 100000) + travelPart,
+              });
+            }
+
+            scored.sort((a, b) => a.score - b.score);
+
+            if (cancelled) return;
+            setSuggestions(scored.slice(0, 3));
+          } catch {
+            if (cancelled) return;
+            // Distance Matrix failed: score by coverage only
+            const fallback = topCandidates.slice(0, 3).map(c => ({
+              ...c,
+              nurse: c.availableNurses[0],
+              travelSeconds: null,
+              score: -c.availableDates,
+            }));
+            setSuggestions(fallback);
+            setError('Calcul des trajets indisponible.');
+          }
+        } else {
+          if (cancelled) return;
+          // No patient coords: score by coverage only
+          const fallback = topCandidates.slice(0, 3).map(c => ({
+            ...c,
+            nurse: c.availableNurses[0],
+            travelSeconds: null,
+            score: -c.availableDates,
+          }));
+          setSuggestions(fallback);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError('Erreur lors du calcul des suggestions.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    computeSuggestions();
+    return () => { cancelled = true; };
+  }, [computeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!firstDate || durationMinutes <= 0) return null;
+
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+        <Lightbulb size={14} />
+        Créneaux suggérés
+      </div>
+
+      {loading && (
+        <div className="grid grid-cols-3 gap-2">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="bg-white/60 border border-amber-200 rounded-lg p-3 animate-pulse space-y-2">
+              <div className="h-4 bg-amber-200/50 rounded w-3/4" />
+              <div className="h-3 bg-amber-200/30 rounded w-1/2" />
+              <div className="h-3 bg-amber-200/30 rounded w-2/3" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && suggestions.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelect(s.startTime, s.endTime)}
+              className="bg-white border border-amber-200 hover:border-blue-400 hover:bg-blue-50 rounded-lg p-3 text-left transition-all group cursor-pointer"
+            >
+              <div className="text-sm font-semibold text-slate-800 group-hover:text-blue-700">
+                {s.startTime}–{s.endTime}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">{s.slotName}</div>
+              {s.nurse && (
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {s.nurse.firstName} {s.nurse.lastName?.charAt(0)}.
+                </div>
+              )}
+              {s.travelSeconds != null && (
+                <div className="flex items-center gap-1 text-xs text-slate-400 mt-1">
+                  <MapPin size={10} />
+                  ~{Math.round(s.travelSeconds / 60)} min trajet
+                </div>
+              )}
+              {s.totalDates > 1 && (
+                <div className={`flex items-center gap-1 text-xs mt-1 ${s.availableDates === s.totalDates ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {s.availableDates === s.totalDates ? <Check size={10} /> : <Calendar size={10} />}
+                  {s.availableDates}/{s.totalDates} jours couverts
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!loading && suggestions.length === 0 && error && (
+        <p className="text-xs text-amber-600 italic">{error}</p>
+      )}
+
+      {!loading && suggestions.length > 0 && error && (
+        <p className="text-xs text-amber-500 italic">{error}</p>
+      )}
+    </div>
+  );
+}
+
 // --- CarePlanForm component ---
 
-function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nurses, appointments, schedule, configs, getActiveConfigForDate, onCreateAppointment, patientId, careLabels = [], onEnsureSaved }) {
+function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nurses, appointments, schedule, configs, getActiveConfigForDate, onCreateAppointment, patientId, careLabels = [], careDurations = {}, onEnsureSaved, cabinetData, patients, patientForm }) {
   const updateSoin = (index, updatedSoin) => {
     const newSoins = [...plan.soins];
     newSoins[index] = updatedSoin;
@@ -674,12 +1146,67 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
     });
   };
 
+  const [suggestionsRefreshKey, setSuggestionsRefreshKey] = useState(0);
+
+  const newSuggestions = () => {
+    onChange({
+      ...plan,
+      careSchedule: { ...plan.careSchedule, startTime: '', endTime: '' },
+    });
+    setSuggestionsRefreshKey(k => k + 1);
+  };
+
   // Validation: at least 1 soin with label + dates
   const isValid = plan.soins.some(s => s.label.trim() && s.startDate && s.endDate);
 
-  // Show planning if at least one soin has valid dates+frequency and times are set
+  // Show planning if at least one soin has valid dates+frequency
   const hasValidSoin = plan.soins.some(s => s.startDate && s.endDate && s.frequency && s.frequency !== 'custom');
-  const showPlanning = hasValidSoin && plan.careSchedule.startTime && plan.careSchedule.endTime;
+
+  const hasBookedAppts = useMemo(() => {
+    if (!plan._apiId || !patientId) return false;
+    return (appointments || []).some(a =>
+      a.patientId === patientId && a.careProtocolId === plan._apiId && a.status === 'scheduled'
+    );
+  }, [plan._apiId, patientId, appointments]);
+
+  const showPlanning = hasValidSoin && (
+    (plan.careSchedule.startTime && plan.careSchedule.endTime) || hasBookedAppts
+  );
+
+  // Check if all occurrences are already booked (only 'scheduled' RDVs count)
+  const allBooked = useMemo(() => {
+    if (!hasValidSoin || !patientId) return false;
+    const occurrences = generateUnionOccurrences(plan.soins).slice(0, 90);
+    if (occurrences.length === 0) return false;
+    const scheduledAppts = (appointments || []).filter(a =>
+      a.patientId === patientId && a.status === 'scheduled'
+    );
+    // Quick check: if fewer scheduled RDVs than occurrences, can't be all booked
+    if (plan._apiId) {
+      const protocolCount = scheduledAppts.filter(a => a.careProtocolId === plan._apiId).length;
+      if (protocolCount < occurrences.length) return false;
+    }
+    return occurrences.every(dateStr =>
+      scheduledAppts.some(a => {
+        if (a.dateStr !== dateStr) return false;
+        if (a.careProtocolId && plan._apiId) return a.careProtocolId === plan._apiId;
+        return a.startTime === plan.careSchedule.startTime;
+      })
+    );
+  }, [hasValidSoin, patientId, plan.soins, plan._apiId, plan.careSchedule.startTime, appointments]);
+
+  // Show slot suggestions when dates/duration are filled but times are not
+  const showSuggestions = hasValidSoin
+    && plan.soins.some(s => s.durationMinutes)
+    && !plan.careSchedule.startTime
+    && !plan.careSchedule.endTime;
+
+  const handleSuggestionSelect = useCallback((startTime, endTime) => {
+    onChange({
+      ...plan,
+      careSchedule: { ...plan.careSchedule, startTime, endTime },
+    });
+  }, [plan, onChange]);
 
   return (
     <div className="border border-blue-200 bg-blue-50/50 rounded-lg p-5 space-y-5">
@@ -700,6 +1227,7 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
               onRemove={() => removeSoin(index)}
               canRemove={plan.soins.length > 1}
               careLabels={careLabels}
+              careDurations={careDurations}
             />
           ))}
         </div>
@@ -721,7 +1249,23 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
           <CalendarDays size={16} className="text-blue-600" /> Planification
         </h4>
 
-        <div className="grid grid-cols-2 gap-4">
+        {showSuggestions && (
+          <SlotSuggestions
+            patient={patientForm}
+            plan={plan}
+            cabinetData={cabinetData}
+            patients={patients}
+            appointments={appointments}
+            nurses={nurses}
+            schedule={schedule}
+            configs={configs}
+            getActiveConfigForDate={getActiveConfigForDate}
+            onSelect={handleSuggestionSelect}
+            refreshKey={suggestionsRefreshKey}
+          />
+        )}
+
+        {!allBooked && <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Heure de début</label>
             <input
@@ -740,7 +1284,19 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
             />
           </div>
-        </div>
+        </div>}
+
+        {/* Bouton nouvelles suggestions (masqué si tout est planifié) */}
+        {!allBooked && hasValidSoin && (
+          <button
+            type="button"
+            onClick={newSuggestions}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 hover:text-amber-800 hover:bg-amber-50 px-2.5 py-1.5 rounded-lg transition-colors"
+          >
+            <RefreshCw size={12} />
+            Nouvelles suggestions
+          </button>
+        )}
 
         {showPlanning ? (
           <PlanningSection
@@ -1003,7 +1559,8 @@ export default function PrescriptionsTab({
   nurses, appointments, schedule, configs, getActiveConfigForDate,
   onCreateAppointment, onCancelAppointment,
   onSavePrescription, onDeletePrescription, prescriptionsLoading,
-  careLabels
+  careLabels, careDurations,
+  cabinetData, patients
 }) {
   const prescriptions = patientForm.prescriptions || [];
   const [expandedId, setExpandedId] = useState(null);
@@ -1179,7 +1736,11 @@ export default function PrescriptionsTab({
           onCreateAppointment={onCreateAppointment}
           patientId={patientForm.id}
           careLabels={careLabels}
+          careDurations={careDurations}
           onEnsureSaved={ensurePlanSaved}
+          cabinetData={cabinetData}
+          patients={patients}
+          patientForm={patientForm}
         />
       )}
 
@@ -1204,7 +1765,11 @@ export default function PrescriptionsTab({
                 onCreateAppointment={onCreateAppointment}
                 patientId={patientForm.id}
                 careLabels={careLabels}
+                careDurations={careDurations}
                 onEnsureSaved={ensurePlanSaved}
+                cabinetData={cabinetData}
+                patients={patients}
+                patientForm={patientForm}
               />
             ) : (
               <CarePlanCard

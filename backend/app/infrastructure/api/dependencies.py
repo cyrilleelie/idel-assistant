@@ -16,10 +16,12 @@ from app.infrastructure.persistence.models.user_model import (
 from app.infrastructure.persistence.repositories import (
     SQLAlchemyAppointmentRepo,
     SQLAlchemyCabinetRepo,
+    SQLAlchemyCareCatalogRepo,
     SQLAlchemyDocumentRepo,
     SQLAlchemyPatientRepo,
     SQLAlchemyScheduleAssignmentRepo,
     SQLAlchemySectorRepo,
+    SQLAlchemyTariffUpdateRepo,
     SQLAlchemyUserRepo,
 )
 from app.infrastructure.persistence.repositories.sqlalchemy_care_protocol_repo import (
@@ -203,6 +205,18 @@ def get_sector_repository(
     db: AsyncSession = Depends(get_db),
 ) -> SQLAlchemySectorRepo:
     return SQLAlchemySectorRepo(db)
+
+
+def get_care_catalog_repository(
+    db: AsyncSession = Depends(get_db),
+) -> SQLAlchemyCareCatalogRepo:
+    return SQLAlchemyCareCatalogRepo(db)
+
+
+def get_tariff_update_repository(
+    db: AsyncSession = Depends(get_db),
+) -> SQLAlchemyTariffUpdateRepo:
+    return SQLAlchemyTariffUpdateRepo(db)
 
 
 def get_routing_service() -> FakeRoutingService:

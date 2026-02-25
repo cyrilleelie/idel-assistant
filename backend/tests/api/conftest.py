@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+
 from app.infrastructure.persistence.models import *  # noqa: F401, F403
 from app.infrastructure.persistence.models.base import Base
 
@@ -26,7 +27,13 @@ async def _ensure_tables():
         return
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        # Drop all tables with CASCADE to handle FK dependencies from stale tables
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
+        await conn.execute(text("GRANT ALL ON SCHEMA public TO PUBLIC"))
+        await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         await conn.run_sync(Base.metadata.create_all)
     await engine.dispose()
     _tables_created = True
@@ -43,6 +50,7 @@ _ALL_TABLES = [
     "care_protocols",
     "patients",
     "sectors",
+    "tariff_updates",
     "care_type_catalog",
     "cabinet_members",
     "users",

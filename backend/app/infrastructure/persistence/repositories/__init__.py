@@ -4,6 +4,12 @@ from app.infrastructure.persistence.repositories.sqlalchemy_appointment_repo imp
 from app.infrastructure.persistence.repositories.sqlalchemy_cabinet_repo import (
     SQLAlchemyCabinetRepo,
 )
+from app.infrastructure.persistence.repositories.sqlalchemy_care_catalog_repo import (
+    SQLAlchemyCareCatalogRepo,
+)
+from app.infrastructure.persistence.repositories.sqlalchemy_tariff_update_repo import (
+    SQLAlchemyTariffUpdateRepo,
+)
 from app.infrastructure.persistence.repositories.sqlalchemy_care_protocol_repo import (
     SQLAlchemyCareProtocolRepo,
 )
@@ -29,6 +35,8 @@ from app.infrastructure.persistence.repositories.sqlalchemy_user_repo import (
 __all__ = [
     "SQLAlchemyAppointmentRepo",
     "SQLAlchemyCabinetRepo",
+    "SQLAlchemyCareCatalogRepo",
+    "SQLAlchemyTariffUpdateRepo",
     "SQLAlchemyCareProtocolRepo",
     "SQLAlchemyDocumentRepo",
     "SQLAlchemyPatientRepo",

@@ -5,6 +5,7 @@ from app.infrastructure.persistence.models.cabinet_model import CabinetModel
 from app.infrastructure.persistence.models.care_protocol_model import CareProtocolModel
 from app.infrastructure.persistence.models.care_type_catalog_model import CareTypeCatalogModel
 from app.infrastructure.persistence.models.document_model import DocumentModel
+from app.infrastructure.persistence.models.tariff_update_model import TariffUpdateModel
 from app.infrastructure.persistence.models.invoice_model import InvoiceLineModel, InvoiceModel
 from app.infrastructure.persistence.models.patient_model import PatientModel
 from app.infrastructure.persistence.models.sector_model import SectorModel
@@ -21,6 +22,7 @@ __all__ = [
     "CareProtocolModel",
     "CareTypeCatalogModel",
     "DocumentModel",
+    "TariffUpdateModel",
     "InvoiceLineModel",
     "InvoiceModel",
     "PatientModel",

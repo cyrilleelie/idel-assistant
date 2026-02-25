@@ -48,6 +48,7 @@ _ALL_TABLES = [
     "transmissions",
     "appointments",
     "care_protocols",
+    "tariff_updates",
     "care_type_catalog",
     "patients",
     "cabinet_members",

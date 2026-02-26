@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, LargeBinary, Numeric, String, func
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, LargeBinary, Numeric, String, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,6 +37,12 @@ class PatientModel(Base):
     city: Mapped[str] = mapped_column(String(100), nullable=False, server_default="")
     preferred_time_slot: Mapped[str | None] = mapped_column(String(20), nullable=True)
     care_duration_default: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    is_ald: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    is_maternity: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    has_active_bsi: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    bsi_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bsi_start_date = mapped_column(Date, nullable=True)
+    bsi_end_date = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", index=True)
     archived_reason: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     archived_at = mapped_column(TIMESTAMP(timezone=True), nullable=True)

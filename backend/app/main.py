@@ -17,6 +17,7 @@ from app.infrastructure.api.v1 import (
     care_catalog_routes,
     care_protocol_routes,
     document_routes,
+    invoice_routes,
     patient_routes,
     schedule_assignment_routes,
     sector_routes,
@@ -99,6 +100,7 @@ app.include_router(cabinet_member_routes.router, prefix="/api/v1")
 app.include_router(document_routes.router, prefix="/api/v1")
 app.include_router(care_catalog_routes.router, prefix="/api/v1")
 app.include_router(care_catalog_routes.tariff_router, prefix="/api/v1")
+app.include_router(invoice_routes.router, prefix="/api/v1")
 app.include_router(schedule_assignment_routes.router, prefix="/api/v1")
 
 

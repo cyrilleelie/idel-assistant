@@ -24,6 +24,12 @@ class Patient:
     doctor_name: str = ""       # Medecin traitant
     doctor_contact: str = ""    # Contact medecin
     notes: str = ""
+    is_ald: bool = False
+    is_maternity: bool = False
+    has_active_bsi: bool = False
+    bsi_level: str | None = None
+    bsi_start_date: datetime.date | None = None
+    bsi_end_date: datetime.date | None = None
     status: str = "active"  # active | archived
     archived_reason: str = ""
     archived_at: datetime.datetime | None = None

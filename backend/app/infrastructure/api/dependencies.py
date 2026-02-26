@@ -18,6 +18,8 @@ from app.infrastructure.persistence.repositories import (
     SQLAlchemyCabinetRepo,
     SQLAlchemyCareCatalogRepo,
     SQLAlchemyDocumentRepo,
+    SQLAlchemyInvoiceLineRepo,
+    SQLAlchemyInvoiceRepo,
     SQLAlchemyPatientRepo,
     SQLAlchemyScheduleAssignmentRepo,
     SQLAlchemySectorRepo,
@@ -217,6 +219,18 @@ def get_tariff_update_repository(
     db: AsyncSession = Depends(get_db),
 ) -> SQLAlchemyTariffUpdateRepo:
     return SQLAlchemyTariffUpdateRepo(db)
+
+
+def get_invoice_repository(
+    db: AsyncSession = Depends(get_db),
+) -> SQLAlchemyInvoiceRepo:
+    return SQLAlchemyInvoiceRepo(db)
+
+
+def get_invoice_line_repository(
+    db: AsyncSession = Depends(get_db),
+) -> SQLAlchemyInvoiceLineRepo:
+    return SQLAlchemyInvoiceLineRepo(db)
 
 
 def get_routing_service() -> FakeRoutingService:

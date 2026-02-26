@@ -14,6 +14,8 @@ import { apptApiToFrontend, assignSlotIds, frontendToApiCreate as apptFrontendTo
 import { getUserRole, getUserEmail } from './utils/auth';
 import { fetchMe } from './api/auth';
 import { fetchCabinet, updateCabinet } from './api/cabinet';
+import { listCareLabels } from './api/care-labels';
+import { listCareActCodes } from './api/cotation';
 import Header from './components/Header';
 import InfoBanner from './components/InfoBanner';
 import LoginPage from './components/LoginPage';
@@ -56,6 +58,11 @@ export default function App() {
   const [cabinetData, setCabinetData] = useState(null);
   const [cabinetLoading, setCabinetLoading] = useState(false);
 
+  // Care label referential from GET /care-labels/
+  const [careLabelEntries, setCareLabelEntries] = useState([]);
+  // NGAP act codes from GET /care-catalog/
+  const [ngapCodes, setNgapCodes] = useState([]);
+
   const loadMe = useCallback(async () => {
     try {
       const data = await fetchMe();
@@ -79,12 +86,32 @@ export default function App() {
     }
   }, []);
 
+  const loadCareLabels = useCallback(async () => {
+    try {
+      const data = await listCareLabels();
+      setCareLabelEntries(data);
+    } catch (err) {
+      console.error('Failed to fetch care labels:', err);
+    }
+  }, []);
+
+  const loadNgapCodes = useCallback(async () => {
+    try {
+      const data = await listCareActCodes();
+      setNgapCodes(data);
+    } catch (err) {
+      console.error('Failed to fetch NGAP codes:', err);
+    }
+  }, []);
+
   useEffect(() => {
     if (isAuthenticated) {
       loadMe();
       loadCabinet();
+      loadCareLabels();
+      loadNgapCodes();
     }
-  }, [isAuthenticated, loadMe, loadCabinet]);
+  }, [isAuthenticated, loadMe, loadCabinet, loadCareLabels, loadNgapCodes]);
 
   const handleLogin = useCallback((email) => {
     const role = getUserRole();
@@ -951,6 +978,19 @@ export default function App() {
   }, [schedule]);
   const workingNurses = useMemo(() => nurses.filter(n => workingNursesIds.has(n.userId) && n.active !== false), [nurses, workingNursesIds]);
 
+  // Derive careLabels (string[]), careDurations (label->minutes), careLabelCodeMap (label->act_codes[]) from API entries
+  const careLabels = useMemo(() => careLabelEntries.map(e => e.label), [careLabelEntries]);
+  const careDurations = useMemo(() => {
+    const map = {};
+    for (const e of careLabelEntries) map[e.label] = e.default_duration_minutes;
+    return map;
+  }, [careLabelEntries]);
+  const careLabelCodeMap = useMemo(() => {
+    const map = {};
+    for (const e of careLabelEntries) map[e.label] = e.act_codes;
+    return map;
+  }, [careLabelEntries]);
+
   useEffect(() => {
     const validIds = selectedAgendaNurseIds.filter(id => workingNursesIds.has(id));
     if (workingNurses.length > 0 && validIds.length === 0) setSelectedAgendaNurseIds([workingNurses[0].userId]);
@@ -1048,8 +1088,9 @@ export default function App() {
               onSavePrescription={savePrescription}
               onDeletePrescription={deletePrescriptionApi}
               prescriptionsLoading={prescriptionsLoading}
-              careLabels={cabinetData?.settings?.care_labels || []}
-              careDurations={cabinetData?.settings?.care_durations || {}}
+              careLabels={careLabels}
+              careDurations={careDurations}
+              careLabelCodeMap={careLabelCodeMap}
               cabinetData={cabinetData}
             />
               )}
@@ -1182,6 +1223,9 @@ export default function App() {
               readOnly={isReadOnly}
               cabinetData={cabinetData}
               onCabinetUpdate={handleCabinetUpdate}
+              careLabelEntries={careLabelEntries}
+              onReloadCareLabels={loadCareLabels}
+              ngapCodes={ngapCodes}
             />
           )}
 

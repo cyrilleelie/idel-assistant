@@ -16,6 +16,7 @@ from app.infrastructure.api.v1 import (
     cabinet_member_routes,
     cabinet_routes,
     care_catalog_routes,
+    care_label_routes,
     care_protocol_routes,
     cotation_routes,
     document_routes,
@@ -28,6 +29,7 @@ from app.infrastructure.api.v1 import (
 )
 from app.infrastructure.persistence.database import async_session_factory, engine
 from app.infrastructure.persistence.seeds.seed_ngap_catalog import seed_ngap_catalog
+from app.infrastructure.persistence.seeds.seed_care_labels import seed_care_labels
 from app.infrastructure.security.token_blacklist import close_redis
 
 logger = logging.getLogger(__name__)
@@ -52,6 +54,14 @@ async def lifespan(app: FastAPI):
             await session.commit()
     except Exception:
         logger.exception("Erreur lors du seed NGAP (non bloquant)")
+
+    # Seed du referentiel de libelles de soins si table vide
+    try:
+        async with async_session_factory() as session:
+            await seed_care_labels(session)
+            await session.commit()
+    except Exception:
+        logger.exception("Erreur lors du seed care_labels (non bloquant)")
 
     yield
 
@@ -105,6 +115,7 @@ app.include_router(care_catalog_routes.tariff_router, prefix="/api/v1")
 app.include_router(invoice_routes.router, prefix="/api/v1")
 app.include_router(cotation_routes.router, prefix="/api/v1")
 app.include_router(schedule_assignment_routes.router, prefix="/api/v1")
+app.include_router(care_label_routes.router, prefix="/api/v1")
 app.include_router(admin_routes.router, prefix="/api/v1")
 
 

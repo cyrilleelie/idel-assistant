@@ -12,7 +12,7 @@ export default function PatientsTab({
   schedule, configs, getActiveConfigForDate,
   onCreateAppointment, onCancelAppointment,
   onSavePrescription, onDeletePrescription, prescriptionsLoading,
-  careLabels, careDurations,
+  careLabels, careDurations, careLabelCodeMap,
   cabinetData
 }) {
   return (
@@ -52,6 +52,7 @@ export default function PatientsTab({
           prescriptionsLoading={prescriptionsLoading}
           careLabels={careLabels}
           careDurations={careDurations}
+          careLabelCodeMap={careLabelCodeMap}
           cabinetData={cabinetData}
           patients={patients}
         />

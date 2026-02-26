@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Trash2, X, Clock, Lock, AlertCircle, Tag, Repeat, Save, MapPin, Search, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, X, Clock, Lock, AlertCircle, Tag, Repeat, Save, MapPin, Search, ChevronDown, Pencil } from 'lucide-react';
+import { createCareLabel, updateCareLabel as apiUpdateCareLabel, deleteCareLabel as apiDeleteCareLabel } from '../../api/care-labels';
 
 export default function CreneauxTab({
   configs, lockedConfigIds,
@@ -13,13 +14,18 @@ export default function CreneauxTab({
   readOnly = false,
   cabinetData,
   onCabinetUpdate,
+  careLabelEntries = [],
+  onReloadCareLabels,
+  ngapCodes = [],
 }) {
-  const careLabels = cabinetData?.settings?.care_labels || [];
-  const careDurations = cabinetData?.settings?.care_durations || {};
   const serverTrames = cabinetData?.settings?.trames;
-  const [newLabel, setNewLabel] = useState('');
-  const [newDuration, setNewDuration] = useState('');
-  const [labelError, setLabelError] = useState('');
+
+  // --- Care label admin state ---
+  const [clForm, setClForm] = useState({ label: '', actCodes: [], durationMinutes: '', category: 'technique' });
+  const [clEditId, setClEditId] = useState(null);
+  const [clError, setClError] = useState('');
+  const [clSaving, setClSaving] = useState(false);
+  const [clFilter, setClFilter] = useState('');
 
   // --- Trames: local state + explicit save ---
   const [localTrames, setLocalTrames] = useState(serverTrames || []);
@@ -326,38 +332,74 @@ export default function CreneauxTab({
     setDirtyTrameIds(prev => new Set(prev).add(trameId));
   };
 
-  const addLabel = () => {
-    const trimmed = newLabel.trim();
-    setLabelError('');
-    if (!trimmed) return;
-    if (trimmed.length > 100) { setLabelError('Maximum 100 caractères.'); return; }
-    if (careLabels.includes(trimmed)) { setLabelError('Ce libellé existe déjà.'); return; }
-    if (careLabels.length >= 50) { setLabelError('Maximum 50 libellés.'); return; }
-    const updatedLabels = [...careLabels, trimmed];
-    const updatedDurations = { ...careDurations };
-    if (newDuration && Number(newDuration) > 0) {
-      updatedDurations[trimmed] = Number(newDuration);
-    }
-    onCabinetUpdate({ settings: { care_labels: updatedLabels, care_durations: updatedDurations } });
-    setNewLabel('');
-    setNewDuration('');
+  const CARE_CATEGORIES = [
+    { value: 'pansement', label: 'Pansement' },
+    { value: 'injection', label: 'Injection' },
+    { value: 'perfusion', label: 'Perfusion' },
+    { value: 'prelevement', label: 'Prélèvement' },
+    { value: 'bsi', label: 'BSI' },
+    { value: 'technique', label: 'Technique' },
+    { value: 'surveillance', label: 'Surveillance' },
+    { value: 'palliatif', label: 'Palliatif' },
+    { value: 'hygiene', label: 'Hygiène' },
+    { value: 'divers', label: 'Divers' },
+  ];
+
+  const resetClForm = () => {
+    setClForm({ label: '', actCodes: [], durationMinutes: '', category: 'technique' });
+    setClEditId(null);
+    setClError('');
   };
 
-  const removeLabel = (label) => {
-    const updatedLabels = careLabels.filter(l => l !== label);
-    const updatedDurations = { ...careDurations };
-    delete updatedDurations[label];
-    onCabinetUpdate({ settings: { care_labels: updatedLabels, care_durations: updatedDurations } });
+  const startEditCareLabel = (entry) => {
+    setClForm({
+      label: entry.label,
+      actCodes: entry.act_codes || [],
+      durationMinutes: entry.default_duration_minutes || '',
+      category: entry.category || 'technique',
+    });
+    setClEditId(entry.id);
+    setClError('');
   };
 
-  const updateDuration = (label, minutes) => {
-    const updatedDurations = { ...careDurations };
-    if (minutes && Number(minutes) > 0) {
-      updatedDurations[label] = Number(minutes);
-    } else {
-      delete updatedDurations[label];
+  const saveCareLabel = async () => {
+    const trimmed = clForm.label.trim();
+    setClError('');
+    if (!trimmed) { setClError('Le libellé est obligatoire.'); return; }
+    if (trimmed.length > 200) { setClError('Maximum 200 caractères.'); return; }
+    if (!clForm.durationMinutes || Number(clForm.durationMinutes) < 1) { setClError('La durée est obligatoire (min 1 min).'); return; }
+
+    setClSaving(true);
+    try {
+      const payload = {
+        label: trimmed,
+        act_codes: clForm.actCodes,
+        default_duration_minutes: Number(clForm.durationMinutes),
+        category: clForm.category,
+      };
+      if (clEditId) {
+        await apiUpdateCareLabel(clEditId, payload);
+      } else {
+        await createCareLabel(payload);
+      }
+      resetClForm();
+      if (onReloadCareLabels) await onReloadCareLabels();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setClError(detail || 'Erreur lors de la sauvegarde.');
+    } finally {
+      setClSaving(false);
     }
-    onCabinetUpdate({ settings: { care_durations: updatedDurations } });
+  };
+
+  const removeCareLabel = async (id) => {
+    try {
+      await apiDeleteCareLabel(id);
+      if (onReloadCareLabels) await onReloadCareLabels();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setClError(detail || 'Erreur lors de la suppression.');
+    }
   };
 
   return (
@@ -943,97 +985,247 @@ export default function CreneauxTab({
 
       {/* ═══════ Libellés de soins ═══════ */}
       <h2 className="text-xl font-semibold mt-10 mb-6 border-b pb-2 flex items-center gap-2">
-        <Tag size={20} className="text-blue-600" /> Libellés de soins
+        <Tag size={20} className="text-blue-600" /> Référentiel de soins
       </h2>
 
       <p className="text-sm text-slate-500 mb-4">
-        Définissez les libellés et durées par défaut proposés lors de la création d'un plan de soins.
+        Libellés proposés à l'autocomplétion lors de la création d'un plan de soins. Chaque libellé est associé à un code NGAP et une durée par défaut.
+        Les libellés système ne sont pas modifiables. Vous pouvez ajouter des libellés personnalisés pour votre cabinet.
       </p>
 
+      {/* Filter */}
+      <div className="mb-4 flex gap-2">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={clFilter}
+            onChange={e => setClFilter(e.target.value)}
+            placeholder="Filtrer par libellé, catégorie ou code..."
+            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          />
+        </div>
+      </div>
+
       {/* Labels table */}
-      {careLabels.length === 0 ? (
+      {careLabelEntries.length === 0 ? (
         <p className="text-sm text-slate-400 italic mb-4">Aucun libellé configuré.</p>
-      ) : (
-        <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="text-left px-4 py-2 font-medium text-slate-600">Libellé</th>
-                <th className="text-left px-4 py-2 font-medium text-slate-600 w-40">Durée (min)</th>
-                {!readOnly && <th className="w-12"></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {careLabels.map(label => (
-                <tr key={label} className="border-b last:border-b-0 border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-2 font-medium text-slate-800">{label}</td>
-                  <td className="px-4 py-2">
-                    {readOnly ? (
-                      <span className="text-slate-600">{careDurations[label] || '-'}</span>
-                    ) : (
-                      <input
-                        type="number"
-                        min="1"
-                        max="480"
-                        value={careDurations[label] || ''}
-                        onChange={e => updateDuration(label, e.target.value)}
-                        placeholder="—"
-                        className="w-24 border border-slate-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                      />
-                    )}
-                  </td>
-                  {!readOnly && (
-                    <td className="px-2 py-2 text-center">
-                      <button
-                        onClick={() => removeLabel(label)}
-                        className="text-slate-400 hover:text-red-600 transition-colors p-1"
-                        title="Supprimer"
-                      >
-                        <X size={14} />
-                      </button>
-                    </td>
-                  )}
+      ) : (() => {
+        const q = clFilter.toLowerCase();
+        const filtered = q
+          ? careLabelEntries.filter(e =>
+              e.label.toLowerCase().includes(q) ||
+              e.category.toLowerCase().includes(q) ||
+              (e.act_codes || []).some(c => c.toLowerCase().includes(q))
+            )
+          : careLabelEntries;
+        return (
+          <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-4 py-2 font-medium text-slate-600">Libellé</th>
+                  <th className="text-left px-4 py-2 font-medium text-slate-600 w-36">Code NGAP</th>
+                  <th className="text-left px-4 py-2 font-medium text-slate-600 w-24">Durée</th>
+                  <th className="text-left px-4 py-2 font-medium text-slate-600 w-28">Catégorie</th>
+                  {!readOnly && <th className="w-20"></th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map(entry => {
+                  const editing = !readOnly && clEditId === entry.id;
+                  return (
+                    <tr key={entry.id} className={`border-b border-slate-100 ${editing ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
+                      {/* Libellé */}
+                      <td className="px-4 py-2">
+                        {editing ? (
+                          <input
+                            type="text"
+                            value={clForm.label}
+                            onChange={e => setClForm({ ...clForm, label: e.target.value })}
+                            maxLength={200}
+                            className="w-full border border-blue-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                          />
+                        ) : (
+                          <span className="font-medium text-slate-800">
+                            {entry.label}
+                            {entry.is_system && <span className="ml-2 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full font-normal">système</span>}
+                          </span>
+                        )}
+                      </td>
+                      {/* Code NGAP */}
+                      <td className="px-4 py-2">
+                        {editing ? (
+                          <select
+                            value={(clForm.actCodes && clForm.actCodes[0]) || ''}
+                            onChange={e => setClForm({ ...clForm, actCodes: e.target.value ? [e.target.value] : [] })}
+                            className="w-full border border-blue-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                          >
+                            <option value="">—</option>
+                            {ngapCodes.map(act => (
+                              <option key={act.id} value={act.code}>{act.code}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-slate-600 font-mono text-xs">{(entry.act_codes || []).join(', ') || '—'}</span>
+                        )}
+                      </td>
+                      {/* Durée */}
+                      <td className="px-4 py-2">
+                        {editing ? (
+                          <input
+                            type="number"
+                            min="1"
+                            max="480"
+                            value={clForm.durationMinutes}
+                            onChange={e => setClForm({ ...clForm, durationMinutes: e.target.value })}
+                            className="w-20 border border-blue-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                          />
+                        ) : (
+                          <span className="text-slate-600">{entry.default_duration_minutes} min</span>
+                        )}
+                      </td>
+                      {/* Catégorie */}
+                      <td className="px-4 py-2">
+                        {editing ? (
+                          <select
+                            value={clForm.category}
+                            onChange={e => setClForm({ ...clForm, category: e.target.value })}
+                            className="w-full border border-blue-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                          >
+                            {CARE_CATEGORIES.map(c => (
+                              <option key={c.value} value={c.value}>{c.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full capitalize">{entry.category}</span>
+                        )}
+                      </td>
+                      {/* Actions */}
+                      {!readOnly && (
+                        <td className="px-2 py-2 text-center">
+                          {editing ? (
+                            <span className="inline-flex gap-1">
+                              <button
+                                onClick={saveCareLabel}
+                                disabled={clSaving || !clForm.label.trim()}
+                                className="text-green-600 hover:text-green-700 disabled:text-slate-300 transition-colors p-1"
+                                title="Enregistrer"
+                              >
+                                <Save size={14} />
+                              </button>
+                              <button
+                                onClick={resetClForm}
+                                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+                                title="Annuler"
+                              >
+                                <X size={14} />
+                              </button>
+                            </span>
+                          ) : (
+                            <span className="inline-flex gap-1">
+                              <button
+                                onClick={() => startEditCareLabel(entry)}
+                                className="text-slate-400 hover:text-blue-600 transition-colors p-1"
+                                title="Modifier"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => removeCareLabel(entry.id)}
+                                className="text-slate-400 hover:text-red-600 transition-colors p-1"
+                                title="Supprimer"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={readOnly ? 4 : 5} className="px-4 py-4 text-center text-slate-400 italic text-sm">Aucun résultat pour « {clFilter} »</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+
+      {clEditId && clError && (
+        <div className="mb-4 flex items-center gap-1 text-red-600 text-xs font-medium">
+          <AlertCircle size={14} /> {clError}
         </div>
       )}
 
-      {/* Add label form */}
-      {!readOnly && (
-        <div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newLabel}
-              onChange={e => setNewLabel(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLabel(); } }}
-              placeholder="Nouveau libellé..."
-              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              maxLength={100}
-            />
-            <input
-              type="number"
-              min="1"
-              max="480"
-              value={newDuration}
-              onChange={e => setNewDuration(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLabel(); } }}
-              placeholder="Durée (min)"
-              className="w-32 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            />
+      {/* Add new care label form (only when NOT editing an existing one) */}
+      {!readOnly && !clEditId && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <h3 className="font-medium text-slate-700 mb-3 text-sm">Ajouter un libellé</h3>
+          <div className="grid grid-cols-4 gap-3 mb-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Libellé *</label>
+              <input
+                type="text"
+                value={clForm.label}
+                onChange={e => setClForm({ ...clForm, label: e.target.value })}
+                placeholder="Ex: Pansement spécifique..."
+                maxLength={200}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Code NGAP</label>
+              <select
+                value={(clForm.actCodes && clForm.actCodes[0]) || ''}
+                onChange={e => setClForm({ ...clForm, actCodes: e.target.value ? [e.target.value] : [] })}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              >
+                <option value="">-- Aucun --</option>
+                {ngapCodes.map(act => (
+                  <option key={act.id} value={act.code}>{act.code} — {act.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Durée (min) *</label>
+              <input
+                type="number"
+                min="1"
+                max="480"
+                value={clForm.durationMinutes}
+                onChange={e => setClForm({ ...clForm, durationMinutes: e.target.value })}
+                placeholder="Ex: 15"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Catégorie</label>
+              <select
+                value={clForm.category}
+                onChange={e => setClForm({ ...clForm, category: e.target.value })}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              >
+                {CARE_CATEGORIES.map(c => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              onClick={addLabel}
-              disabled={!newLabel.trim()}
+              onClick={saveCareLabel}
+              disabled={clSaving || !clForm.label.trim()}
               className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
-              Ajouter
+              {clSaving ? 'Enregistrement...' : 'Ajouter'}
             </button>
           </div>
-          {labelError && (
+          {clError && (
             <div className="mt-2 flex items-center gap-1 text-red-600 text-xs font-medium">
-              <AlertCircle size={14} /> {labelError}
+              <AlertCircle size={14} /> {clError}
             </div>
           )}
         </div>

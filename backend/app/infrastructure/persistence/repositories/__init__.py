@@ -11,6 +11,9 @@ from app.infrastructure.persistence.repositories.sqlalchemy_cabinet_repo import 
 from app.infrastructure.persistence.repositories.sqlalchemy_care_catalog_repo import (
     SQLAlchemyCareCatalogRepo,
 )
+from app.infrastructure.persistence.repositories.sqlalchemy_care_label_repo import (
+    SQLAlchemyCareLabelRepo,
+)
 from app.infrastructure.persistence.repositories.sqlalchemy_tariff_update_repo import (
     SQLAlchemyTariffUpdateRepo,
 )
@@ -40,6 +43,7 @@ __all__ = [
     "SQLAlchemyAppointmentRepo",
     "SQLAlchemyCabinetRepo",
     "SQLAlchemyCareCatalogRepo",
+    "SQLAlchemyCareLabelRepo",
     "SQLAlchemyInvoiceLineRepo",
     "SQLAlchemyInvoiceRepo",
     "SQLAlchemyTariffUpdateRepo",

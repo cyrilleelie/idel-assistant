@@ -12,7 +12,7 @@ export default function PatientDetail({
   appointments, nurses, schedule, configs, getActiveConfigForDate,
   onCreateAppointment, onCancelAppointment,
   onSavePrescription, onDeletePrescription, prescriptionsLoading,
-  careLabels, careDurations,
+  careLabels, careDurations, careLabelCodeMap,
   cabinetData, patients
 }) {
   const isInactive = patientForm.active === false;
@@ -182,6 +182,7 @@ export default function PatientDetail({
             prescriptionsLoading={prescriptionsLoading}
             careLabels={careLabels}
             careDurations={careDurations}
+            careLabelCodeMap={careLabelCodeMap}
             cabinetData={cabinetData}
             patients={patients}
           />

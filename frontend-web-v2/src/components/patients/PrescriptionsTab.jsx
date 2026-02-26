@@ -554,7 +554,7 @@ function labelToCareType(label) {
 
 // --- SoinFormItem: individual soin inside CarePlanForm ---
 
-function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels = [], careDurations = {}, ngapCodes = [] }) {
+function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels = [], careDurations = {}, careLabelCodeMap = {}, ngapCodes = [] }) {
   const [dragOver, setDragOver] = useState(false);
   const [showLabelSuggestions, setShowLabelSuggestions] = useState(false);
 
@@ -575,6 +575,11 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
     const duration = careDurations[label];
     if (duration) {
       updated.durationMinutes = duration;
+    }
+    // Auto-fill NGAP act codes from care label referential
+    const codes = careLabelCodeMap[label];
+    if (codes && codes.length > 0) {
+      updated.actCodes = codes;
     }
     onChange(updated);
     setShowLabelSuggestions(false);
@@ -1175,7 +1180,7 @@ function SlotSuggestions({ patient, plan, cabinetData, patients, appointments, n
 
 // --- CarePlanForm component ---
 
-function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nurses, appointments, schedule, configs, getActiveConfigForDate, onCreateAppointment, patientId, careLabels = [], careDurations = {}, ngapCodes = [], onEnsureSaved, cabinetData, patients, patientForm }) {
+function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nurses, appointments, schedule, configs, getActiveConfigForDate, onCreateAppointment, patientId, careLabels = [], careDurations = {}, careLabelCodeMap = {}, ngapCodes = [], onEnsureSaved, cabinetData, patients, patientForm }) {
   const updateSoin = (index, updatedSoin) => {
     const newSoins = [...plan.soins];
     newSoins[index] = updatedSoin;
@@ -1281,6 +1286,7 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
               canRemove={plan.soins.length > 1}
               careLabels={careLabels}
               careDurations={careDurations}
+              careLabelCodeMap={careLabelCodeMap}
               ngapCodes={ngapCodes}
             />
           ))}
@@ -1613,7 +1619,7 @@ export default function PrescriptionsTab({
   nurses, appointments, schedule, configs, getActiveConfigForDate,
   onCreateAppointment, onCancelAppointment,
   onSavePrescription, onDeletePrescription, prescriptionsLoading,
-  careLabels, careDurations,
+  careLabels, careDurations, careLabelCodeMap,
   cabinetData, patients
 }) {
   const prescriptions = patientForm.prescriptions || [];
@@ -1796,6 +1802,7 @@ export default function PrescriptionsTab({
           patientId={patientForm.id}
           careLabels={careLabels}
           careDurations={careDurations}
+          careLabelCodeMap={careLabelCodeMap}
           ngapCodes={ngapCodes}
           onEnsureSaved={ensurePlanSaved}
           cabinetData={cabinetData}
@@ -1826,6 +1833,7 @@ export default function PrescriptionsTab({
                 patientId={patientForm.id}
                 careLabels={careLabels}
                 careDurations={careDurations}
+                careLabelCodeMap={careLabelCodeMap}
                 ngapCodes={ngapCodes}
                 onEnsureSaved={ensurePlanSaved}
                 cabinetData={cabinetData}

@@ -1,5 +1,5 @@
-from sqlalchemy import ForeignKey, Integer, String, Time, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, TIMESTAMP
+from sqlalchemy import ForeignKey, Integer, Numeric, String, Time, func
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PG_UUID, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.persistence.models.base import Base
@@ -22,6 +22,9 @@ class AppointmentModel(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="scheduled", index=True)
     cancellation_reason: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     canceled_at = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    act_codes = mapped_column(ARRAY(String(30)), nullable=True)
+    care_labels = mapped_column(ARRAY(String(200)), nullable=True)
+    distance_km = mapped_column(Numeric(6, 2), nullable=True)
     created_by: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
     created_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

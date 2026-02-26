@@ -44,7 +44,6 @@ class AddInvoiceLineRequest(BaseModel):
     act_code: str
     quantity: Decimal = Field(default=Decimal("1"), ge=0)
     supplements: dict | None = None
-    appointment_id: UUID | None = None
 
     model_config = ConfigDict(json_schema_extra={
         "example": {
@@ -73,7 +72,6 @@ class UpdateInvoiceLineRequest(BaseModel):
 class InvoiceLineResponse(BaseModel):
     id: str
     invoice_id: str
-    appointment_id: str | None
     line_order: int
     act_code: str
     act_label: str
@@ -93,6 +91,7 @@ class InvoiceResponse(BaseModel):
     idel_id: str
     patient_id: str
     prescription_id: str | None
+    appointment_id: str | None = None
     invoice_number: str
     invoice_date: datetime.date
     care_date: datetime.date

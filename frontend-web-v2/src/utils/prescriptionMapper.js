@@ -65,6 +65,7 @@ export function protocolApiToFrontend(p) {
         customFrequency: s.customFrequency || '',
         notes: s.notes || '',
         documents: s.documents || [],
+        actCodes: s.actCodes || [],
       })),
       careSchedule: { startTime, endTime },
     };
@@ -83,6 +84,7 @@ export function protocolApiToFrontend(p) {
       customFrequency: p.custom_frequency || '',
       notes: p.notes || '',
       documents: [],
+      actCodes: [],
     }],
     careSchedule: { startTime, endTime },
   };
@@ -128,6 +130,7 @@ export function prescriptionFrontendToApiCreate(rx, patientId) {
       customFrequency: s.customFrequency || '',
       notes: s.notes || '',
       documents: s.documents || [],
+      actCodes: s.actCodes || [],
     })),
   });
 
@@ -180,6 +183,7 @@ export function prescriptionFrontendToApiUpdate(rx) {
       customFrequency: s.customFrequency || '',
       notes: s.notes || '',
       documents: s.documents || [],
+      actCodes: s.actCodes || [],
     })),
   });
 

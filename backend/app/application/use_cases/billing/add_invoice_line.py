@@ -49,7 +49,6 @@ class AddInvoiceLineUseCase:
             invoice_id=invoice.id,
             quantity=dto.quantity,
             supplements=dto.supplements,
-            appointment_id=dto.appointment_id,
             line_order=max_order + 1,
         )
 

@@ -100,6 +100,21 @@ async def list_catalog(
     )
 
 
+@router.get("/suggest-codes")
+async def suggest_codes(
+    care_type: str,
+    request: Request,
+    auth: AuthContext = Depends(get_current_user),
+):
+    """Suggere les codes NGAP par defaut pour un type de soin."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    from app.domain.services.care_type_ngap_mapping import suggest_ngap_codes
+    codes = suggest_ngap_codes(care_type)
+    return {"care_type": care_type, "suggested_codes": codes}
+
+
 @router.get("/{entry_id}", response_model=CareCatalogResponse)
 async def get_catalog_entry(
     entry_id: UUID,

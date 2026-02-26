@@ -1,4 +1,4 @@
-import { Calendar, LogOut, UserCircle, CalendarDays, Building2, Receipt, Route } from 'lucide-react';
+import { Calendar, LogOut, UserCircle, CalendarDays, Building2, Receipt, Route, Database } from 'lucide-react';
 
 const screens = [
   { id: 'cabinet', label: 'Cabinet', icon: Building2 },
@@ -6,6 +6,7 @@ const screens = [
   { id: 'agendas', label: 'Agenda', icon: CalendarDays },
   { id: 'tournee', label: 'Ma Tournée', icon: Route },
   { id: 'facturation', label: 'Facturation', icon: Receipt },
+  { id: 'admin-bdd', label: 'Admin BDD', icon: Database },
 ];
 
 export default function Header({ activeScreen, onScreenChange, onLogout }) {

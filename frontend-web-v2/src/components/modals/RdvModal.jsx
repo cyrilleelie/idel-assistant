@@ -1,4 +1,5 @@
-import { X, AlertCircle, FileText, Loader2, User, Home, Building2, MapPin, CircleDot, CheckCircle2, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { X, AlertCircle, FileText, Loader2, User, Home, Building2, MapPin, CircleDot, CheckCircle2, XCircle, Plus } from 'lucide-react';
 
 const STATUS_OPTIONS = [
   { value: 'scheduled', label: 'Planifié', icon: CircleDot, className: 'bg-blue-50 text-blue-700 border-blue-300 shadow-sm' },
@@ -19,6 +20,8 @@ export default function RdvModal({
   onPatientChange,
   patientsWithActivePlans,
 }) {
+  const [showAddSoin, setShowAddSoin] = useState(false);
+
   if (!rdvModalParams) return null;
 
   const isEditMode = !!rdvModalParams.editAppt;
@@ -33,10 +36,55 @@ export default function RdvModal({
   const selectedPatientId = isEditMode ? editAppt.patientId : rdvForm.patientId;
   const selectedPatient = selectedPatientId ? patients.find(p => p.id === selectedPatientId) : null;
 
+  // Get soins from currently selected care protocol
+  const selectedPlan = rdvForm.careProtocolId
+    ? rdvPrescriptions.find(rx => rx._apiId === rdvForm.careProtocolId)
+    : null;
+  const planSoins = selectedPlan?.soins || [];
+
+  // Build a map label -> actCodes from the plan soins
+  const labelToCodesMap = {};
+  for (const soin of planSoins) {
+    if (soin.label) {
+      labelToCodesMap[soin.label] = soin.actCodes || [];
+    }
+  }
+
+  // Soins not yet associated to this RDV
+  const availableSoins = planSoins.filter(s => s.label && !rdvForm.careLabels.includes(s.label));
+
   const handlePatientSelect = (e) => {
     const patientId = e.target.value;
-    setRdvForm({ ...rdvForm, patientId, careProtocolId: '' });
+    setRdvForm({ ...rdvForm, patientId, careProtocolId: '', careLabels: [], actCodes: [] });
     onPatientChange(patientId);
+  };
+
+  const handlePlanChange = (e) => {
+    const careProtocolId = e.target.value;
+    // Find the selected plan and auto-populate soins
+    const plan = rdvPrescriptions.find(rx => rx._apiId === careProtocolId);
+    const soins = plan?.soins || [];
+    const careLabels = soins.map(s => s.label).filter(Boolean);
+    const actCodes = [...new Set(soins.flatMap(s => s.actCodes || []))];
+    setRdvForm({ ...rdvForm, careProtocolId, careLabels, actCodes });
+    setShowAddSoin(false);
+  };
+
+  const handleRemoveSoin = (label) => {
+    const codesToRemove = labelToCodesMap[label] || [];
+    // Only remove codes that are exclusive to this soin (not used by other remaining soins)
+    const remainingLabels = rdvForm.careLabels.filter(l => l !== label);
+    const remainingCodes = new Set(remainingLabels.flatMap(l => labelToCodesMap[l] || []));
+    const newActCodes = rdvForm.actCodes.filter(c => remainingCodes.has(c) || !codesToRemove.includes(c));
+    setRdvForm({ ...rdvForm, careLabels: remainingLabels, actCodes: newActCodes });
+  };
+
+  const handleAddSoin = (label) => {
+    const codesToAdd = labelToCodesMap[label] || [];
+    const newCareLabels = [...rdvForm.careLabels, label];
+    const newActCodes = [...new Set([...rdvForm.actCodes, ...codesToAdd])];
+    setRdvForm({ ...rdvForm, careLabels: newCareLabels, actCodes: newActCodes });
+    setShowAddSoin(false);
   };
 
   return (
@@ -46,7 +94,7 @@ export default function RdvModal({
           <h3 className="font-semibold text-lg text-slate-800">{isEditMode ? 'Modifier le Rendez-vous' : 'Nouveau Rendez-vous'}</h3>
           <button onClick={() => setRdvModalParams(null)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20}/></button>
         </div>
-        <form onSubmit={onSubmit} className="p-6 space-y-5">
+        <form onSubmit={onSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
           {rdvError && <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-medium flex gap-2"><AlertCircle size={18} className="shrink-0" /><p>{rdvError}</p></div>}
 
           {/* Soignant (read-only) */}
@@ -175,7 +223,7 @@ export default function RdvModal({
                 return (
                   <select
                     value={rdvForm.careProtocolId}
-                    onChange={e => setRdvForm({ ...rdvForm, careProtocolId: e.target.value })}
+                    onChange={handlePlanChange}
                     className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white ${
                       !rdvForm.careProtocolId ? 'border-red-300' : 'border-slate-300'
                     }`}
@@ -200,6 +248,79 @@ export default function RdvModal({
                   </select>
                 );
               })()}
+
+              {/* Soins associés */}
+              {rdvForm.careProtocolId && planSoins.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide">Soins associés</label>
+                  {rdvForm.careLabels.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {rdvForm.careLabels.map(label => {
+                        const codes = labelToCodesMap[label] || [];
+                        return (
+                          <div key={label} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200 group">
+                            <span className="text-sm text-slate-700 font-medium flex-1">{label}</span>
+                            {codes.length > 0 && (
+                              <div className="flex gap-1 flex-wrap">
+                                {codes.map(code => (
+                                  <span key={code} className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-mono">{code}</span>
+                                ))}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSoin(label)}
+                              className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                              title="Retirer ce soin"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">Aucun soin sélectionné.</p>
+                  )}
+
+                  {/* Add soin button / dropdown */}
+                  {availableSoins.length > 0 && (
+                    <div>
+                      {showAddSoin ? (
+                        <div className="flex gap-2 items-center">
+                          <select
+                            className="flex-1 text-sm border border-slate-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                            defaultValue=""
+                            onChange={(e) => { if (e.target.value) handleAddSoin(e.target.value); }}
+                          >
+                            <option value="" disabled>-- Choisir un soin --</option>
+                            {availableSoins.map(s => (
+                              <option key={s.label} value={s.label}>
+                                {s.label}{s.actCodes?.length ? ` (${s.actCodes.join(', ')})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddSoin(false)}
+                            className="text-slate-400 hover:text-slate-600 text-sm"
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowAddSoin(true)}
+                          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          <Plus size={14} /> Ajouter un soin
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

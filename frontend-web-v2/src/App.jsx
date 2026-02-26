@@ -25,6 +25,7 @@ import CabinetTab from './components/cabinet/CabinetTab';
 import CreneauxTab from './components/creneaux/CreneauxTab';
 import FacturationTab from './components/facturation/FacturationTab';
 import MaTourneeTab from './components/tournee/MaTourneeTab';
+import AdminBddTab from './components/admin/AdminBddTab';
 import RdvModal from './components/modals/RdvModal';
 
 // --- Sub-tab definitions per screen ---
@@ -147,7 +148,7 @@ export default function App() {
   const [appointments, setAppointments] = useState([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [rdvModalParams, setRdvModalParams] = useState(null);
-  const [rdvForm, setRdvForm] = useState({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home' });
+  const [rdvForm, setRdvForm] = useState({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home', careLabels: [], actCodes: [] });
   const [rdvError, setRdvError] = useState('');
   const [rdvPrescriptions, setRdvPrescriptions] = useState([]);
   const [rdvPrescriptionsLoading, setRdvPrescriptionsLoading] = useState(false);
@@ -726,7 +727,7 @@ export default function App() {
 
   const openRdvModal = (dateStr, slotId, nurseId) => {
     setRdvModalParams({ dateStr, slotId, nurseId });
-    setRdvForm({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home' });
+    setRdvForm({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home', careLabels: [], actCodes: [] });
     setRdvPrescriptions([]);
     setRdvError('');
     // Fetch care protocols to determine which patients have active plans (en cours)
@@ -764,7 +765,7 @@ export default function App() {
 
   const editRdv = (appt) => {
     setRdvModalParams({ dateStr: appt.dateStr, slotId: appt.slotId, nurseId: appt.nurseId, editAppt: appt });
-    setRdvForm({ mode: 'select', patientId: appt.patientId, newFirstName: '', newLastName: '', startTime: appt.startTime, endTime: appt.endTime, careProtocolId: appt.careProtocolId || '', locationType: appt._apiLocationType || 'home', status: appt.status || 'scheduled' });
+    setRdvForm({ mode: 'select', patientId: appt.patientId, newFirstName: '', newLastName: '', startTime: appt.startTime, endTime: appt.endTime, careProtocolId: appt.careProtocolId || '', locationType: appt._apiLocationType || 'home', status: appt.status || 'scheduled', careLabels: appt.careLabels || [], actCodes: appt.actCodes || [] });
     setRdvError('');
     loadRdvPrescriptions(appt.patientId);
   };
@@ -801,6 +802,8 @@ export default function App() {
         careProtocolId: rdvForm.careProtocolId,
         locationType: rdvForm.locationType,
         status: rdvForm.status,
+        actCodes: rdvForm.actCodes,
+        careLabels: rdvForm.careLabels,
       });
       const updated = await apiUpdateAppointment(editAppt.id, payload);
       const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
@@ -875,6 +878,8 @@ export default function App() {
         patientId: finalPatientId,
         careProtocolId: rdvForm.careProtocolId || undefined,
         locationType: rdvForm.locationType,
+        actCodes: rdvForm.actCodes,
+        careLabels: rdvForm.careLabels,
       });
       const createdAppt = await apiCreateAppointment(apptPayload);
       const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
@@ -897,8 +902,8 @@ export default function App() {
   };
 
   // Generic appointment creation callable from PrescriptionsTab
-  const createAppointmentForPrescription = useCallback(async ({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId }) => {
-    const apptPayload = apptFrontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId });
+  const createAppointmentForPrescription = useCallback(async ({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId, actCodes, careLabels }) => {
+    const apptPayload = apptFrontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId, actCodes, careLabels });
     const createdAppt = await apiCreateAppointment(apptPayload);
     const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
     const mappedAppt = apptApiToFrontend(createdAppt, pMap);
@@ -1182,7 +1187,12 @@ export default function App() {
 
           {/* --- Facturation --- */}
           {activeScreen === 'facturation' && (
-            <FacturationTab />
+            <FacturationTab nurses={nurses} />
+          )}
+
+          {/* --- Admin BDD --- */}
+          {activeScreen === 'admin-bdd' && (
+            <AdminBddTab />
           )}
 
         </main>

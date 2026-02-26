@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, literal_column, select
@@ -26,6 +27,9 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
             location_type=model.location_type or "home",
             time_window_start=model.time_window_start,
             time_window_end=model.time_window_end,
+            act_codes=list(model.act_codes) if model.act_codes else [],
+            care_labels=list(model.care_labels) if model.care_labels else [],
+            distance_km=Decimal(str(model.distance_km)) if model.distance_km is not None else None,
             status=model.status,
             cancellation_reason=model.cancellation_reason,
             canceled_at=model.canceled_at,
@@ -130,6 +134,9 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
             location_type=appointment.location_type,
             time_window_start=appointment.time_window_start,
             time_window_end=appointment.time_window_end,
+            act_codes=appointment.act_codes or None,
+            care_labels=appointment.care_labels or None,
+            distance_km=appointment.distance_km,
             status=appointment.status,
             created_by=appointment.created_by,
         )
@@ -152,6 +159,9 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
                 location_type=appt.location_type,
                 time_window_start=appt.time_window_start,
                 time_window_end=appt.time_window_end,
+                act_codes=appt.act_codes or None,
+                care_labels=appt.care_labels or None,
+                distance_km=appt.distance_km,
                 status=appt.status,
                 created_by=appt.created_by,
             )
@@ -174,6 +184,9 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
         model.location_type = appointment.location_type
         model.time_window_start = appointment.time_window_start
         model.time_window_end = appointment.time_window_end
+        model.act_codes = appointment.act_codes or None
+        model.care_labels = appointment.care_labels or None
+        model.distance_km = appointment.distance_km
         model.status = appointment.status
         model.cancellation_reason = appointment.cancellation_reason
         model.canceled_at = appointment.canceled_at

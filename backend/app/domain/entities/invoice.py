@@ -17,7 +17,6 @@ class InvoiceLine:
     supplements_total: Decimal = Decimal("0.00")
     line_total: Decimal = Decimal("0.00")
     line_order: int = 1
-    appointment_id: UUID | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime.datetime = field(default_factory=lambda: datetime.datetime.now(datetime.UTC))
 
@@ -51,6 +50,7 @@ class Invoice:
     validated_at: datetime.datetime | None = None
     transmitted_at: datetime.datetime | None = None
     paid_at: datetime.datetime | None = None
+    appointment_id: UUID | None = None
     metadata: dict | None = None
     lines: list[InvoiceLine] = field(default_factory=list)
     id: UUID = field(default_factory=uuid4)

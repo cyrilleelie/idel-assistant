@@ -1,6 +1,7 @@
 """Schemas Pydantic pour les rendez-vous."""
 
 import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -15,6 +16,9 @@ class AppointmentCreate(BaseModel):
     time_window_start: datetime.time | None = None
     time_window_end: datetime.time | None = None
     care_protocol_id: UUID | None = None
+    act_codes: list[str] = Field(default_factory=list)
+    care_labels: list[str] = Field(default_factory=list)
+    distance_km: Decimal | None = None
     idel_id: UUID | None = None
 
 
@@ -24,6 +28,9 @@ class AppointmentUpdate(BaseModel):
     care_type: str | None = Field(default=None, min_length=1, max_length=50)
     care_protocol_id: UUID | None = None
     location_type: str | None = Field(default=None, pattern=r"^(home|office|hospital)$")
+    act_codes: list[str] | None = None
+    care_labels: list[str] | None = None
+    distance_km: Decimal | None = None
     status: str | None = Field(default=None, pattern=r"^(scheduled|completed|canceled)$")
 
 
@@ -46,6 +53,9 @@ class AppointmentResponse(BaseModel):
     status: str
     cancellation_reason: str = ""
     canceled_at: datetime.datetime | None = None
+    act_codes: list[str] = []
+    care_labels: list[str] = []
+    distance_km: Decimal | None = None
     created_by: str = "manual"
     created_at: datetime.datetime
     updated_at: datetime.datetime

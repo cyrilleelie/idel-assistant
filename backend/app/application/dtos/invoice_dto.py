@@ -25,7 +25,6 @@ class AddInvoiceLineDTO:
     act_code: str
     quantity: Decimal = Decimal("1")
     supplements: dict | None = None
-    appointment_id: UUID | None = None
 
 
 @dataclass
@@ -38,7 +37,6 @@ class UpdateInvoiceLineDTO:
 class InvoiceLineDTO:
     id: UUID
     invoice_id: UUID
-    appointment_id: UUID | None
     line_order: int
     act_code: str
     act_label: str
@@ -59,6 +57,7 @@ class InvoiceDTO:
     idel_id: UUID
     patient_id: UUID
     prescription_id: UUID | None
+    appointment_id: UUID | None
     invoice_number: str
     invoice_date: datetime.date
     care_date: datetime.date

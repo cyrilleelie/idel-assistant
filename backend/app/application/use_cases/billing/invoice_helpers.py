@@ -8,7 +8,6 @@ def line_entity_to_dto(line: InvoiceLine) -> InvoiceLineDTO:
     return InvoiceLineDTO(
         id=line.id,
         invoice_id=line.invoice_id,
-        appointment_id=line.appointment_id,
         line_order=line.line_order,
         act_code=line.act_code,
         act_label=line.act_label,
@@ -30,6 +29,7 @@ def invoice_entity_to_dto(invoice: Invoice) -> InvoiceDTO:
         idel_id=invoice.idel_id,
         patient_id=invoice.patient_id,
         prescription_id=invoice.prescription_id,
+        appointment_id=invoice.appointment_id,
         invoice_number=invoice.invoice_number,
         invoice_date=invoice.invoice_date,
         care_date=invoice.care_date,

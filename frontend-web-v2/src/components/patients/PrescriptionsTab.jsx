@@ -5,6 +5,7 @@ import {
   ClipboardList, CalendarDays, Check, Loader2, Lightbulb, MapPin
 } from 'lucide-react';
 import { getDistanceMatrix } from '../../utils/geocode';
+import { listCareActCodes } from '../../api/cotation';
 
 const FREQUENCY_OPTIONS = [
   { value: 'daily', label: '1x / jour' },
@@ -44,6 +45,7 @@ function emptySoin() {
     customFrequency: '',
     notes: '',
     documents: [],
+    actCodes: [],
   };
 }
 
@@ -101,6 +103,27 @@ function generateOccurrences(startDate, endDate, frequency) {
     current.setDate(current.getDate() + step);
   }
   return dates;
+}
+
+/**
+ * For a given date, return the labels and actCodes of the soins active on that date.
+ */
+function getActiveSoinsForDate(soins, dateStr) {
+  const labels = [];
+  const codes = [];
+  for (const soin of soins) {
+    if (!soin.startDate || !soin.endDate || !soin.frequency || soin.frequency === 'custom') continue;
+    const occurrences = generateOccurrences(soin.startDate, soin.endDate, soin.frequency);
+    if (occurrences.includes(dateStr)) {
+      if (soin.label) labels.push(soin.label);
+      if (soin.actCodes?.length) {
+        for (const c of soin.actCodes) {
+          if (!codes.includes(c)) codes.push(c);
+        }
+      }
+    }
+  }
+  return { labels, codes };
 }
 
 /**
@@ -291,6 +314,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
     if (!nurseId || !onCreateAppointment || !patientId) return;
 
     const dateEnd = endTimeByDate[dateStr] || endTime;
+    const { labels: careLabels, codes: actCodes } = getActiveSoinsForDate(soins, dateStr);
     setBookingInProgress(dateStr);
     setBookingError(null);
     try {
@@ -298,7 +322,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
       if (!protocolId && onEnsureSaved) {
         protocolId = await onEnsureSaved();
       }
-      await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId });
+      await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId, actCodes, careLabels });
       setSelectedNurseByDate(prev => { const next = { ...prev }; delete next[dateStr]; return next; });
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -338,8 +362,9 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
     let done = 0;
     for (const { dateStr, dateEnd } of bookable) {
       const nurseId = selectedNurseByDate[dateStr];
+      const { labels: careLabels, codes: actCodes } = getActiveSoinsForDate(soins, dateStr);
       try {
-        await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId });
+        await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId, actCodes, careLabels });
         setSelectedNurseByDate(prev => { const next = { ...prev }; delete next[dateStr]; return next; });
       } catch (err) {
         const detail = err.response?.data?.detail;
@@ -514,9 +539,22 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
   );
 }
 
+// Helper: derive a care_type key from the soin label for NGAP suggestions
+function labelToCareType(label) {
+  if (!label) return '';
+  const l = label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (l.includes('pansement')) return 'pansement';
+  if (l.includes('injection') || l.includes('insuline') || l.includes('vaccin')) return 'injection';
+  if (l.includes('perfusion')) return 'perfusion';
+  if (l.includes('bsi') || l.includes('bilan de soins')) return 'bsi';
+  if (l.includes('prelevement') || l.includes('prise de sang') || l.includes('sang')) return 'prelevements';
+  if (l.includes('soin')) return 'soins_infirmiers';
+  return '';
+}
+
 // --- SoinFormItem: individual soin inside CarePlanForm ---
 
-function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels = [], careDurations = {} }) {
+function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels = [], careDurations = {}, ngapCodes = [] }) {
   const [dragOver, setDragOver] = useState(false);
   const [showLabelSuggestions, setShowLabelSuggestions] = useState(false);
 
@@ -579,38 +617,53 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
         )}
       </div>
 
-      {/* Nom du soin */}
-      <div className="relative">
-        <label className="block text-xs font-medium text-slate-600 mb-1">Nom du soin *</label>
-        <input
-          type="text"
-          value={soin.label}
-          onChange={e => { update('label', e.target.value); setShowLabelSuggestions(true); }}
-          onFocus={() => setShowLabelSuggestions(true)}
-          onBlur={() => setTimeout(() => setShowLabelSuggestions(false), 150)}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-          placeholder="Ex: Pansement post-opératoire, Injection insuline..."
-          autoComplete="off"
-        />
-        {showLabelSuggestions && careLabels.length > 0 && (() => {
-          const query = soin.label.toLowerCase();
-          const filtered = careLabels.filter(l => l.toLowerCase().includes(query));
-          if (filtered.length === 0) return null;
-          if (filtered.length === 1 && filtered[0].toLowerCase() === query) return null;
-          return (
-            <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-              {filtered.map(label => (
-                <li
-                  key={label}
-                  onMouseDown={() => selectLabel(label)}
-                  className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                >
-                  {label}
-                </li>
-              ))}
-            </ul>
-          );
-        })()}
+      {/* Nom du soin + Code NGAP */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="relative">
+          <label className="block text-xs font-medium text-slate-600 mb-1">Nom du soin *</label>
+          <input
+            type="text"
+            value={soin.label}
+            onChange={e => { update('label', e.target.value); setShowLabelSuggestions(true); }}
+            onFocus={() => setShowLabelSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowLabelSuggestions(false), 150)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+            placeholder="Ex: Pansement, Injection..."
+            autoComplete="off"
+          />
+          {showLabelSuggestions && careLabels.length > 0 && (() => {
+            const query = soin.label.toLowerCase();
+            const filtered = careLabels.filter(l => l.toLowerCase().includes(query));
+            if (filtered.length === 0) return null;
+            if (filtered.length === 1 && filtered[0].toLowerCase() === query) return null;
+            return (
+              <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {filtered.map(label => (
+                  <li
+                    key={label}
+                    onMouseDown={() => selectLabel(label)}
+                    className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                  >
+                    {label}
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Code NGAP</label>
+          <select
+            value={(soin.actCodes && soin.actCodes[0]) || ''}
+            onChange={e => update('actCodes', e.target.value ? [e.target.value] : [])}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+          >
+            <option value="">-- Aucun --</option>
+            {ngapCodes.map(act => (
+              <option key={act.id} value={act.code}>{act.code} — {act.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Dates */}
@@ -636,32 +689,32 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
         </div>
       </div>
 
-      {/* Durée du soin */}
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Durée du soin (minutes)</label>
-        <input
-          type="number"
-          min="1"
-          max="480"
-          value={soin.durationMinutes || ''}
-          onChange={e => update('durationMinutes', e.target.value ? Number(e.target.value) : '')}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-          placeholder="Ex: 15, 30, 45..."
-        />
-      </div>
-
-      {/* Fréquence */}
-      <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Fréquence</label>
-        <select
-          value={soin.frequency}
-          onChange={e => update('frequency', e.target.value)}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-        >
-          {FREQUENCY_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+      {/* Durée + Fréquence */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Durée du soin (minutes)</label>
+          <input
+            type="number"
+            min="1"
+            max="480"
+            value={soin.durationMinutes || ''}
+            onChange={e => update('durationMinutes', e.target.value ? Number(e.target.value) : '')}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+            placeholder="Ex: 15, 30, 45..."
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Fréquence</label>
+          <select
+            value={soin.frequency}
+            onChange={e => update('frequency', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+          >
+            {FREQUENCY_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {soin.frequency === 'custom' && (
@@ -1122,7 +1175,7 @@ function SlotSuggestions({ patient, plan, cabinetData, patients, appointments, n
 
 // --- CarePlanForm component ---
 
-function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nurses, appointments, schedule, configs, getActiveConfigForDate, onCreateAppointment, patientId, careLabels = [], careDurations = {}, onEnsureSaved, cabinetData, patients, patientForm }) {
+function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nurses, appointments, schedule, configs, getActiveConfigForDate, onCreateAppointment, patientId, careLabels = [], careDurations = {}, ngapCodes = [], onEnsureSaved, cabinetData, patients, patientForm }) {
   const updateSoin = (index, updatedSoin) => {
     const newSoins = [...plan.soins];
     newSoins[index] = updatedSoin;
@@ -1228,6 +1281,7 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
               canRemove={plan.soins.length > 1}
               careLabels={careLabels}
               careDurations={careDurations}
+              ngapCodes={ngapCodes}
             />
           ))}
         </div>
@@ -1568,6 +1622,11 @@ export default function PrescriptionsTab({
   const [formData, setFormData] = useState(null);
   const [savingPrescription, setSavingPrescription] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [ngapCodes, setNgapCodes] = useState([]);
+
+  useEffect(() => {
+    listCareActCodes().then(setNgapCodes).catch(() => setNgapCodes([]));
+  }, []);
 
   // Sort by earliest soin startDate (descending)
   const sortedPrescriptions = [...prescriptions].sort((a, b) => {
@@ -1737,6 +1796,7 @@ export default function PrescriptionsTab({
           patientId={patientForm.id}
           careLabels={careLabels}
           careDurations={careDurations}
+          ngapCodes={ngapCodes}
           onEnsureSaved={ensurePlanSaved}
           cabinetData={cabinetData}
           patients={patients}
@@ -1766,6 +1826,7 @@ export default function PrescriptionsTab({
                 patientId={patientForm.id}
                 careLabels={careLabels}
                 careDurations={careDurations}
+                ngapCodes={ngapCodes}
                 onEnsureSaved={ensurePlanSaved}
                 cabinetData={cabinetData}
                 patients={patients}

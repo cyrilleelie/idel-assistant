@@ -227,7 +227,7 @@ export default function MaTourneeTab({
                                 <span>{leg.durationText}</span>
                               </div>
                             )}
-                            <div className={`rounded border p-2 text-xs shadow-sm group relative ${sc.card}`}>
+                            <div className={`rounded border p-2 text-base shadow-sm group relative ${sc.card}`}>
                               {confirmDeleteId === rdv.id ? (
                                 <div className="flex flex-col gap-1.5">
                                   <p className="text-slate-600 font-medium">Annuler ce RDV ?</p>
@@ -242,23 +242,29 @@ export default function MaTourneeTab({
                                   <div className={`font-semibold flex flex-col gap-0.5 ${isCanceled ? 'text-slate-400' : 'text-slate-700'}`}>
                                     <div className="flex items-center gap-1.5">
                                       <span className={`shrink-0 font-bold ${isCanceled ? 'text-slate-400 line-through' : 'text-blue-600'}`}>{rdv.startTime} - {rdv.endTime}</span>
-                                      <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded ${sc.badge}`}>{sc.label}</span>
+                                      <span className={`text-[11px] font-semibold uppercase px-1 py-0.5 rounded ${sc.badge}`}>{sc.label}</span>
                                     </div>
                                     <span className={`truncate ${isCanceled ? 'line-through' : ''}`}>{rdv.patient}</span>
                                   </div>
                                   {(() => {
-                                    const protocol = rdv.careProtocolId ? protocolsMap.get(rdv.careProtocolId) : null;
-                                    const soinsLabels = protocol?.soins?.map(s => s.label).filter(Boolean) || [];
+                                    const soinsLabels = rdv.careLabels?.length > 0 ? rdv.careLabels : [];
                                     const isOffice = rdv._apiLocationType === 'office';
                                     const patient = patientsMap.get(rdv.patientId);
                                     const address = isOffice ? cabinetData?.address : patient?.address;
                                     return (
-                                      <div className={`flex flex-col gap-0.5 mt-1 text-[10px] ${isCanceled ? 'text-slate-300' : 'text-slate-400'}`}>
+                                      <div className={`flex flex-col gap-0.5 mt-1 text-sm ${isCanceled ? 'text-slate-300' : 'text-slate-400'}`}>
                                         {soinsLabels.length > 0 && (
                                           <span className="truncate">{soinsLabels.join(', ')}</span>
                                         )}
+                                        {rdv.actCodes?.length > 0 && (
+                                          <div className="flex flex-wrap gap-0.5">
+                                            {rdv.actCodes.map(code => (
+                                              <span key={code} className="text-[11px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium">{code}</span>
+                                            ))}
+                                          </div>
+                                        )}
                                         <div className="flex items-center gap-1">
-                                          {isOffice ? <Building2 size={10} className="shrink-0" /> : <Home size={10} className="shrink-0" />}
+                                          {isOffice ? <Building2 size={12} className="shrink-0" /> : <Home size={12} className="shrink-0" />}
                                           <span className="font-medium">{isOffice ? 'Cabinet' : 'Domicile'}</span>
                                           {address && (
                                             <>

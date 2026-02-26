@@ -19,7 +19,6 @@ class SQLAlchemyInvoiceRepo(InvoiceRepository):
         return InvoiceLine(
             id=model.id,
             invoice_id=model.invoice_id,
-            appointment_id=model.appointment_id,
             line_order=model.line_order,
             act_code=model.act_code,
             act_label=model.act_label,
@@ -41,6 +40,7 @@ class SQLAlchemyInvoiceRepo(InvoiceRepository):
             idel_id=model.idel_id,
             patient_id=model.patient_id,
             prescription_id=model.prescription_id,
+            appointment_id=model.appointment_id,
             invoice_number=model.invoice_number or "",
             invoice_date=model.invoice_date,
             care_date=model.care_date,
@@ -114,6 +114,7 @@ class SQLAlchemyInvoiceRepo(InvoiceRepository):
             idel_id=entity.idel_id,
             patient_id=entity.patient_id,
             prescription_id=entity.prescription_id,
+            appointment_id=entity.appointment_id,
             invoice_number=entity.invoice_number,
             invoice_date=entity.invoice_date,
             care_date=entity.care_date,
@@ -160,6 +161,7 @@ class SQLAlchemyInvoiceRepo(InvoiceRepository):
         model.paid_at = entity.paid_at
         model.metadata_ = entity.metadata
         model.prescription_id = entity.prescription_id
+        model.appointment_id = entity.appointment_id
 
         await self._session.flush()
         return await self.get_by_id(entity.id, entity.cabinet_id)  # type: ignore[return-value]
@@ -217,7 +219,6 @@ class SQLAlchemyInvoiceLineRepo(InvoiceLineRepository):
         return InvoiceLine(
             id=model.id,
             invoice_id=model.invoice_id,
-            appointment_id=model.appointment_id,
             line_order=model.line_order,
             act_code=model.act_code,
             act_label=model.act_label,
@@ -250,7 +251,6 @@ class SQLAlchemyInvoiceLineRepo(InvoiceLineRepository):
         model = InvoiceLineModel(
             id=entity.id,
             invoice_id=entity.invoice_id,
-            appointment_id=entity.appointment_id,
             line_order=entity.line_order,
             act_code=entity.act_code,
             act_label=entity.act_label,
@@ -284,7 +284,6 @@ class SQLAlchemyInvoiceLineRepo(InvoiceLineRepository):
         model.supplements = entity.supplements
         model.supplements_total = entity.supplements_total
         model.line_total = entity.line_total
-        model.appointment_id = entity.appointment_id
 
         await self._session.flush()
         await self._session.refresh(model)

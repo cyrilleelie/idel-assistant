@@ -58,7 +58,6 @@ def snapshot_line_from_catalog(
     invoice_id: UUID,
     quantity: Decimal = Decimal("1"),
     supplements: dict | None = None,
-    appointment_id: UUID | None = None,
     line_order: int = 1,
 ) -> InvoiceLine:
     """Cree une InvoiceLine avec les tarifs figes depuis le catalogue."""
@@ -78,7 +77,6 @@ def snapshot_line_from_catalog(
         base_rate=base_rate,
         quantity=quantity,
         supplements=supplements,
-        appointment_id=appointment_id,
         line_order=line_order,
     )
     line.recalculate()

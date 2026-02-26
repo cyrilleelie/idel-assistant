@@ -1,5 +1,6 @@
 import datetime
 from dataclasses import dataclass, field
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 
@@ -18,6 +19,9 @@ class Appointment:
     status: str = "scheduled"  # scheduled | in_progress | completed | canceled | no_show
     cancellation_reason: str = ""
     canceled_at: datetime.datetime | None = None
+    act_codes: list[str] = field(default_factory=list)
+    care_labels: list[str] = field(default_factory=list)
+    distance_km: Decimal | None = None
     created_by: str = "manual"  # manual | vocal_agent | protocol | import
     id: UUID = field(default_factory=uuid4)
     created_at: datetime.datetime = field(default_factory=lambda: datetime.datetime.now(datetime.UTC))

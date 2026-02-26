@@ -18,6 +18,7 @@ class CareProtocolCreate(BaseModel):
     end_date: datetime.date | None = None
     preferred_time: datetime.time | None = None
     preferred_slot: str = Field(default="", pattern=r"^(morning|afternoon|evening|)$")
+    act_codes: list[str] = Field(default_factory=list)
     notes: str = Field(default="", max_length=5000)
     idel_id: UUID | None = None
 
@@ -33,6 +34,7 @@ class CareProtocolUpdate(BaseModel):
     end_date: datetime.date | None = None
     preferred_time: datetime.time | None = None
     preferred_slot: str | None = Field(default=None, pattern=r"^(morning|afternoon|evening|)$")
+    act_codes: list[str] | None = None
     notes: str | None = Field(default=None, max_length=5000)
     status: str | None = Field(default=None, pattern=r"^(active|paused|completed)$")
 
@@ -52,6 +54,7 @@ class CareProtocolResponse(BaseModel):
     preferred_time: datetime.time | None = None
     preferred_slot: str = ""
     status: str
+    act_codes: list[str] = []
     notes: str = ""
     created_at: datetime.datetime
     updated_at: datetime.datetime

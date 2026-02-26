@@ -45,6 +45,7 @@ class SQLAlchemyCareProtocolRepo(CareProtocolRepository):
             preferred_time=model.preferred_time,
             preferred_slot=model.preferred_slot or "",
             status=model.status,
+            act_codes=list(model.act_codes) if model.act_codes else [],
             notes=self._decrypt_field(model.notes_encrypted, model.cabinet_id),
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -119,6 +120,7 @@ class SQLAlchemyCareProtocolRepo(CareProtocolRepository):
             end_date=protocol.end_date,
             preferred_time=protocol.preferred_time,
             preferred_slot=protocol.preferred_slot,
+            act_codes=protocol.act_codes or None,
             status=protocol.status,
             notes_encrypted=(
                 self._encrypt_field(protocol.notes, protocol.cabinet_id)
@@ -150,6 +152,7 @@ class SQLAlchemyCareProtocolRepo(CareProtocolRepository):
         model.end_date = protocol.end_date
         model.preferred_time = protocol.preferred_time
         model.preferred_slot = protocol.preferred_slot
+        model.act_codes = protocol.act_codes or None
         model.status = protocol.status
         model.notes_encrypted = (
             self._encrypt_field(protocol.notes, protocol.cabinet_id)

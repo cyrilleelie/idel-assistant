@@ -1,5 +1,6 @@
 """DTOs pour le moteur de cotation automatique NGAP."""
 
+import datetime
 from dataclasses import dataclass, field
 from decimal import Decimal
 from uuid import UUID
@@ -37,3 +38,25 @@ class CotationResultDTO:
     repartition_patient: Decimal
     auto_corrections: list[str]
     explications: list[str]
+
+
+@dataclass
+class DailyBillingItemDTO:
+    appointment_id: UUID
+    patient_id: UUID
+    patient_name: str
+    idel_id: UUID
+    scheduled_at: datetime.datetime
+    care_type: str
+    act_codes: list[str]
+    status: str
+    invoice_id: UUID | None
+    invoice_status: str | None
+
+
+@dataclass
+class DailyBillingResponseDTO:
+    date: datetime.date
+    items: list[DailyBillingItemDTO]
+    total_facture: int
+    total_non_facture: int

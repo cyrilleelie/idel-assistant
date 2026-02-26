@@ -55,7 +55,6 @@ def _line_dto_to_response(dto) -> InvoiceLineResponse:
     return InvoiceLineResponse(
         id=str(dto.id),
         invoice_id=str(dto.invoice_id),
-        appointment_id=str(dto.appointment_id) if dto.appointment_id else None,
         line_order=dto.line_order,
         act_code=dto.act_code,
         act_label=dto.act_label,
@@ -77,6 +76,7 @@ def _dto_to_response(dto) -> InvoiceResponse:
         idel_id=str(dto.idel_id),
         patient_id=str(dto.patient_id),
         prescription_id=str(dto.prescription_id) if dto.prescription_id else None,
+        appointment_id=str(dto.appointment_id) if dto.appointment_id else None,
         invoice_number=dto.invoice_number,
         invoice_date=dto.invoice_date,
         care_date=dto.care_date,
@@ -306,7 +306,6 @@ async def add_invoice_line(
         act_code=body.act_code,
         quantity=body.quantity,
         supplements=body.supplements,
-        appointment_id=body.appointment_id,
     )
 
     use_case = AddInvoiceLineUseCase(invoice_repo, line_repo, catalog_repo)

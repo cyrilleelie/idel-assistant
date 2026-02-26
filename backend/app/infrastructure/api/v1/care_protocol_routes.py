@@ -44,6 +44,7 @@ def _entity_to_response(protocol: CareProtocol) -> CareProtocolResponse:
         preferred_time=protocol.preferred_time,
         preferred_slot=protocol.preferred_slot,
         status=protocol.status,
+        act_codes=protocol.act_codes,
         notes=protocol.notes,
         created_at=protocol.created_at,
         updated_at=protocol.updated_at,
@@ -111,6 +112,7 @@ async def create_care_protocol(
         end_date=body.end_date,
         preferred_time=body.preferred_time,
         preferred_slot=body.preferred_slot,
+        act_codes=body.act_codes,
         notes=body.notes,
     )
     protocol = await protocol_repo.create(protocol)
@@ -156,7 +158,7 @@ async def list_care_protocols(
 CARE_PROTOCOL_UPDATABLE_FIELDS = frozenset({
     "care_type", "label", "frequency_display", "custom_frequency",
     "duration_minutes", "recurrence_rule", "start_date", "end_date",
-    "preferred_time", "preferred_slot", "notes", "status",
+    "preferred_time", "preferred_slot", "act_codes", "notes", "status",
 })
 
 

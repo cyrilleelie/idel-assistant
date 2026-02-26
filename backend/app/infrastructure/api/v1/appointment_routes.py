@@ -27,7 +27,8 @@ from app.infrastructure.persistence.repositories import (
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
 APPOINTMENT_UPDATABLE_FIELDS = frozenset({
-    "scheduled_at", "duration_minutes", "care_type", "care_protocol_id", "location_type", "status",
+    "scheduled_at", "duration_minutes", "care_type", "care_protocol_id",
+    "location_type", "act_codes", "care_labels", "distance_km", "status",
 })
 
 
@@ -44,6 +45,9 @@ def _entity_to_response(appt: Appointment) -> AppointmentResponse:
         time_window_start=appt.time_window_start,
         time_window_end=appt.time_window_end,
         care_protocol_id=str(appt.care_protocol_id) if appt.care_protocol_id else None,
+        act_codes=appt.act_codes,
+        care_labels=appt.care_labels,
+        distance_km=appt.distance_km,
         status=appt.status,
         cancellation_reason=appt.cancellation_reason,
         canceled_at=appt.canceled_at,
@@ -141,6 +145,9 @@ async def create_appointment(
         time_window_start=body.time_window_start,
         time_window_end=body.time_window_end,
         care_protocol_id=body.care_protocol_id,
+        act_codes=body.act_codes,
+        care_labels=body.care_labels,
+        distance_km=body.distance_km,
     )
     appointment = await repo.create(appointment)
     return _entity_to_response(appointment)

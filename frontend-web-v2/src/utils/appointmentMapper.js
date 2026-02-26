@@ -40,6 +40,9 @@ export function apptApiToFrontend(appt, patientsMap) {
     patient: patientName,
     status: appt.status || 'scheduled',
     careProtocolId: appt.care_protocol_id || null,
+    actCodes: appt.act_codes || [],
+    careLabels: appt.care_labels || [],
+    distanceKm: appt.distance_km != null ? parseFloat(appt.distance_km) : null,
     slotId: null, // assigned separately via assignSlotIds
     // Preserve backend-only fields
     _apiCareType: appt.care_type || 'soins_infirmiers',
@@ -76,7 +79,7 @@ export function assignSlotIds(appts, getActiveConfigForDate) {
  * Convert frontend RDV update data to backend AppointmentUpdate payload.
  * @param {object} params - { dateStr, startTime, endTime }
  */
-export function frontendToApiUpdate({ dateStr, startTime, endTime, careProtocolId, locationType, status }) {
+export function frontendToApiUpdate({ dateStr, startTime, endTime, careProtocolId, locationType, status, actCodes, careLabels, distanceKm }) {
   const scheduled_at = `${dateStr}T${startTime}:00`;
   const duration_minutes = timeToMinutes(endTime) - timeToMinutes(startTime);
   const payload = {
@@ -86,6 +89,9 @@ export function frontendToApiUpdate({ dateStr, startTime, endTime, careProtocolI
     location_type: locationType || 'home',
   };
   if (status) payload.status = status;
+  if (actCodes !== undefined) payload.act_codes = actCodes;
+  if (careLabels !== undefined) payload.care_labels = careLabels;
+  if (distanceKm !== undefined) payload.distance_km = distanceKm;
   return payload;
 }
 
@@ -93,7 +99,7 @@ export function frontendToApiUpdate({ dateStr, startTime, endTime, careProtocolI
  * Convert frontend RDV creation data to backend AppointmentCreate payload.
  * @param {object} params - { dateStr, startTime, endTime, nurseId, patientId }
  */
-export function frontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId, locationType }) {
+export function frontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId, locationType, actCodes, careLabels, distanceKm }) {
   const scheduled_at = `${dateStr}T${startTime}:00`;
   const duration_minutes = timeToMinutes(endTime) - timeToMinutes(startTime);
   const payload = {
@@ -106,6 +112,15 @@ export function frontendToApiCreate({ dateStr, startTime, endTime, nurseId, pati
   };
   if (careProtocolId) {
     payload.care_protocol_id = careProtocolId;
+  }
+  if (actCodes && actCodes.length) {
+    payload.act_codes = actCodes;
+  }
+  if (careLabels && careLabels.length) {
+    payload.care_labels = careLabels;
+  }
+  if (distanceKm != null) {
+    payload.distance_km = distanceKm;
   }
   return payload;
 }

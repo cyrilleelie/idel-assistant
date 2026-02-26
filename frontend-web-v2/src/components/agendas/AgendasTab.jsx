@@ -283,9 +283,21 @@ function NurseAgenda({ nurse, displayDays, schedule, appointments, getActiveConf
                                   ) : (
                                     <>
                                       <div className={`font-semibold flex flex-col gap-0.5 ${isCanceled ? 'text-slate-400' : 'text-slate-700'}`}>
-                                        <span className={`shrink-0 font-bold ${isCanceled ? 'text-slate-400 line-through' : 'text-blue-600'}`}>{rdv.startTime} - {rdv.endTime}</span>
-                                        <span className={`truncate ${isCanceled ? 'line-through' : ''}`}>{rdv.patient}</span>
-                                        <span className={`text-[9px] font-semibold uppercase px-1 py-0.5 rounded self-start ${sc.badge}`}>{sc.label}</span>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className={`shrink-0 font-bold text-base ${isCanceled ? 'text-slate-400 line-through' : 'text-blue-600'}`}>{rdv.startTime} - {rdv.endTime}</span>
+                                          <span className={`text-[11px] font-semibold uppercase px-1 py-0.5 rounded ${sc.badge}`}>{sc.label}</span>
+                                        </div>
+                                        <span className={`text-base truncate ${isCanceled ? 'line-through' : ''}`}>{rdv.patient}</span>
+                                        {rdv.careLabels?.length > 0 && (
+                                          <span className={`text-xs truncate ${isCanceled ? 'text-slate-300' : 'text-slate-400'}`}>{rdv.careLabels.join(', ')}</span>
+                                        )}
+                                        {rdv.actCodes?.length > 0 && (
+                                          <div className="flex flex-wrap gap-0.5 mt-0.5">
+                                            {rdv.actCodes.map(code => (
+                                              <span key={code} className="text-[11px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium">{code}</span>
+                                            ))}
+                                          </div>
+                                        )}
                                       </div>
                                       {!isCanceled && (
                                         <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">

@@ -18,6 +18,7 @@ class CareProtocol:
     preferred_slot: str = ""  # morning | afternoon | evening
     end_date: datetime.date | None = None
     status: str = "active"  # active | paused | completed
+    act_codes: list[str] = field(default_factory=list)
     notes: str = ""
     id: UUID = field(default_factory=uuid4)
     created_at: datetime.datetime = field(default_factory=lambda: datetime.datetime.now(datetime.UTC))

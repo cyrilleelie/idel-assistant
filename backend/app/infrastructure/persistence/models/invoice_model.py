@@ -26,6 +26,7 @@ class InvoiceModel(Base):
     validated_at = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     transmitted_at = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     paid_at = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    appointment_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True, index=True)
     metadata_ = mapped_column("metadata", JSONB, nullable=True)
     created_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
@@ -51,7 +52,6 @@ class InvoiceLineModel(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     invoice_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False)
-    appointment_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     line_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     act_code: Mapped[str] = mapped_column(String(30), nullable=False)
     act_label: Mapped[str] = mapped_column(String(200), nullable=False, server_default="")

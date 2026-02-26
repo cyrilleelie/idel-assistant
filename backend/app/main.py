@@ -10,6 +10,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.infrastructure.api.middleware import AuditMiddleware
 from app.infrastructure.api.v1 import (
+    admin_routes,
     appointment_routes,
     auth_routes,
     cabinet_member_routes,
@@ -104,6 +105,7 @@ app.include_router(care_catalog_routes.tariff_router, prefix="/api/v1")
 app.include_router(invoice_routes.router, prefix="/api/v1")
 app.include_router(cotation_routes.router, prefix="/api/v1")
 app.include_router(schedule_assignment_routes.router, prefix="/api/v1")
+app.include_router(admin_routes.router, prefix="/api/v1")
 
 
 @app.get("/health")

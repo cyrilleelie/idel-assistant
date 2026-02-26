@@ -42,6 +42,7 @@ def generate_appointments_from_protocol(
             duration_minutes=protocol.duration_minutes,
             care_type=protocol.care_type,
             care_protocol_id=protocol.id,
+            act_codes=list(protocol.act_codes),
             status="scheduled",
             created_by="protocol",
         )

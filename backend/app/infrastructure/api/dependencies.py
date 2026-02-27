@@ -23,6 +23,7 @@ from app.infrastructure.persistence.repositories import (
     SQLAlchemyInvoiceRepo,
     SQLAlchemyPatientRepo,
     SQLAlchemyPrescriptionRepo,
+    SQLAlchemyRppsDoctorRepo,
     SQLAlchemyScheduleAssignmentRepo,
     SQLAlchemySectorRepo,
     SQLAlchemyTariffUpdateRepo,
@@ -244,6 +245,12 @@ def get_prescription_repository(
     db: AsyncSession = Depends(get_db),
 ) -> SQLAlchemyPrescriptionRepo:
     return SQLAlchemyPrescriptionRepo(db)
+
+
+def get_rpps_doctor_repo(
+    db: AsyncSession = Depends(get_db),
+) -> SQLAlchemyRppsDoctorRepo:
+    return SQLAlchemyRppsDoctorRepo(db)
 
 
 def get_routing_service() -> FakeRoutingService:

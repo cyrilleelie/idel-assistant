@@ -3,6 +3,7 @@ import { Plus, X, File, FileUp, FileText, AlertCircle, Check, Loader2 } from 'lu
 import { createPrescription, updatePrescription, uploadPrescriptionDocument } from '../../api/prescriptions';
 import { listCareActCodes } from '../../api/cotation';
 import { listCareLabels } from '../../api/care-labels';
+import DoctorAutocomplete from '../common/DoctorAutocomplete';
 
 const FREQUENCY_OPTIONS = [
   { value: 'daily', label: '1x / jour' },
@@ -34,6 +35,7 @@ export default function PrescriptionForm({
   patientId,
   careProtocolId = null,
   prescription = null,
+  patientDoctor = null,  // { name: string, rpps_number: string } — médecin traitant du patient
   onSave,
   onCancel,
 }) {
@@ -48,8 +50,8 @@ export default function PrescriptionForm({
     frequency_display: prescription?.frequency_display ?? 'daily',
     custom_frequency: prescription?.custom_frequency ?? '',
     act_codes: prescription?.act_codes ?? [],
-    prescriber_name: prescription?.prescriber_name ?? '',
-    prescriber_rpps: prescription?.prescriber_rpps ?? '',
+    prescriber_name: prescription?.prescriber_name ?? (!isEdit && patientDoctor?.name ? patientDoctor.name : ''),
+    prescriber_rpps: prescription?.prescriber_rpps ?? (!isEdit && patientDoctor?.rpps_number ? patientDoctor.rpps_number : ''),
     prescription_date: prescription?.prescription_date ?? '',
     care_description: prescription?.care_description ?? '',
     notes: prescription?.notes ?? '',
@@ -127,7 +129,7 @@ export default function PrescriptionForm({
     setForm(f => ({ ...f, document_filename: null, document_url: null, document_type: null }));
   };
 
-  const isValid = form.label.trim() && form.start_date && form.end_date;
+  const isValid = form.label.trim() && form.start_date;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -318,11 +320,11 @@ export default function PrescriptionForm({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Médecin prescripteur</label>
-            <input
-              type="text"
-              value={form.prescriber_name || ''}
-              onChange={e => update('prescriber_name', e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+            <DoctorAutocomplete
+              value={{ name: form.prescriber_name || '', rpps_number: form.prescriber_rpps || null }}
+              onChange={({ name, rpps_number }) =>
+                setForm(f => ({ ...f, prescriber_name: name, prescriber_rpps: rpps_number || '' }))
+              }
               placeholder="Dr Dupont (optionnel)"
             />
           </div>

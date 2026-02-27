@@ -23,6 +23,7 @@ class PatientModel(Base):
     ssn_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     ssn_search_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     doctor_name_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    doctor_rpps_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     doctor_contact_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
     # Hash pour recherche par nom

@@ -19,6 +19,7 @@ class PatientCreate(BaseModel):
     notes: str = Field(default="", max_length=5000)
     ssn: str = Field(default="", max_length=15)
     doctor_name: str = Field(default="", max_length=200)
+    doctor_rpps: str = Field(default="", max_length=11)
     doctor_contact: str = Field(default="", max_length=200)
     sector_id: UUID | None = None
     postal_code: str = Field(default="", max_length=10)
@@ -38,6 +39,7 @@ class PatientUpdate(BaseModel):
     notes: str | None = Field(default=None, max_length=5000)
     ssn: str | None = Field(default=None, max_length=15)
     doctor_name: str | None = Field(default=None, max_length=200)
+    doctor_rpps: str | None = Field(default=None, max_length=11)
     doctor_contact: str | None = Field(default=None, max_length=200)
     sector_id: UUID | None = None
     postal_code: str | None = Field(default=None, max_length=10)
@@ -64,6 +66,7 @@ class PatientResponse(BaseModel):
     notes: str = ""
     ssn: str = ""
     doctor_name: str = ""
+    doctor_rpps: str = ""
     doctor_contact: str = ""
     status: str = "active"
     created_at: datetime.datetime

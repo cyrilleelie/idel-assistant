@@ -68,6 +68,7 @@ class SQLAlchemyPatientRepo(PatientRepository):
             notes=self._decrypt_field(model.notes_encrypted, cabinet_id),
             ssn=self._decrypt_field(model.ssn_encrypted, cabinet_id),
             doctor_name=self._decrypt_field(model.doctor_name_encrypted, cabinet_id),
+            doctor_rpps=self._decrypt_field(model.doctor_rpps_encrypted, cabinet_id),
             doctor_contact=self._decrypt_field(model.doctor_contact_encrypted, cabinet_id),
             is_ald=model.is_ald,
             is_maternity=model.is_maternity,
@@ -139,6 +140,9 @@ class SQLAlchemyPatientRepo(PatientRepository):
         )
         data["doctor_name_encrypted"] = (
             self._encrypt_field(patient.doctor_name, cid) if patient.doctor_name else None
+        )
+        data["doctor_rpps_encrypted"] = (
+            self._encrypt_field(patient.doctor_rpps, cid) if patient.doctor_rpps else None
         )
         data["doctor_contact_encrypted"] = (
             self._encrypt_field(patient.doctor_contact, cid) if patient.doctor_contact else None

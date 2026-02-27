@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { getDistanceMatrix } from '../../utils/geocode';
 import { listCareActCodes } from '../../api/cotation';
+import DoctorAutocomplete from '../common/DoctorAutocomplete';
 
 const isActiveAppt = (a) => a.status === 'scheduled' || a.status === 'completed';
 
@@ -621,21 +622,18 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
   };
 
   const handleFiles = (files) => {
-    // Un seul fichier par ordonnance (le dernier sélectionné)
+    // Un seul fichier par ordonnance — un seul onChange pour éviter les écrasements
     const file = Array.from(files)[0];
     if (!file) return;
-    update('_pendingFile', file);
-    update('_pendingFileName', file.name);
-    update('_pendingFileSize', file.size);
+    onChange({ ...soin, _pendingFile: file, _pendingFileName: file.name, _pendingFileSize: file.size });
   };
 
   const removeDoc = () => {
-    update('_pendingFile', null);
-    update('_pendingFileName', null);
-    update('_pendingFileSize', null);
-    update('document_filename', null);
-    update('document_url', null);
-    update('document_type', null);
+    onChange({
+      ...soin,
+      _pendingFile: null, _pendingFileName: null, _pendingFileSize: null,
+      document_filename: null, document_url: null, document_type: null,
+    });
   };
 
   const handleDrop = (e) => {
@@ -785,11 +783,11 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Médecin prescripteur</label>
-          <input
-            type="text"
-            value={soin.prescriber_name || ''}
-            onChange={e => update('prescriber_name', e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+          <DoctorAutocomplete
+            value={{ name: soin.prescriber_name || '', rpps_number: soin.prescriber_rpps || null }}
+            onChange={({ name, rpps_number }) =>
+              onChange({ ...soin, prescriber_name: name, prescriber_rpps: rpps_number || '' })
+            }
             placeholder="Dr Dupont (optionnel)"
           />
         </div>
@@ -1282,7 +1280,12 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
 
   const addSoin = () => {
     if (plan.soins.length >= 5) return;
-    onChange({ ...plan, soins: [...plan.soins, emptySoin()] });
+    const soin = {
+      ...emptySoin(),
+      prescriber_name: patientForm?.doctorName || '',
+      prescriber_rpps: patientForm?.doctorRpps || '',
+    };
+    onChange({ ...plan, soins: [...plan.soins, soin] });
   };
 
   const updateSchedule = (field, value) => {
@@ -1750,7 +1753,16 @@ export default function PrescriptionsTab({
     if (!isEditingPatient && setIsEditingPatient) {
       setIsEditingPatient(true);
     }
-    setFormData(emptyCarePlan());
+    const plan = emptyCarePlan();
+    // Pré-remplir le prescripteur avec le médecin traitant du patient
+    if (patientForm?.doctorName || patientForm?.doctorRpps) {
+      plan.soins = plan.soins.map(s => ({
+        ...s,
+        prescriber_name: patientForm.doctorName || '',
+        prescriber_rpps: patientForm.doctorRpps || '',
+      }));
+    }
+    setFormData(plan);
     setFormMode('add');
   };
 

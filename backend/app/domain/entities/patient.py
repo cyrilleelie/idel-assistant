@@ -22,6 +22,7 @@ class Patient:
     care_duration_default: int = 30
     ssn: str = ""               # N° Securite Sociale
     doctor_name: str = ""       # Medecin traitant
+    doctor_rpps: str = ""       # Numéro RPPS du médecin traitant (11 chiffres)
     doctor_contact: str = ""    # Contact medecin
     notes: str = ""
     is_ald: bool = False

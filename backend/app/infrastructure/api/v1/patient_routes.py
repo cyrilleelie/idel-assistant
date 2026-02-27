@@ -42,6 +42,7 @@ def _entity_to_response(patient: Patient) -> PatientResponse:
         notes=patient.notes,
         ssn=patient.ssn,
         doctor_name=patient.doctor_name,
+        doctor_rpps=patient.doctor_rpps,
         doctor_contact=patient.doctor_contact,
         status=patient.status,
         created_at=patient.created_at,
@@ -110,6 +111,7 @@ async def create_patient(
         notes=body.notes,
         ssn=body.ssn,
         doctor_name=body.doctor_name,
+        doctor_rpps=body.doctor_rpps,
         doctor_contact=body.doctor_contact,
         sector_id=body.sector_id,
         postal_code=body.postal_code,
@@ -142,7 +144,7 @@ async def get_patient(
 PATIENT_UPDATABLE_FIELDS = frozenset({
     "first_name", "last_name", "birth_date", "address", "phone",
     "email", "pathologies", "preferred_time_slot", "care_duration_default", "notes",
-    "ssn", "doctor_name", "doctor_contact",
+    "ssn", "doctor_name", "doctor_rpps", "doctor_contact",
     "sector_id", "postal_code", "city", "status",
 })
 

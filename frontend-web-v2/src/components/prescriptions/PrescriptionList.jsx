@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { FileText, RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { FileText, RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle, Pencil } from 'lucide-react';
 import { listPrescriptions, renewPrescription } from '../../api/prescriptions';
 import PrescriptionDetail from './PrescriptionDetail';
+import PrescriptionForm from './PrescriptionForm';
 
 function formatDateFr(dateStr) {
   if (!dateStr) return '-';
@@ -54,13 +55,15 @@ function StatusBadge({ status, daysRemaining }) {
  *
  * Props:
  *   - patientId: UUID (obligatoire)
+ *   - patientDoctor: { name, rpps_number } (optionnel) — médecin traitant pour pré-remplissage
  */
-export default function PrescriptionList({ patientId }) {
+export default function PrescriptionList({ patientId, patientDoctor = null }) {
   const [prescriptions, setPrescriptions] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [editingPrescription, setEditingPrescription] = useState(null);
   const [renewingId, setRenewingId] = useState(null);
 
   const load = async () => {
@@ -97,6 +100,17 @@ export default function PrescriptionList({ patientId }) {
       setRenewingId(null);
     }
   };
+
+  if (editingPrescription) {
+    return (
+      <PrescriptionForm
+        patientId={editingPrescription.patient_id}
+        prescription={editingPrescription}
+        onSave={() => { setEditingPrescription(null); load(); }}
+        onCancel={() => setEditingPrescription(null)}
+      />
+    );
+  }
 
   if (selectedId) {
     return (
@@ -195,13 +209,21 @@ export default function PrescriptionList({ patientId }) {
                     </p>
                   )}
                 </div>
-                <div className="flex flex-col gap-2 shrink-0">
+                <div className="flex flex-col gap-2 shrink-0 items-end">
                   <button
                     onClick={() => setSelectedId(p.id)}
                     className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
                   >
                     Voir
                   </button>
+                  {p.status !== 'canceled' && (
+                    <button
+                      onClick={() => setEditingPrescription(p)}
+                      className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"
+                    >
+                      <Pencil className="w-3 h-3" /> Modifier
+                    </button>
+                  )}
                   {(p.status === 'expiring' || p.status === 'expired') && p.max_renewals > 0 && (
                     <button
                       onClick={() => handleRenew(p)}

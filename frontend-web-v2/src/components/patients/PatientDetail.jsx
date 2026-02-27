@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import PrescriptionsTab from './PrescriptionsTab';
 import PrescriptionList from '../prescriptions/PrescriptionList';
+import DoctorAutocomplete from '../common/DoctorAutocomplete';
 
 export default function PatientDetail({
   selectedPatientId, patientForm, setPatientForm,
@@ -130,7 +131,20 @@ export default function PatientDetail({
                 <h4 className="font-medium text-sm text-slate-700 flex items-center gap-2"><Stethoscope size={16} className="text-blue-600"/> Médecin Traitant</h4>
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Nom du médecin</label>
-                  {isEditingPatient ? <input type="text" value={patientForm.doctorName} onChange={e => setPatientForm({...patientForm, doctorName: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white" placeholder="Dr. ..." /> : <div className="text-sm font-medium">{patientForm.doctorName || '-'}</div>}
+                  {isEditingPatient ? (
+                    <DoctorAutocomplete
+                      value={{ name: patientForm.doctorName, rpps_number: patientForm.doctorRpps || null }}
+                      onChange={({ name, rpps_number }) => setPatientForm({ ...patientForm, doctorName: name, doctorRpps: rpps_number || '' })}
+                      placeholder="Dr. ..."
+                    />
+                  ) : (
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      {patientForm.doctorName || '-'}
+                      {patientForm.doctorRpps && (
+                        <span className="text-xs bg-emerald-100 text-emerald-700 font-semibold px-1.5 py-0.5 rounded border border-emerald-200">RPPS</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Contact cabinet</label>
@@ -194,7 +208,10 @@ export default function PatientDetail({
 
         {/* ORDONNANCES TAB */}
         {patientSubTab === 'ordonnances' && patientForm.id && (
-          <PrescriptionList patientId={patientForm.id} />
+          <PrescriptionList
+            patientId={patientForm.id}
+            patientDoctor={patientForm.doctorName ? { name: patientForm.doctorName, rpps_number: patientForm.doctorRpps || null } : null}
+          />
         )}
 
       </div>

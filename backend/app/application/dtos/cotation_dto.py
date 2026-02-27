@@ -54,9 +54,10 @@ class DailyBillingItemDTO:
     invoice_status: str | None
     # Champs ordonnance (ajoutés iter 4)
     prescription_id: UUID | None = None
-    prescription_status: str | None = None   # "active" | "expiring" | "expired" | None
-    prescription_missing: bool = False        # True si le CareProtocol n'a pas d'ordonnance
-    prescription_warning: str | None = None  # Message d'alerte si problème
+    prescription_status: str | None = None    # "active" | "expiring" | "expired" | None
+    prescription_missing: bool = False         # True si le CareProtocol n'a pas d'ordonnance
+    prescription_incomplete: bool = False      # True si ordonnance trouvée mais incomplète (pas de document / champ manquant)
+    prescription_warning: str | None = None   # Message d'alerte si problème
 
 
 @dataclass

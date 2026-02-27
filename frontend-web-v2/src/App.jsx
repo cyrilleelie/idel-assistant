@@ -205,6 +205,11 @@ export default function App() {
   const [patientForm, setPatientForm] = useState({});
   const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
 
+  // Réinitialise la sélection patient à chaque changement d'écran
+  useEffect(() => {
+    setSelectedPatientId(null);
+  }, [activeScreen]);
+
   // --- PRESCRIPTIONS (Care Protocols + ordonnances liées) ---
   const loadPrescriptionsForPatient = useCallback(async (patientId) => {
     setPrescriptionsLoading(true);

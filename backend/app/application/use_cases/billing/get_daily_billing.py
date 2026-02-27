@@ -10,7 +10,7 @@ from app.application.dtos.cotation_dto import DailyBillingItemDTO, DailyBillingR
 from app.domain.repositories.appointment_repository import AppointmentRepository
 from app.domain.repositories.invoice_repository import InvoiceRepository
 from app.domain.repositories.patient_repository import PatientRepository
-from app.domain.rules.prescription_rules import compute_prescription_status
+from app.domain.rules.prescription_rules import compute_prescription_status, is_prescription_complete_for_billing
 
 
 class GetDailyBillingUseCase:
@@ -87,31 +87,41 @@ class GetDailyBillingUseCase:
             else:
                 total_non_facture += 1
 
-            # Infos ordonnance : prend la première ordonnance active du plan
+            # Infos ordonnance : prend la première ordonnance active et complète du plan
             prescription_id = None
             prescription_status = None
             prescription_missing = False
+            prescription_incomplete = False
             prescription_warning = None
 
             if appt.care_protocol_id and self._session:
                 prescriptions = prescriptions_by_protocol.get(appt.care_protocol_id, [])
                 if not prescriptions:
                     prescription_missing = True
-                    prescription_warning = "Pas d'ordonnance rattachée"
+                    prescription_warning = "Pas d'ordonnance rattachée au plan de soins"
                 else:
-                    # Prend la première ordonnance valide pour la date
+                    # Prend la première ordonnance valide ET complète pour la date
                     for prescription in prescriptions:
                         effective_status = compute_prescription_status(prescription, date)
-                        if effective_status not in ("expired", "canceled", "completed"):
-                            prescription_id = prescription.id
-                            prescription_status = effective_status
-                            if effective_status == "expiring" and prescription.end_date:
-                                days_left = (prescription.end_date - date).days
-                                prescription_warning = f"Ordonnance expire dans {days_left} jour(s)"
-                            elif effective_status == "expired":
-                                prescription_warning = "Ordonnance expirée — renouvellement nécessaire"
-                            break
-                    if prescription_id is None:
+                        if effective_status in ("expired", "canceled", "completed"):
+                            prescription_warning = "Ordonnance expirée — renouvellement nécessaire"
+                            continue
+                        # Ordonnance valide côté dates — vérifier la complétude
+                        complete, incomplete_reason = is_prescription_complete_for_billing(prescription)
+                        if not complete:
+                            prescription_incomplete = True
+                            prescription_warning = incomplete_reason
+                            continue
+                        # Ordonnance valide et complète
+                        prescription_id = prescription.id
+                        prescription_status = effective_status
+                        prescription_incomplete = False
+                        prescription_warning = None
+                        if effective_status == "expiring" and prescription.end_date:
+                            days_left = (prescription.end_date - date).days
+                            prescription_warning = f"Ordonnance expire dans {days_left} jour(s)"
+                        break
+                    if prescription_id is None and not prescription_missing and not prescription_incomplete:
                         prescription_warning = "Ordonnance expirée — renouvellement nécessaire"
 
             items.append(DailyBillingItemDTO(
@@ -128,6 +138,7 @@ class GetDailyBillingUseCase:
                 prescription_id=prescription_id,
                 prescription_status=prescription_status,
                 prescription_missing=prescription_missing,
+                prescription_incomplete=prescription_incomplete,
                 prescription_warning=prescription_warning,
             ))
 
@@ -171,6 +182,8 @@ class GetDailyBillingUseCase:
                 end_date=presc_model.end_date,
                 care_description=presc_model.care_description,
                 status=presc_model.status,
+                document_filename=presc_model.document_filename,
+                document_url=presc_model.document_url,
             )
             if protocol_id not in mapping:
                 mapping[protocol_id] = []

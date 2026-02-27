@@ -13,7 +13,7 @@ from app.domain.repositories.appointment_repository import AppointmentRepository
 from app.domain.repositories.care_type_catalog_repository import CareTypeCatalogRepository
 from app.domain.repositories.invoice_repository import InvoiceLineRepository, InvoiceRepository
 from app.domain.repositories.patient_repository import PatientRepository
-from app.domain.rules.prescription_rules import can_bill_against_prescription, compute_prescription_status
+from app.domain.rules.prescription_rules import can_bill_against_prescription, compute_prescription_status, is_prescription_complete_for_billing
 from app.domain.value_objects.invoice_number import generate_next_invoice_number
 
 
@@ -86,10 +86,8 @@ class CreateInvoiceFromAppointmentUseCase:
         seq = await self._invoice_repo.get_next_sequence(cabinet_id, today.year, today.month)
         invoice_number = generate_next_invoice_number(cabinet_id, today.year, today.month, seq)
 
-        # 4b. Cherche la première ordonnance valide liée au plan de soins du RDV
-        # Nouvelle logique : Prescription.care_protocol_id (au lieu de CareProtocol.prescription_id)
+        # 4b. Cherche la première ordonnance valide et complète liée au plan de soins du RDV
         prescription_id = None
-        prescription_warning = None
         if appt.care_protocol_id and self._session:
             from sqlalchemy import select
             from app.infrastructure.persistence.models.prescription_model import PrescriptionModel
@@ -106,30 +104,46 @@ class CreateInvoiceFromAppointmentUseCase:
             prescriptions = result.scalars().all()
 
             if not prescriptions:
-                prescription_warning = "Aucune ordonnance active rattachée au plan de soins"
-            else:
-                care_date = appt.scheduled_at.date()
-                for presc_model in prescriptions:
-                    presc_entity = PrescriptionEntity(
-                        id=presc_model.id,
-                        cabinet_id=presc_model.cabinet_id,
-                        patient_id=presc_model.patient_id,
-                        prescriber_name=presc_model.prescriber_name,
-                        prescription_date=presc_model.prescription_date,
-                        start_date=presc_model.start_date,
-                        end_date=presc_model.end_date,
-                        care_description=presc_model.care_description,
-                        status=presc_model.status,
-                    )
-                    ok, reason = can_bill_against_prescription(presc_entity, care_date)
-                    if ok:
-                        prescription_id = presc_model.id
-                        break
-                    else:
-                        prescription_warning = reason
+                raise ValueError(
+                    "Facturation impossible : aucune ordonnance active n'est rattachée au plan de soins"
+                )
+
+            care_date = appt.scheduled_at.date()
+            found_valid = False
+            last_reason: str | None = None
+            for presc_model in prescriptions:
+                presc_entity = PrescriptionEntity(
+                    id=presc_model.id,
+                    cabinet_id=presc_model.cabinet_id,
+                    patient_id=presc_model.patient_id,
+                    prescriber_name=presc_model.prescriber_name,
+                    prescription_date=presc_model.prescription_date,
+                    start_date=presc_model.start_date,
+                    end_date=presc_model.end_date,
+                    care_description=presc_model.care_description,
+                    status=presc_model.status,
+                    document_filename=presc_model.document_filename,
+                    document_url=presc_model.document_url,
+                )
+                ok, reason = can_bill_against_prescription(presc_entity, care_date)
+                if not ok:
+                    last_reason = reason
+                    continue
+                complete, incomplete_reason = is_prescription_complete_for_billing(presc_entity)
+                if not complete:
+                    last_reason = incomplete_reason
+                    continue
+                prescription_id = presc_model.id
+                found_valid = True
+                break
+
+            if not found_valid:
+                raise ValueError(
+                    f"Facturation impossible : {last_reason or 'ordonnance invalide ou incomplète'}"
+                )
 
         # 5. Cree la facture
-        needs_review = prescription_warning is not None
+        needs_review = False
         invoice = Invoice(
             cabinet_id=cabinet_id,
             idel_id=appt.idel_id,

@@ -86,3 +86,22 @@ def can_bill_against_prescription(
         )
 
     return True, None
+
+
+def is_prescription_complete_for_billing(
+    prescription: Prescription,
+) -> tuple[bool, str | None]:
+    """
+    Vérifie qu'une ordonnance est complète pour pouvoir facturer.
+    Conditions obligatoires : document scanné/photo + prescripteur + date de prescription + date de début.
+    Retourne (True, None) si complète, (False, raison) sinon.
+    """
+    if not (prescription.document_filename or prescription.document_url):
+        return False, "Document d'ordonnance manquant (scan ou photo requis)"
+    if not prescription.prescriber_name:
+        return False, "Nom du prescripteur manquant sur l'ordonnance"
+    if not prescription.prescription_date:
+        return False, "Date de prescription manquante"
+    if not prescription.start_date:
+        return False, "Date de début des soins manquante"
+    return True, None

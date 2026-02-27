@@ -159,7 +159,10 @@ export default function FacturationTab({ nurses = [] }) {
   };
 
   const appointments = billing?.items || [];
-  const completedNotInvoiced = appointments.filter(a => a.status === 'completed' && !a.invoice_id);
+  // Seuls les RDV sans blocage ordonnance peuvent être facturés
+  const completedNotInvoiced = appointments.filter(a =>
+    a.status === 'completed' && !a.invoice_id && !a.prescription_missing && !a.prescription_incomplete
+  );
   const totalBilled = billing?.total_facture ?? 0;
   const totalNonBilled = billing?.total_non_facture ?? 0;
 
@@ -283,7 +286,8 @@ export default function FacturationTab({ nurses = [] }) {
                     ? new Date(appt.scheduled_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
                     : '--:--';
                   const codes = appt.act_codes || [];
-                  const canInvoice = appt.status === 'completed' && !appt.invoice_id;
+                  const prescriptionBlocked = appt.prescription_missing || appt.prescription_incomplete;
+                  const canInvoice = appt.status === 'completed' && !appt.invoice_id && !prescriptionBlocked;
                   return (
                     <tr key={appt.appointment_id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-3 font-medium text-slate-700">{time}</td>
@@ -306,11 +310,11 @@ export default function FacturationTab({ nurses = [] }) {
                           {/* Badge ordonnance */}
                           {appt.prescription_warning && (
                             <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
-                              appt.prescription_status === 'expired'
+                              appt.prescription_missing || appt.prescription_incomplete
                                 ? 'bg-red-100 text-red-700'
-                                : appt.prescription_missing
-                                  ? 'bg-slate-100 text-slate-500'
-                                  : 'bg-amber-100 text-amber-700'
+                                : appt.prescription_status === 'expiring'
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-red-100 text-red-700'
                             }`}>
                               <AlertCircle size={10} />
                               {appt.prescription_warning}
@@ -329,11 +333,16 @@ export default function FacturationTab({ nurses = [] }) {
                         )}
                       </td>
                       <td className="px-5 py-3 text-right">
-                        {canInvoice && (
+                        {appt.status === 'completed' && !appt.invoice_id && (
                           <button
-                            onClick={() => handleInvoiceOne(appt.appointment_id)}
-                            disabled={actionLoading[appt.appointment_id]}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                            onClick={() => canInvoice && handleInvoiceOne(appt.appointment_id)}
+                            disabled={!canInvoice || actionLoading[appt.appointment_id]}
+                            title={prescriptionBlocked ? appt.prescription_warning : undefined}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                              canInvoice
+                                ? 'bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50'
+                                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            }`}
                           >
                             <Receipt size={12} />
                             {actionLoading[appt.appointment_id] ? '...' : 'Facturer'}

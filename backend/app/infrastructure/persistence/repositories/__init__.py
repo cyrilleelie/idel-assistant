@@ -20,6 +20,9 @@ from app.infrastructure.persistence.repositories.sqlalchemy_tariff_update_repo i
 from app.infrastructure.persistence.repositories.sqlalchemy_care_protocol_repo import (
     SQLAlchemyCareProtocolRepo,
 )
+from app.infrastructure.persistence.repositories.sqlalchemy_prescription_repo import (
+    SQLAlchemyPrescriptionRepo,
+)
 from app.infrastructure.persistence.repositories.sqlalchemy_document_repo import (
     SQLAlchemyDocumentRepo,
 )
@@ -50,6 +53,7 @@ __all__ = [
     "SQLAlchemyCareProtocolRepo",
     "SQLAlchemyDocumentRepo",
     "SQLAlchemyPatientRepo",
+    "SQLAlchemyPrescriptionRepo",
     "SQLAlchemyScheduleAssignmentRepo",
     "SQLAlchemySectorRepo",
     "SQLAlchemyTourneeRepo",

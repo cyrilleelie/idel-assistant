@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getDailyBilling, createInvoiceFromAppointment, createAllDailyInvoices } from '../../api/cotation';
 import { listInvoices, validateInvoice, cancelInvoice } from '../../api/invoices';
+import ExpiringPrescriptionsAlert from '../prescriptions/ExpiringPrescriptionsAlert';
 
 function formatDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -244,6 +245,9 @@ export default function FacturationTab({ nurses = [] }) {
         </div>
       </div>
 
+      {/* Alertes ordonnances expirant bientôt */}
+      <ExpiringPrescriptionsAlert daysAhead={7} />
+
       {/* Appointments table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-5 py-3.5 border-b border-slate-100">
@@ -296,7 +300,24 @@ export default function FacturationTab({ nurses = [] }) {
                           )}
                         </div>
                       </td>
-                      <td className="px-5 py-3">{statusBadge(appt.status)}</td>
+                      <td className="px-5 py-3">
+                        <div className="space-y-1">
+                          {statusBadge(appt.status)}
+                          {/* Badge ordonnance */}
+                          {appt.prescription_warning && (
+                            <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
+                              appt.prescription_status === 'expired'
+                                ? 'bg-red-100 text-red-700'
+                                : appt.prescription_missing
+                                  ? 'bg-slate-100 text-slate-500'
+                                  : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              <AlertCircle size={10} />
+                              {appt.prescription_warning}
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-5 py-3">
                         {appt.invoice_id ? (
                           <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">

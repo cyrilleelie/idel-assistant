@@ -53,11 +53,19 @@ class TestSuggestNgapCodes:
 
 
 class TestProtocolActCodesPropagation:
-    def _make_protocol(self, act_codes: list[str] | None = None) -> CareProtocol:
+    def _make_protocol(self) -> CareProtocol:
         return CareProtocol(
             patient_id=uuid4(),
             cabinet_id=uuid4(),
-            care_type="pansement",
+            start_date=datetime.date(2026, 3, 1),
+            end_date=datetime.date(2026, 3, 3),
+        )
+
+    def _make_prescription(self, act_codes: list[str] | None = None):
+        from app.domain.entities.prescription import Prescription
+        return Prescription(
+            patient_id=uuid4(),
+            cabinet_id=uuid4(),
             duration_minutes=30,
             recurrence_rule="FREQ=DAILY;INTERVAL=1",
             start_date=datetime.date(2026, 3, 1),
@@ -67,47 +75,55 @@ class TestProtocolActCodesPropagation:
         )
 
     def test_act_codes_propagated(self):
-        protocol = self._make_protocol(act_codes=["AMI_1.5"])
+        protocol = self._make_protocol()
+        prescription = self._make_prescription(act_codes=["AMI_1.5"])
         appointments = generate_appointments_from_protocol(
             protocol=protocol,
             idel_id=uuid4(),
             from_date=datetime.date(2026, 3, 1),
             to_date=datetime.date(2026, 3, 3),
+            prescriptions=[prescription],
         )
         assert len(appointments) > 0
         for appt in appointments:
             assert appt.act_codes == ["AMI_1.5"]
 
     def test_empty_act_codes_propagated(self):
-        protocol = self._make_protocol(act_codes=[])
+        protocol = self._make_protocol()
+        prescription = self._make_prescription(act_codes=[])
         appointments = generate_appointments_from_protocol(
             protocol=protocol,
             idel_id=uuid4(),
             from_date=datetime.date(2026, 3, 1),
             to_date=datetime.date(2026, 3, 3),
+            prescriptions=[prescription],
         )
         for appt in appointments:
             assert appt.act_codes == []
 
     def test_multiple_act_codes_propagated(self):
-        protocol = self._make_protocol(act_codes=["AMI_4", "AMI_1"])
+        protocol = self._make_protocol()
+        prescription = self._make_prescription(act_codes=["AMI_4", "AMI_1"])
         appointments = generate_appointments_from_protocol(
             protocol=protocol,
             idel_id=uuid4(),
             from_date=datetime.date(2026, 3, 1),
             to_date=datetime.date(2026, 3, 3),
+            prescriptions=[prescription],
         )
         for appt in appointments:
             assert appt.act_codes == ["AMI_4", "AMI_1"]
 
     def test_act_codes_are_independent_copies(self):
         """Modifying one appointment's act_codes shouldn't affect others."""
-        protocol = self._make_protocol(act_codes=["AMI_1"])
+        protocol = self._make_protocol()
+        prescription = self._make_prescription(act_codes=["AMI_1"])
         appointments = generate_appointments_from_protocol(
             protocol=protocol,
             idel_id=uuid4(),
             from_date=datetime.date(2026, 3, 1),
             to_date=datetime.date(2026, 3, 3),
+            prescriptions=[prescription],
         )
         if len(appointments) > 1:
             appointments[0].act_codes.append("AMI_4")
@@ -189,25 +205,19 @@ class TestAppointmentEntity:
 
 
 class TestCareProtocolEntity:
-    def test_act_codes_default_empty(self):
+    def test_create_minimal(self):
         protocol = CareProtocol(
             patient_id=uuid4(),
             cabinet_id=uuid4(),
-            care_type="injection",
-            duration_minutes=15,
-            recurrence_rule="FREQ=DAILY",
-            start_date=datetime.date.today(),
         )
-        assert protocol.act_codes == []
+        assert protocol.status == "active"
+        assert protocol.label == ""
 
-    def test_act_codes_set(self):
+    def test_create_with_label(self):
         protocol = CareProtocol(
             patient_id=uuid4(),
             cabinet_id=uuid4(),
-            care_type="pansement",
-            duration_minutes=30,
-            recurrence_rule="FREQ=DAILY",
+            label="Pansements post-op",
             start_date=datetime.date.today(),
-            act_codes=["AMI_1.5", "AMI_4"],
         )
-        assert protocol.act_codes == ["AMI_1.5", "AMI_4"]
+        assert protocol.label == "Pansements post-op"

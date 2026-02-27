@@ -1,8 +1,9 @@
 import {
   ArrowLeft, UserMinus, UserPlus, Edit, UserCircle, Activity,
-  MapPin, Phone, Mail, Stethoscope, FileText, ClipboardList
+  MapPin, Phone, Mail, Stethoscope, FileText, ClipboardList, ScrollText
 } from 'lucide-react';
 import PrescriptionsTab from './PrescriptionsTab';
+import PrescriptionList from '../prescriptions/PrescriptionList';
 
 export default function PatientDetail({
   selectedPatientId, patientForm, setPatientForm,
@@ -77,6 +78,9 @@ export default function PatientDetail({
         </button>
         <button onClick={() => setPatientSubTab('prescriptions')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'prescriptions' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           <ClipboardList size={16}/> Plans de soins
+        </button>
+        <button onClick={() => setPatientSubTab('ordonnances')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'ordonnances' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <ScrollText size={16}/> Ordonnances
         </button>
       </div>
 
@@ -186,6 +190,11 @@ export default function PatientDetail({
             cabinetData={cabinetData}
             patients={patients}
           />
+        )}
+
+        {/* ORDONNANCES TAB */}
+        {patientSubTab === 'ordonnances' && patientForm.id && (
+          <PrescriptionList patientId={patientForm.id} />
         )}
 
       </div>

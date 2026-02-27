@@ -7,9 +7,10 @@ import { apiToFrontend, frontendToApiUpdate, frontendToApiInvite } from './utils
 import { listPatients, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient, archivePatient as apiArchivePatient } from './api/patients';
 import { listAppointments, createAppointment as apiCreateAppointment, cancelAppointment as apiCancelAppointment, updateAppointment as apiUpdateAppointment, completeAppointment as apiCompleteAppointment } from './api/appointments';
 import { listCareProtocols, createCareProtocol, updateCareProtocol, deleteCareProtocol } from './api/care-protocols';
+import { listPrescriptions, createPrescription as apiCreatePrescription, updatePrescription as apiUpdatePrescription, deletePrescription as apiDeletePrescription, uploadPrescriptionDocument } from './api/prescriptions';
 import { fetchMonthSchedule as fetchMonthScheduleApi, toggleScheduleAssignment } from './api/schedule-assignments';
 import { patientApiToFrontend, patientFrontendToApiCreate, patientFrontendToApiUpdate } from './utils/patientMapper';
-import { protocolApiToFrontend, prescriptionFrontendToApiCreate, prescriptionFrontendToApiUpdate } from './utils/prescriptionMapper';
+import { protocolApiToFrontend, prescriptionApiToSoin, protocolFrontendToApiCreate, protocolFrontendToApiUpdate, soinToApiCreate, soinToApiUpdate } from './utils/prescriptionMapper';
 import { apptApiToFrontend, assignSlotIds, frontendToApiCreate as apptFrontendToApiCreate, frontendToApiUpdate as apptFrontendToApiUpdate } from './utils/appointmentMapper';
 import { getUserRole, getUserEmail } from './utils/auth';
 import { fetchMe } from './api/auth';
@@ -204,12 +205,22 @@ export default function App() {
   const [patientForm, setPatientForm] = useState({});
   const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
 
-  // --- PRESCRIPTIONS (Care Protocols) ---
+  // --- PRESCRIPTIONS (Care Protocols + ordonnances liées) ---
   const loadPrescriptionsForPatient = useCallback(async (patientId) => {
     setPrescriptionsLoading(true);
     try {
       const data = await listCareProtocols({ patient_id: patientId });
-      const mapped = data.items.map(protocolApiToFrontend);
+      // Pour chaque plan, charger les ordonnances (soins) liées
+      const mapped = await Promise.all(
+        data.items.map(async (protocol) => {
+          try {
+            const prescData = await listPrescriptions({ care_protocol_id: protocol.id, limit: 10 });
+            return protocolApiToFrontend(protocol, prescData.items || []);
+          } catch {
+            return protocolApiToFrontend(protocol, []);
+          }
+        })
+      );
       setPatientForm(prev => ({ ...prev, prescriptions: mapped }));
     } catch (err) {
       console.error('Failed to fetch prescriptions:', err);
@@ -339,33 +350,41 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configs]);
 
-  // --- PRESCRIPTIONS: save & delete (needs fetchAppointments) ---
+  // --- PRESCRIPTIONS: save & delete ---
   const savePrescription = useCallback(async (rx, patientId) => {
-    if (rx._apiId) {
-      // Update existing protocol
-      const payload = prescriptionFrontendToApiUpdate(rx);
-      const updated = await updateCareProtocol(rx._apiId, payload);
-      const mapped = protocolApiToFrontend(updated);
-      // Preserve soin-level documents (blob URLs) from the original data
-      if (rx.soins && mapped.soins) {
-        for (let i = 0; i < mapped.soins.length && i < rx.soins.length; i++) {
-          mapped.soins[i].documents = rx.soins[i].documents || [];
-        }
-      }
-      return mapped;
+    // Étape 1 : créer ou mettre à jour le CareProtocol (conteneur)
+    let protocolId = rx._apiId;
+    let protocolData;
+    if (protocolId) {
+      const payload = protocolFrontendToApiUpdate(rx);
+      protocolData = await updateCareProtocol(protocolId, payload);
     } else {
-      // Create new protocol
-      const payload = prescriptionFrontendToApiCreate(rx, patientId);
-      const created = await createCareProtocol(payload);
-      const mapped = protocolApiToFrontend(created);
-      // Preserve soin-level documents (blob URLs) from the original data
-      if (rx.soins && mapped.soins) {
-        for (let i = 0; i < mapped.soins.length && i < rx.soins.length; i++) {
-          mapped.soins[i].documents = rx.soins[i].documents || [];
+      const payload = protocolFrontendToApiCreate(rx, patientId);
+      protocolData = await createCareProtocol(payload);
+      protocolId = protocolData.id;
+    }
+
+    // Étape 2 : créer ou mettre à jour chaque soin (Prescription)
+    const savedApiPrescriptions = [];
+    for (const soin of (rx.soins || [])) {
+      let savedPrescription;
+      if (soin._prescriptionId) {
+        savedPrescription = await apiUpdatePrescription(soin._prescriptionId, soinToApiUpdate(soin));
+      } else {
+        savedPrescription = await apiCreatePrescription(soinToApiCreate(soin, protocolId, patientId));
+      }
+      // Upload du document si un fichier est en attente
+      if (soin._pendingFile && savedPrescription?.id) {
+        try {
+          savedPrescription = await uploadPrescriptionDocument(savedPrescription.id, soin._pendingFile);
+        } catch (e) {
+          console.error('Échec upload document ordonnance:', e);
         }
       }
-      return mapped;
+      savedApiPrescriptions.push(savedPrescription);
     }
+
+    return protocolApiToFrontend(protocolData, savedApiPrescriptions);
   }, []);
 
   const deletePrescriptionApi = useCallback(async (rxId) => {
@@ -744,7 +763,17 @@ export default function App() {
     setRdvPrescriptionsLoading(true);
     try {
       const data = await listCareProtocols({ patient_id: patientId });
-      setRdvPrescriptions(data.items.map(protocolApiToFrontend));
+      const mapped = await Promise.all(
+        data.items.map(async (protocol) => {
+          try {
+            const prescData = await listPrescriptions({ care_protocol_id: protocol.id, limit: 10 });
+            return protocolApiToFrontend(protocol, prescData.items || []);
+          } catch {
+            return protocolApiToFrontend(protocol, []);
+          }
+        })
+      );
+      setRdvPrescriptions(mapped);
     } catch {
       setRdvPrescriptions([]);
     } finally {

@@ -1,16 +1,39 @@
 /**
- * Prescription mapper: backend CareProtocol (snake_case) <-> frontend care plan (camelCase)
+ * Prescription mapper: backend API (snake_case) <-> frontend care plan (camelCase)
  *
- * New format: a care plan contains 1-5 "soins", each with its own label, dates,
- * frequency, notes, and documents. The backend stores soins as JSON in the `notes` field.
+ * Nouveau modèle :
+ * - Un CareProtocol (plan de soins) est un conteneur léger (label, dates, statut).
+ * - Chaque "soin" est désormais une Prescription DB liée via care_protocol_id.
  *
- * Backend fields: id, patient_id, cabinet_id, care_type, label, frequency_display,
- *   custom_frequency, duration_minutes, recurrence_rule, start_date, end_date,
- *   preferred_time, preferred_slot, status, notes, created_at, updated_at
- *
- * Frontend fields: id (local rx_*), _apiId (backend UUID),
- *   soins: [{ id, label, startDate, endDate, frequency, customFrequency, notes, documents }],
- *   careSchedule: { startTime, endTime }
+ * Structure frontend d'un plan de soins :
+ *   {
+ *     id: 'rx_<uuid>',          // identifiant local dérivé du UUID backend
+ *     _apiId: '<uuid>',          // UUID backend du CareProtocol
+ *     label: '',
+ *     startDate: '',
+ *     endDate: '',
+ *     status: 'active',
+ *     soins: [                   // ordonnances liées chargées séparément
+ *       {
+ *         id: 'soin_<uuid>',       // identifiant local
+ *         _prescriptionId: '<uuid>' | null, // UUID backend de la Prescription
+ *         label: '',
+ *         care_label_code: null,
+ *         startDate: '',
+ *         endDate: '',
+ *         durationMinutes: 30,
+ *         frequency: 'daily',
+ *         customFrequency: '',
+ *         notes: '',
+ *         actCodes: [],
+ *         prescriber_name: null,
+ *         prescription_date: null,
+ *         document_filename: null,  // fichier déjà uploadé
+ *         _pendingFile: null,       // File JS en attente d'upload
+ *       }
+ *     ],
+ *     careSchedule: { startTime: '', endTime: '' },
+ *   }
  */
 
 function timeStringToMinutes(t) {
@@ -26,175 +49,140 @@ function minutesToTimeString(totalMinutes) {
 }
 
 /**
- * Backend CareProtocolResponse → frontend care plan object
- * Retrocompatible: old prescriptions (notes = plain text) become a plan with 1 soin.
+ * Convertit un CareProtocol API (backend) vers le format frontend.
+ * Les soins sont vides ici — ils sont chargés séparément via prescriptionApiToSoin().
  */
-export function protocolApiToFrontend(p) {
-  // preferred_time comes as "HH:MM:SS" or "HH:MM" — normalize to "HH:MM"
-  const startTime = p.preferred_time ? String(p.preferred_time).slice(0, 5) : '';
-  const startMinutes = timeStringToMinutes(startTime);
-  const endTime = startTime && p.duration_minutes
-    ? minutesToTimeString(startMinutes + p.duration_minutes)
+export function protocolApiToFrontend(p, prescriptions = []) {
+  // Calcule l'heure de début depuis la première prescription active
+  const firstPrescr = prescriptions[0];
+  const startTime = firstPrescr?.preferred_time
+    ? String(firstPrescr.preferred_time).slice(0, 5)
+    : '';
+  const firstDuration = firstPrescr?.duration_minutes || 30;
+  const endTime = startTime
+    ? minutesToTimeString(timeStringToMinutes(startTime) + firstDuration)
     : '';
 
-  // Try to parse notes as JSON { soins: [...] } (new format)
-  let soins = null;
-  if (p.notes) {
-    try {
-      const parsed = JSON.parse(p.notes);
-      if (parsed && Array.isArray(parsed.soins)) {
-        soins = parsed.soins;
-      }
-    } catch {
-      // Not JSON — old format, will be converted below
-    }
-  }
-
-  if (soins) {
-    // New format: soins array from JSON notes
-    return {
-      id: 'rx_' + p.id,
-      _apiId: p.id,
-      soins: soins.map(s => ({
-        id: s.id || ('soin_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)),
-        label: s.label || '',
-        startDate: s.startDate || '',
-        endDate: s.endDate || '',
-        durationMinutes: s.durationMinutes || '',
-        frequency: s.frequency || 'daily',
-        customFrequency: s.customFrequency || '',
-        notes: s.notes || '',
-        documents: s.documents || [],
-        actCodes: s.actCodes || [],
-      })),
-      careSchedule: { startTime, endTime },
-    };
-  }
-
-  // Retrocompatibility: old format → plan with 1 soin
   return {
     id: 'rx_' + p.id,
     _apiId: p.id,
-    soins: [{
-      id: 'soin_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-      label: p.label || '',
-      startDate: p.start_date || '',
-      endDate: p.end_date || '',
-      frequency: p.frequency_display || 'daily',
-      customFrequency: p.custom_frequency || '',
-      notes: p.notes || '',
-      documents: [],
-      actCodes: [],
-    }],
+    label: p.label || '',
+    startDate: p.start_date || '',
+    endDate: p.end_date || '',
+    status: p.status || 'active',
+    soins: prescriptions.map(prescriptionApiToSoin),
     careSchedule: { startTime, endTime },
   };
 }
 
 /**
- * Frontend care plan → backend CareProtocolCreate payload
+ * Convertit une Prescription API (backend) vers le format soin frontend.
  */
-export function prescriptionFrontendToApiCreate(rx, patientId) {
-  const soins = rx.soins || [];
-  const startMinutes = timeStringToMinutes(rx.careSchedule?.startTime);
-  const endMinutes = timeStringToMinutes(rx.careSchedule?.endTime);
-  const duration = endMinutes > startMinutes ? endMinutes - startMinutes : 30;
-
-  const preferredTime = rx.careSchedule?.startTime
-    ? rx.careSchedule.startTime + ':00'
-    : null;
-
-  // label = concatenation of soin names
-  const label = soins.map(s => s.label?.trim()).filter(Boolean).join(', ') || '';
-
-  // start_date = min of all soins startDate
-  const startDates = soins.map(s => s.startDate).filter(Boolean).sort();
-  const start_date = startDates[0] || '';
-
-  // end_date = max of all soins endDate
-  const endDates = soins.map(s => s.endDate).filter(Boolean).sort();
-  const end_date = endDates[endDates.length - 1] || null;
-
-  // frequency_display = first soin's frequency, or 'custom' if heterogeneous
-  const frequencies = [...new Set(soins.map(s => s.frequency).filter(Boolean))];
-  const frequency_display = frequencies.length === 1 ? frequencies[0] : 'custom';
-
-  // Serialize soins array into notes as JSON
-  const notes = JSON.stringify({
-    soins: soins.map(s => ({
-      id: s.id,
-      label: s.label || '',
-      startDate: s.startDate || '',
-      endDate: s.endDate || '',
-      durationMinutes: s.durationMinutes || '',
-      frequency: s.frequency || 'daily',
-      customFrequency: s.customFrequency || '',
-      notes: s.notes || '',
-      documents: s.documents || [],
-      actCodes: s.actCodes || [],
-    })),
-  });
-
+export function prescriptionApiToSoin(p) {
   return {
-    patient_id: patientId,
-    care_type: 'soins_infirmiers',
-    label,
-    frequency_display,
-    custom_frequency: soins[0]?.customFrequency || '',
-    duration_minutes: duration,
-    start_date,
-    end_date,
-    preferred_time: preferredTime,
-    notes,
+    id: 'soin_' + p.id,
+    _prescriptionId: p.id,
+    label: p.label || '',
+    care_label_code: p.care_label_code || null,
+    startDate: p.start_date || '',
+    endDate: p.end_date || '',
+    durationMinutes: p.duration_minutes || 30,
+    frequency: p.frequency_display || 'daily',
+    customFrequency: p.custom_frequency || '',
+    notes: p.notes || '',
+    actCodes: p.act_codes || [],
+    prescriber_name: p.prescriber_name || '',
+    prescriber_rpps: p.prescriber_rpps || '',
+    prescription_date: p.prescription_date || '',
+    care_description: p.care_description || '',
+    document_filename: p.document_filename || null,
+    document_url: p.document_url || null,
+    document_type: p.document_type || null,
+    _pendingFile: null,
   };
 }
 
 /**
- * Frontend care plan → backend CareProtocolUpdate payload (partial)
+ * Convertit un soin frontend vers le payload de création de Prescription (POST /prescriptions/).
  */
-export function prescriptionFrontendToApiUpdate(rx) {
-  const soins = rx.soins || [];
-  const startMinutes = timeStringToMinutes(rx.careSchedule?.startTime);
-  const endMinutes = timeStringToMinutes(rx.careSchedule?.endTime);
-  const duration = endMinutes > startMinutes ? endMinutes - startMinutes : 30;
-
-  const preferredTime = rx.careSchedule?.startTime
-    ? rx.careSchedule.startTime + ':00'
-    : null;
-
-  const label = soins.map(s => s.label?.trim()).filter(Boolean).join(', ') || '';
-
-  const startDates = soins.map(s => s.startDate).filter(Boolean).sort();
-  const start_date = startDates[0] || '';
-
-  const endDates = soins.map(s => s.endDate).filter(Boolean).sort();
-  const end_date = endDates[endDates.length - 1] || null;
-
-  const frequencies = [...new Set(soins.map(s => s.frequency).filter(Boolean))];
-  const frequency_display = frequencies.length === 1 ? frequencies[0] : 'custom';
-
-  const notes = JSON.stringify({
-    soins: soins.map(s => ({
-      id: s.id,
-      label: s.label || '',
-      startDate: s.startDate || '',
-      endDate: s.endDate || '',
-      durationMinutes: s.durationMinutes || '',
-      frequency: s.frequency || 'daily',
-      customFrequency: s.customFrequency || '',
-      notes: s.notes || '',
-      documents: s.documents || [],
-      actCodes: s.actCodes || [],
-    })),
-  });
-
+export function soinToApiCreate(soin, careProtocolId, patientId) {
   return {
-    label,
-    frequency_display,
-    custom_frequency: soins[0]?.customFrequency || '',
-    duration_minutes: duration,
-    start_date,
-    end_date,
-    preferred_time: preferredTime,
-    notes,
+    patient_id: patientId,
+    care_protocol_id: careProtocolId,
+    label: soin.label || '',
+    care_label_code: soin.care_label_code || null,
+    duration_minutes: Number(soin.durationMinutes) || 30,
+    frequency_display: soin.frequency || 'daily',
+    custom_frequency: soin.customFrequency || '',
+    preferred_time: null, // géré au niveau du plan via careSchedule
+    preferred_slot: '',
+    recurrence_rule: '',
+    prescriber_name: soin.prescriber_name || null,
+    prescriber_rpps: soin.prescriber_rpps || null,
+    prescription_date: soin.prescription_date || null,
+    start_date: soin.startDate || null,
+    end_date: soin.endDate || null,
+    care_description: soin.care_description || null,
+    act_codes: soin.actCodes || [],
+    notes: soin.notes || null,
   };
 }
+
+/**
+ * Convertit un soin frontend vers le payload de mise à jour de Prescription (PUT /prescriptions/{id}).
+ */
+export function soinToApiUpdate(soin) {
+  return {
+    label: soin.label || '',
+    care_label_code: soin.care_label_code || null,
+    duration_minutes: Number(soin.durationMinutes) || 30,
+    frequency_display: soin.frequency || 'daily',
+    custom_frequency: soin.customFrequency || '',
+    prescriber_name: soin.prescriber_name || null,
+    prescriber_rpps: soin.prescriber_rpps || null,
+    prescription_date: soin.prescription_date || null,
+    start_date: soin.startDate || null,
+    end_date: soin.endDate || null,
+    care_description: soin.care_description || null,
+    act_codes: soin.actCodes || [],
+    notes: soin.notes || null,
+  };
+}
+
+/**
+ * Convertit un plan de soins frontend vers le payload de création du CareProtocol
+ * (POST /care-protocols/).
+ */
+export function protocolFrontendToApiCreate(rx, patientId) {
+  const startDates = (rx.soins || []).map(s => s.startDate).filter(Boolean).sort();
+  const endDates = (rx.soins || []).map(s => s.endDate).filter(Boolean).sort();
+
+  return {
+    patient_id: patientId,
+    label: rx.label || (rx.soins || []).map(s => s.label?.trim()).filter(Boolean).join(', ') || '',
+    start_date: rx.startDate || startDates[0] || null,
+    end_date: rx.endDate || endDates[endDates.length - 1] || null,
+  };
+}
+
+/**
+ * Convertit un plan de soins frontend vers le payload de mise à jour du CareProtocol
+ * (PATCH /care-protocols/{id}).
+ */
+export function protocolFrontendToApiUpdate(rx) {
+  const startDates = (rx.soins || []).map(s => s.startDate).filter(Boolean).sort();
+  const endDates = (rx.soins || []).map(s => s.endDate).filter(Boolean).sort();
+
+  const update = {};
+  const label = rx.label || (rx.soins || []).map(s => s.label?.trim()).filter(Boolean).join(', ') || '';
+  if (label) update.label = label;
+  const start = rx.startDate || startDates[0];
+  if (start) update.start_date = start;
+  const end = rx.endDate || endDates[endDates.length - 1];
+  if (end !== undefined) update.end_date = end || null;
+  return update;
+}
+
+// --- Backward-compat exports (used in cotation tab) ---
+export { protocolFrontendToApiCreate as prescriptionFrontendToApiCreate };
+export { protocolFrontendToApiUpdate as prescriptionFrontendToApiUpdate };

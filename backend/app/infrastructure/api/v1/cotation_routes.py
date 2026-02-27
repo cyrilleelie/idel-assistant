@@ -28,6 +28,8 @@ from app.infrastructure.api.dependencies import (
     get_invoice_repository,
     get_patient_repository,
 )
+from app.infrastructure.persistence.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.api.schemas.cotation_schemas import (
     CotationLigneResponse,
     CotationResultResponse,
@@ -72,6 +74,11 @@ class DailyBillingItemResponse(BaseModel):
     status: str
     invoice_id: str | None
     invoice_status: str | None
+    # Champs ordonnance (iter 4)
+    prescription_id: str | None = None
+    prescription_status: str | None = None
+    prescription_missing: bool = False
+    prescription_warning: str | None = None
 
 
 class DailyBillingResponse(BaseModel):
@@ -195,13 +202,14 @@ async def create_invoice_from_appointment(
     line_repo: SQLAlchemyInvoiceLineRepo = Depends(get_invoice_line_repository),
     patient_repo: SQLAlchemyPatientRepo = Depends(get_patient_repository),
     catalog_repo: SQLAlchemyCareCatalogRepo = Depends(get_care_catalog_repository),
+    db: AsyncSession = Depends(get_db),
 ):
     """Cree une facture a partir d'un RDV complete (utilise ses act_codes et distance_km)."""
     request.state.user_id = auth.user_id
     request.state.cabinet_id = auth.cabinet_id
 
     use_case = CreateInvoiceFromAppointmentUseCase(
-        appointment_repo, invoice_repo, line_repo, patient_repo, catalog_repo
+        appointment_repo, invoice_repo, line_repo, patient_repo, catalog_repo, db
     )
 
     try:
@@ -224,12 +232,13 @@ async def get_daily_billing(
     appointment_repo: SQLAlchemyAppointmentRepo = Depends(get_appointment_repository),
     invoice_repo: SQLAlchemyInvoiceRepo = Depends(get_invoice_repository),
     patient_repo: SQLAlchemyPatientRepo = Depends(get_patient_repository),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Liste les RDV du jour avec statut facturation."""
+    """Liste les RDV du jour avec statut facturation et infos ordonnance."""
     request.state.user_id = auth.user_id
     request.state.cabinet_id = auth.cabinet_id
 
-    use_case = GetDailyBillingUseCase(appointment_repo, invoice_repo, patient_repo)
+    use_case = GetDailyBillingUseCase(appointment_repo, invoice_repo, patient_repo, db)
     result = await use_case.execute(auth.cabinet_id, date)
 
     return DailyBillingResponse(
@@ -246,6 +255,10 @@ async def get_daily_billing(
                 status=item.status,
                 invoice_id=str(item.invoice_id) if item.invoice_id else None,
                 invoice_status=item.invoice_status,
+                prescription_id=str(item.prescription_id) if item.prescription_id else None,
+                prescription_status=item.prescription_status,
+                prescription_missing=item.prescription_missing,
+                prescription_warning=item.prescription_warning,
             )
             for item in result.items
         ],
@@ -264,13 +277,14 @@ async def create_all_daily_invoices(
     line_repo: SQLAlchemyInvoiceLineRepo = Depends(get_invoice_line_repository),
     patient_repo: SQLAlchemyPatientRepo = Depends(get_patient_repository),
     catalog_repo: SQLAlchemyCareCatalogRepo = Depends(get_care_catalog_repository),
+    db: AsyncSession = Depends(get_db),
 ):
     """Genere les factures pour tous les RDV completes non factures du jour."""
     request.state.user_id = auth.user_id
     request.state.cabinet_id = auth.cabinet_id
 
     use_case = CreateAllDailyInvoicesUseCase(
-        appointment_repo, invoice_repo, line_repo, patient_repo, catalog_repo
+        appointment_repo, invoice_repo, line_repo, patient_repo, catalog_repo, db
     )
     results = await use_case.execute(auth.cabinet_id, body.date, body.zone_ik)
 

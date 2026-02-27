@@ -12,7 +12,11 @@ class InvoiceModel(Base):
     cabinet_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("cabinets.id", ondelete="CASCADE"), nullable=False)
     idel_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     patient_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False)
-    prescription_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    prescription_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("prescriptions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     invoice_number: Mapped[str] = mapped_column(String(50), nullable=False, server_default="")
     invoice_date = mapped_column(Date, nullable=False)
     care_date = mapped_column(Date, nullable=False)

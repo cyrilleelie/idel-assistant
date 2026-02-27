@@ -22,6 +22,7 @@ from app.infrastructure.persistence.repositories import (
     SQLAlchemyInvoiceLineRepo,
     SQLAlchemyInvoiceRepo,
     SQLAlchemyPatientRepo,
+    SQLAlchemyPrescriptionRepo,
     SQLAlchemyScheduleAssignmentRepo,
     SQLAlchemySectorRepo,
     SQLAlchemyTariffUpdateRepo,
@@ -187,9 +188,8 @@ def get_appointment_repository(
 
 def get_care_protocol_repository(
     db: AsyncSession = Depends(get_db),
-    km: KeyManager = Depends(get_key_manager),
 ) -> SQLAlchemyCareProtocolRepo:
-    return SQLAlchemyCareProtocolRepo(db, km)
+    return SQLAlchemyCareProtocolRepo(db)
 
 
 def get_document_repository(
@@ -238,6 +238,12 @@ def get_care_label_repository(
     db: AsyncSession = Depends(get_db),
 ) -> SQLAlchemyCareLabelRepo:
     return SQLAlchemyCareLabelRepo(db)
+
+
+def get_prescription_repository(
+    db: AsyncSession = Depends(get_db),
+) -> SQLAlchemyPrescriptionRepo:
+    return SQLAlchemyPrescriptionRepo(db)
 
 
 def get_routing_service() -> FakeRoutingService:

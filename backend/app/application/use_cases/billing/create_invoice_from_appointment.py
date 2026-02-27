@@ -13,6 +13,7 @@ from app.domain.repositories.appointment_repository import AppointmentRepository
 from app.domain.repositories.care_type_catalog_repository import CareTypeCatalogRepository
 from app.domain.repositories.invoice_repository import InvoiceLineRepository, InvoiceRepository
 from app.domain.repositories.patient_repository import PatientRepository
+from app.domain.rules.prescription_rules import can_bill_against_prescription, compute_prescription_status
 from app.domain.value_objects.invoice_number import generate_next_invoice_number
 
 
@@ -24,12 +25,14 @@ class CreateInvoiceFromAppointmentUseCase:
         line_repo: InvoiceLineRepository,
         patient_repo: PatientRepository,
         catalog_repo: CareTypeCatalogRepository,
+        db_session=None,
     ):
         self._appointment_repo = appointment_repo
         self._invoice_repo = invoice_repo
         self._line_repo = line_repo
         self._patient_repo = patient_repo
         self._catalog_repo = catalog_repo
+        self._session = db_session
 
     async def execute(
         self,
@@ -83,12 +86,56 @@ class CreateInvoiceFromAppointmentUseCase:
         seq = await self._invoice_repo.get_next_sequence(cabinet_id, today.year, today.month)
         invoice_number = generate_next_invoice_number(cabinet_id, today.year, today.month, seq)
 
+        # 4b. Cherche la première ordonnance valide liée au plan de soins du RDV
+        # Nouvelle logique : Prescription.care_protocol_id (au lieu de CareProtocol.prescription_id)
+        prescription_id = None
+        prescription_warning = None
+        if appt.care_protocol_id and self._session:
+            from sqlalchemy import select
+            from app.infrastructure.persistence.models.prescription_model import PrescriptionModel
+            from app.domain.entities.prescription import Prescription as PrescriptionEntity
+
+            result = await self._session.execute(
+                select(PrescriptionModel)
+                .where(
+                    PrescriptionModel.care_protocol_id == appt.care_protocol_id,
+                    PrescriptionModel.status.in_(["active", "expiring"]),
+                )
+                .order_by(PrescriptionModel.created_at)
+            )
+            prescriptions = result.scalars().all()
+
+            if not prescriptions:
+                prescription_warning = "Aucune ordonnance active rattachée au plan de soins"
+            else:
+                care_date = appt.scheduled_at.date()
+                for presc_model in prescriptions:
+                    presc_entity = PrescriptionEntity(
+                        id=presc_model.id,
+                        cabinet_id=presc_model.cabinet_id,
+                        patient_id=presc_model.patient_id,
+                        prescriber_name=presc_model.prescriber_name,
+                        prescription_date=presc_model.prescription_date,
+                        start_date=presc_model.start_date,
+                        end_date=presc_model.end_date,
+                        care_description=presc_model.care_description,
+                        status=presc_model.status,
+                    )
+                    ok, reason = can_bill_against_prescription(presc_entity, care_date)
+                    if ok:
+                        prescription_id = presc_model.id
+                        break
+                    else:
+                        prescription_warning = reason
+
         # 5. Cree la facture
+        needs_review = prescription_warning is not None
         invoice = Invoice(
             cabinet_id=cabinet_id,
             idel_id=appt.idel_id,
             patient_id=appt.patient_id,
             appointment_id=appointment_id,
+            prescription_id=prescription_id,
             invoice_number=invoice_number,
             invoice_date=today,
             care_date=appt.scheduled_at.date(),
@@ -103,6 +150,7 @@ class CreateInvoiceFromAppointmentUseCase:
                 "from_appointment": str(appointment_id),
                 "auto_corrections": cotation.auto_corrections,
                 "explications": cotation.explications,
+                **({"needs_review": True, "review_reason": prescription_warning} if needs_review else {}),
             },
         )
 

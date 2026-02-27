@@ -44,63 +44,36 @@ class TestPatientEntity:
 
 
 class TestCareProtocolEntity:
-    def test_create_with_new_fields(self):
-        cp = CareProtocol(
-            patient_id=uuid4(),
-            cabinet_id=uuid4(),
-            care_type="pansement",
-            duration_minutes=30,
-            recurrence_rule="FREQ=DAILY",
-            start_date=datetime.date(2026, 1, 1),
-            label="Pansement post-op genou",
-            frequency_display="daily",
-            custom_frequency="",
-        )
-        assert cp.label == "Pansement post-op genou"
-        assert cp.frequency_display == "daily"
-        assert cp.custom_frequency == ""
-
-    def test_custom_frequency(self):
-        cp = CareProtocol(
-            patient_id=uuid4(),
-            cabinet_id=uuid4(),
-            care_type="injection",
-            duration_minutes=15,
-            recurrence_rule="FREQ=WEEKLY;BYDAY=MO,WE",
-            start_date=datetime.date(2026, 2, 1),
-            frequency_display="custom",
-            custom_frequency="Lundi et Mercredi",
-        )
-        assert cp.frequency_display == "custom"
-        assert cp.custom_frequency == "Lundi et Mercredi"
-
-    def test_defaults_for_new_fields(self):
-        cp = CareProtocol(
-            patient_id=uuid4(),
-            cabinet_id=uuid4(),
-            care_type="bsi",
-            duration_minutes=45,
-            recurrence_rule="FREQ=DAILY",
-            start_date=datetime.date(2026, 3, 1),
-        )
+    def test_create_minimal(self):
+        cp = CareProtocol(patient_id=uuid4(), cabinet_id=uuid4())
         assert cp.label == ""
-        assert cp.frequency_display == "daily"
-        assert cp.custom_frequency == ""
+        assert cp.status == "active"
+        assert cp.start_date is None
+        assert cp.end_date is None
+        assert cp.id is not None
 
-    def test_existing_fields_unaffected(self):
+    def test_create_with_label_and_dates(self):
         cp = CareProtocol(
             patient_id=uuid4(),
             cabinet_id=uuid4(),
-            care_type="injection",
-            duration_minutes=20,
-            recurrence_rule="FREQ=DAILY",
-            start_date=datetime.date(2026, 1, 15),
-            preferred_slot="morning",
-            notes="Insuline Lantus 20 UI",
+            label="Soins post-op genou",
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 1, 31),
         )
-        assert cp.preferred_slot == "morning"
-        assert cp.notes == "Insuline Lantus 20 UI"
+        assert cp.label == "Soins post-op genou"
+        assert cp.start_date == datetime.date(2026, 1, 1)
+        assert cp.end_date == datetime.date(2026, 1, 31)
+
+    def test_status_defaults_active(self):
+        cp = CareProtocol(patient_id=uuid4(), cabinet_id=uuid4())
         assert cp.status == "active"
+
+    def test_unique_ids(self):
+        p = uuid4()
+        c = uuid4()
+        cp1 = CareProtocol(patient_id=p, cabinet_id=c)
+        cp2 = CareProtocol(patient_id=p, cabinet_id=c)
+        assert cp1.id != cp2.id
 
 
 class TestDocumentEntity:

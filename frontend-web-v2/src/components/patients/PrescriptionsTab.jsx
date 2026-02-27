@@ -1,11 +1,13 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Plus, Trash2, ChevronDown, ChevronUp, FileUp, X, File,
-  Calendar, Clock, RefreshCw, MessageSquare, Pencil, Users,
-  ClipboardList, CalendarDays, Check, Loader2, Lightbulb, MapPin
+  Calendar, Clock, RefreshCw, MessageSquare, Pencil,
+  ClipboardList, CalendarDays, Check, CheckCheck, Loader2, Lightbulb, MapPin
 } from 'lucide-react';
 import { getDistanceMatrix } from '../../utils/geocode';
 import { listCareActCodes } from '../../api/cotation';
+
+const isActiveAppt = (a) => a.status === 'scheduled' || a.status === 'completed';
 
 const FREQUENCY_OPTIONS = [
   { value: 'daily', label: '1x / jour' },
@@ -37,21 +39,36 @@ function emptySoin() {
   const tomorrow = tomorrowStr();
   return {
     id: 'soin_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    _prescriptionId: null,     // UUID backend une fois sauvegardé
     label: '',
+    care_label_code: null,     // code CareLabel pour auto-fill
     startDate: tomorrow,
     endDate: tomorrow,
     durationMinutes: '',
     frequency: 'daily',
     customFrequency: '',
     notes: '',
-    documents: [],
     actCodes: [],
+    prescriber_name: '',
+    prescriber_rpps: '',
+    prescription_date: '',
+    care_description: '',
+    document_filename: null,   // fichier déjà uploadé (nom serveur)
+    document_url: null,
+    document_type: null,
+    _pendingFile: null,        // File JS en attente d'upload
+    max_renewals: 0,           // renouvellements autorisés
   };
 }
 
 function emptyCarePlan() {
   return {
     id: 'rx_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    _apiId: null,
+    label: '',
+    startDate: '',
+    endDate: '',
+    status: 'active',
     soins: [emptySoin()],
     careSchedule: {
       startTime: '',
@@ -180,7 +197,7 @@ function getPlanLabel(soins) {
 
 // Helper: count total documents across soins
 function totalDocuments(soins) {
-  return soins.reduce((sum, s) => sum + (s.documents?.length || 0), 0);
+  return soins.reduce((sum, s) => sum + (s.document_filename || s._pendingFile ? 1 : 0), 0);
 }
 
 // --- PlanningSection component ---
@@ -241,7 +258,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
     const plannedList = [];
     const toPlanList = [];
 
-    const patientAppts = (appointments || []).filter(a => a.patientId === patientId && a.status === 'scheduled');
+    const patientAppts = (appointments || []).filter(a => a.patientId === patientId && isActiveAppt(a));
 
     for (const dateStr of limited) {
       const dateObj = new Date(dateStr + 'T00:00:00');
@@ -388,7 +405,8 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
   if (totalOccurrences === 0) return null;
 
   const remainingCount = toPlan.length;
-  const plannedCount = planned.length;
+  const completedCount = planned.filter(p => p.appointment?.status === 'completed').length;
+  const scheduledCount = planned.length - completedCount;
   const bookableCount = toPlan.filter(({ dateStr, availableNurses }) =>
     selectedNurseByDate[dateStr] && availableNurses.length > 0
   ).length;
@@ -402,9 +420,16 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
         <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
           {totalOccurrences} séance{totalOccurrences > 1 ? 's' : ''} au total
         </span>
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
-          <Check size={12} /> {plannedCount} planifié{plannedCount > 1 ? 's' : ''}
-        </span>
+        {completedCount > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700">
+            <CheckCheck size={12} /> {completedCount} réalisé{completedCount > 1 ? 's' : ''}
+          </span>
+        )}
+        {scheduledCount > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
+            <Check size={12} /> {scheduledCount} planifié{scheduledCount > 1 ? 's' : ''}
+          </span>
+        )}
         {remainingCount > 0 && (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
             {remainingCount} restant{remainingCount > 1 ? 's' : ''}
@@ -436,23 +461,33 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
         <div className="space-y-1.5">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">RDV planifiés</div>
           <div className="space-y-1">
-            {planned.map(({ dateStr, dateObj, dateEnd, appointment, nurse }) => (
-              <div key={dateStr} className="flex items-center gap-3 bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-200 text-sm">
-                <Check size={14} className="text-emerald-600 shrink-0" />
-                <div className="w-24 shrink-0 font-medium text-slate-700 capitalize">
-                  {dayName(dateObj)} {dayMonth(dateObj)}
-                </div>
-                <div className="text-slate-500 shrink-0">
-                  {appointment?.startTime || startTime}–{dateEnd}
-                </div>
-                {nurse && (
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${nurse.color?.split(' ').slice(0, 2).join(' ') || 'bg-slate-100 text-slate-700'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${nurse.color?.split(' ')[0] || 'bg-slate-400'}`} />
-                    {nurse.firstName} {nurse.lastName}
+            {planned.map(({ dateStr, dateObj, dateEnd, appointment, nurse }) => {
+              const isCompleted = appointment?.status === 'completed';
+              return (
+                <div key={dateStr} className={`flex items-center gap-3 rounded-lg px-3 py-2 border text-sm ${isCompleted ? 'bg-indigo-50 border-indigo-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                  {isCompleted ? (
+                    <CheckCheck size={14} className="text-indigo-600 shrink-0" />
+                  ) : (
+                    <Check size={14} className="text-emerald-600 shrink-0" />
+                  )}
+                  <div className="w-24 shrink-0 font-medium text-slate-700 capitalize">
+                    {dayName(dateObj)} {dayMonth(dateObj)}
+                  </div>
+                  <div className="text-slate-500 shrink-0">
+                    {appointment?.startTime || startTime}–{dateEnd}
+                  </div>
+                  <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${isCompleted ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    {isCompleted ? 'Réalisé' : 'Planifié'}
                   </span>
-                )}
-              </div>
-            ))}
+                  {nurse && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${nurse.color?.split(' ').slice(0, 2).join(' ') || 'bg-slate-100 text-slate-700'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${nurse.color?.split(' ')[0] || 'bg-slate-400'}`} />
+                      {nurse.firstName} {nurse.lastName}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -586,17 +621,21 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
   };
 
   const handleFiles = (files) => {
-    const newDocs = Array.from(files).map(f => ({
-      id: 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-      name: f.name,
-      size: f.size,
-      url: URL.createObjectURL(f),
-    }));
-    update('documents', [...(soin.documents || []), ...newDocs]);
+    // Un seul fichier par ordonnance (le dernier sélectionné)
+    const file = Array.from(files)[0];
+    if (!file) return;
+    update('_pendingFile', file);
+    update('_pendingFileName', file.name);
+    update('_pendingFileSize', file.size);
   };
 
-  const removeDoc = (docId) => {
-    update('documents', (soin.documents || []).filter(d => d.id !== docId));
+  const removeDoc = () => {
+    update('_pendingFile', null);
+    update('_pendingFileName', null);
+    update('_pendingFileSize', null);
+    update('document_filename', null);
+    update('document_url', null);
+    update('document_type', null);
   };
 
   const handleDrop = (e) => {
@@ -605,17 +644,24 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
     if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
   };
 
+  // Nom du document affiché (en attente ou déjà uploadé)
+  const displayedDoc = soin._pendingFileName
+    ? { name: soin._pendingFileName, size: soin._pendingFileSize, pending: true }
+    : soin.document_filename
+      ? { name: soin.document_filename.split('/').pop(), pending: false }
+      : null;
+
   return (
     <div className="border border-slate-200 bg-white rounded-lg p-4 space-y-3 relative">
       {/* Header with number + remove button */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Soin {index + 1}</span>
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Ordonnance {index + 1}</span>
         {canRemove && (
           <button
             type="button"
             onClick={onRemove}
             className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-colors"
-            title="Supprimer ce soin"
+            title="Supprimer cette ordonnance"
           >
             <X size={14} />
           </button>
@@ -625,7 +671,7 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
       {/* Nom du soin + Code NGAP */}
       <div className="grid grid-cols-2 gap-4">
         <div className="relative">
-          <label className="block text-xs font-medium text-slate-600 mb-1">Nom du soin *</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Type de soin *</label>
           <input
             type="text"
             value={soin.label}
@@ -735,6 +781,29 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
         </div>
       )}
 
+      {/* Prescripteur (optionnel) */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Médecin prescripteur</label>
+          <input
+            type="text"
+            value={soin.prescriber_name || ''}
+            onChange={e => update('prescriber_name', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+            placeholder="Dr Dupont (optionnel)"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Date de prescription</label>
+          <input
+            type="date"
+            value={soin.prescription_date || ''}
+            onChange={e => update('prescription_date', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+          />
+        </div>
+      </div>
+
       {/* Notes */}
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">Précisions sur le soin</label>
@@ -747,45 +816,64 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
         />
       </div>
 
-      {/* Documents */}
-      <div className="space-y-2">
-        <label className="block text-xs font-medium text-slate-600">Documents</label>
+      {/* Renouvellements autorisés */}
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1">
+          Renouvellements autorisés
+          <span className="ml-1 text-slate-400 font-normal">(0 = non renouvelable)</span>
+        </label>
+        <input
+          type="number"
+          min={0}
+          max={12}
+          value={soin.max_renewals ?? 0}
+          onChange={e => update('max_renewals', parseInt(e.target.value, 10) || 0)}
+          className="w-24 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+        />
+      </div>
 
-        {(soin.documents || []).length > 0 && (
-          <div className="space-y-1">
-            {soin.documents.map(doc => (
-              <div key={doc.id} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm">
-                <div className="flex items-center gap-2 min-w-0">
-                  <File size={14} className="text-slate-400 shrink-0" />
-                  <span className="truncate">{doc.name}</span>
-                  <span className="text-slate-400 text-xs shrink-0">({(doc.size / 1024).toFixed(0)} Ko)</span>
-                </div>
-                <button onClick={() => removeDoc(doc.id)} className="text-red-400 hover:text-red-600 shrink-0 ml-2">
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
+      {/* Document ordonnance (scan / photo) */}
+      <div className="space-y-2">
+        <label className="block text-xs font-medium text-slate-600">Document (scan ou photo de l'ordonnance)</label>
+
+        {displayedDoc && (
+          <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm">
+            <div className="flex items-center gap-2 min-w-0">
+              <File size={14} className="text-slate-400 shrink-0" />
+              <span className="truncate">{displayedDoc.name}</span>
+              {displayedDoc.pending && displayedDoc.size && (
+                <span className="text-slate-400 text-xs shrink-0">({(displayedDoc.size / 1024).toFixed(0)} Ko)</span>
+              )}
+              {displayedDoc.pending && (
+                <span className="text-amber-600 text-xs shrink-0 font-medium">• en attente d'upload</span>
+              )}
+            </div>
+            <button onClick={removeDoc} className="text-red-400 hover:text-red-600 shrink-0 ml-2">
+              <X size={14} />
+            </button>
           </div>
         )}
 
-        <div
-          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors cursor-pointer ${dragOver ? 'border-blue-400 bg-blue-50' : 'border-slate-300 hover:border-blue-300 bg-slate-50'}`}
-          onClick={() => document.getElementById('soin-file-input-' + soin.id)?.click()}
-        >
-          <FileUp size={16} className="mx-auto text-slate-400 mb-0.5" />
-          <p className="text-xs text-slate-500">Glisser ou <span className="text-blue-600 font-medium">parcourir</span></p>
-          <input
-            id={'soin-file-input-' + soin.id}
-            type="file"
-            multiple
-            accept="image/*,.pdf"
-            className="hidden"
-            onChange={e => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ''; }}
-          />
-        </div>
+        {!displayedDoc && (
+          <div
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-lg p-3 text-center transition-colors cursor-pointer ${dragOver ? 'border-blue-400 bg-blue-50' : 'border-slate-300 hover:border-blue-300 bg-slate-50'}`}
+            onClick={() => document.getElementById('soin-file-input-' + soin.id)?.click()}
+          >
+            <FileUp size={16} className="mx-auto text-slate-400 mb-0.5" />
+            <p className="text-xs text-slate-500">Glisser ou <span className="text-blue-600 font-medium">parcourir</span></p>
+            <p className="text-xs text-slate-400 mt-0.5">JPEG, PNG, PDF · max 10 Mo</p>
+            <input
+              id={'soin-file-input-' + soin.id}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              className="hidden"
+              onChange={e => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ''; }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1223,7 +1311,7 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
   const hasBookedAppts = useMemo(() => {
     if (!plan._apiId || !patientId) return false;
     return (appointments || []).some(a =>
-      a.patientId === patientId && a.careProtocolId === plan._apiId && a.status === 'scheduled'
+      a.patientId === patientId && a.careProtocolId === plan._apiId && isActiveAppt(a)
     );
   }, [plan._apiId, patientId, appointments]);
 
@@ -1237,7 +1325,7 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
     const occurrences = generateUnionOccurrences(plan.soins).slice(0, 90);
     if (occurrences.length === 0) return false;
     const scheduledAppts = (appointments || []).filter(a =>
-      a.patientId === patientId && a.status === 'scheduled'
+      a.patientId === patientId && isActiveAppt(a)
     );
     // Quick check: if fewer scheduled RDVs than occurrences, can't be all booked
     if (plan._apiId) {
@@ -1253,9 +1341,10 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
     );
   }, [hasValidSoin, patientId, plan.soins, plan._apiId, plan.careSchedule.startTime, appointments]);
 
-  // Show slot suggestions when dates/duration are filled but times are not
-  const showSuggestions = hasValidSoin
-    && plan.soins.some(s => s.durationMinutes)
+  // Show slot suggestions when at least one soin has dates + duration + frequency filled
+  const showSuggestions = plan.soins.some(s =>
+    s.startDate && s.endDate && s.durationMinutes && s.frequency && s.frequency !== 'custom'
+  )
     && !plan.careSchedule.startTime
     && !plan.careSchedule.endTime;
 
@@ -1269,10 +1358,10 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
   return (
     <div className="border border-blue-200 bg-blue-50/50 rounded-lg p-5 space-y-5">
 
-      {/* ═══════ SECTION 1 : Soins ═══════ */}
+      {/* ═══════ SECTION 1 : Ordonnances ═══════ */}
       <div className="space-y-4">
         <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2">
-          <ClipboardList size={16} className="text-blue-600" /> Soins
+          <ClipboardList size={16} className="text-blue-600" /> Ordonnances
         </h4>
 
         <div className="space-y-3">
@@ -1298,7 +1387,7 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
             onClick={addSoin}
             className="flex items-center gap-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 px-3 py-2 rounded-lg text-sm font-medium transition-colors w-full justify-center border border-dashed border-blue-300"
           >
-            <Plus size={14} /> Ajouter un soin ({plan.soins.length}/5)
+            <Plus size={14} /> Ajouter une ordonnance ({plan.soins.length}/5)
           </button>
         )}
       </div>
@@ -1411,12 +1500,12 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
   const docCount = totalDocuments(soins);
 
   // Compute associated appointments and remaining count
-  const { matchingAppts, totalOccurrences, plannedCount, remainingCount } = useMemo(() => {
+  const { matchingAppts, totalOccurrences, plannedCount, completedCount, remainingCount } = useMemo(() => {
     if (!patientId || !startDate || !endDate || !startTime || !endTime) {
-      return { matchingAppts: [], totalOccurrences: 0, plannedCount: 0, remainingCount: 0 };
+      return { matchingAppts: [], totalOccurrences: 0, plannedCount: 0, completedCount: 0, remainingCount: 0 };
     }
 
-    const patientAppts = (appointments || []).filter(a => a.patientId === patientId && a.status === 'scheduled');
+    const patientAppts = (appointments || []).filter(a => a.patientId === patientId && isActiveAppt(a));
     const matching = patientAppts.filter(a => {
       if (a.careProtocolId && plan._apiId) {
         return a.careProtocolId === plan._apiId;
@@ -1425,10 +1514,12 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
         && a.dateStr >= startDate && a.dateStr <= endDate;
     });
 
+    const completed = matching.filter(a => a.status === 'completed').length;
+
     // Check if all soins are custom
     const allCustom = soins.every(s => s.frequency === 'custom' || !s.frequency || !s.startDate || !s.endDate);
     if (allCustom) {
-      return { matchingAppts: [...matching].sort((a, b) => a.dateStr.localeCompare(b.dateStr)), totalOccurrences: 0, plannedCount: matching.length, remainingCount: 0 };
+      return { matchingAppts: [...matching].sort((a, b) => a.dateStr.localeCompare(b.dateStr)), totalOccurrences: 0, plannedCount: matching.length, completedCount: completed, remainingCount: 0 };
     }
 
     const occurrences = generateUnionOccurrences(soins);
@@ -1439,14 +1530,17 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
       matchingAppts: [...matching].sort((a, b) => a.dateStr.localeCompare(b.dateStr)),
       totalOccurrences: occurrences.length,
       plannedCount: planned,
+      completedCount: completed,
       remainingCount: occurrences.length - planned,
     };
   }, [plan, soins, appointments, patientId, startDate, endDate, startTime, endTime]);
 
   const hasStats = totalOccurrences > 0 || plannedCount > 0;
   const allPlanned = hasStats && remainingCount === 0;
-  const today = toDateStr(new Date());
-  const isTerminee = endDate < today && matchingAppts.length === 0;
+  const allCompleted = totalOccurrences > 0
+    && matchingAppts.length >= totalOccurrences
+    && matchingAppts.every(a => a.status === 'completed');
+  const isTerminee = allCompleted;
 
   return (
     <div className={`border rounded-lg transition-shadow ${isTerminee ? 'border-slate-200 bg-slate-50/50' : 'border-slate-200 bg-white'}`}>
@@ -1468,9 +1562,16 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-2">
           {hasStats && (
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${allPlanned ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-              {plannedCount}/{totalOccurrences} RDV{remainingCount > 0 && <span className="ml-1 opacity-75">({remainingCount} restant{remainingCount > 1 ? 's' : ''})</span>}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {completedCount > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-50 text-indigo-700">
+                  <CheckCheck size={10} className="inline -mt-0.5 mr-0.5" />{completedCount} réalisé{completedCount > 1 ? 's' : ''}
+                </span>
+              )}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${allPlanned ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                {plannedCount}/{totalOccurrences} RDV{remainingCount > 0 && <span className="ml-1 opacity-75">({remainingCount} restant{remainingCount > 1 ? 's' : ''})</span>}
+              </span>
+            </div>
           )}
           {docCount > 0 && (
             <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
@@ -1486,7 +1587,7 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
             </span>
           ) : (
             <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
-              {soins.length} soins
+              {soins.length} ordonnances
             </span>
           )}
           {startTime && endTime && (
@@ -1506,7 +1607,7 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
           {soins.map((soin, idx) => (
             <div key={soin.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-400 uppercase">Soin {idx + 1}</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase">Ordonnance {idx + 1}</span>
                 <span className="font-medium text-sm text-slate-800">{soin.label || 'Sans titre'}</span>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
@@ -1676,7 +1777,8 @@ export default function PrescriptionsTab({
     if (!hasValidSoin) return null;
 
     const saved = await onSavePrescription(formData, patientForm.id);
-    setFormData(prev => ({ ...prev, _apiId: saved._apiId, id: saved.id }));
+    // Met à jour aussi les soins avec leur _prescriptionId backend pour éviter la double-création
+    setFormData(prev => ({ ...prev, _apiId: saved._apiId, id: saved.id, soins: saved.soins }));
     if (formMode === 'add') {
       updatePrescriptions([...prescriptions, saved]);
       setFormMode(saved.id);

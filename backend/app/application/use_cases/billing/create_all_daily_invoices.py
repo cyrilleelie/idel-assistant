@@ -21,12 +21,14 @@ class CreateAllDailyInvoicesUseCase:
         line_repo: InvoiceLineRepository,
         patient_repo: PatientRepository,
         catalog_repo: CareTypeCatalogRepository,
+        db_session=None,
     ):
         self._appointment_repo = appointment_repo
         self._invoice_repo = invoice_repo
         self._line_repo = line_repo
         self._patient_repo = patient_repo
         self._catalog_repo = catalog_repo
+        self._session = db_session
 
     async def execute(
         self,
@@ -64,6 +66,7 @@ class CreateAllDailyInvoicesUseCase:
             self._line_repo,
             self._patient_repo,
             self._catalog_repo,
+            self._session,
         )
 
         created_invoices: list[InvoiceDTO] = []

@@ -1,0 +1,88 @@
+"""Règles métier pour les ordonnances (prescriptions médicales)."""
+
+import datetime
+from datetime import timedelta
+
+from app.domain.entities.prescription import Prescription
+
+
+def compute_end_date(
+    start_date: datetime.date,
+    duration_days: int | None,
+    end_date_explicit: datetime.date | None,
+) -> datetime.date | None:
+    """
+    Calcule la date de fin d'une ordonnance.
+    Priorité : end_date explicite > start_date + duration_days > None.
+    Si duration_days est fourni, le jour de début compte (duration_days=15 → 15 jours incluant J1).
+    """
+    if end_date_explicit:
+        return end_date_explicit
+    if duration_days and duration_days > 0:
+        return start_date + timedelta(days=duration_days - 1)
+    return None
+
+
+def compute_prescription_status(
+    prescription: Prescription,
+    reference_date: datetime.date | None = None,
+) -> str:
+    """
+    Calcule le statut effectif d'une ordonnance à la date de référence.
+
+    Appelé à la consultation (pas en batch). Ne modifie pas l'entité.
+    Statuts stockés permanents : "canceled", "completed" — retournés tels quels.
+    Statuts calculés depuis la date : "active", "expiring" (≤ 3j restants), "expired".
+    """
+    today = reference_date or datetime.date.today()
+
+    if prescription.status in ("canceled", "completed"):
+        return prescription.status
+
+    if prescription.end_date is None:
+        return "active"
+
+    days_remaining = (prescription.end_date - today).days
+
+    if days_remaining < 0:
+        return "expired"
+    elif days_remaining <= 3:
+        return "expiring"
+    else:
+        return "active"
+
+
+def days_remaining(
+    prescription: Prescription,
+    reference_date: datetime.date | None = None,
+) -> int | None:
+    """Retourne le nombre de jours restants, ou None si pas de date de fin."""
+    if prescription.end_date is None:
+        return None
+    today = reference_date or datetime.date.today()
+    return max(0, (prescription.end_date - today).days)
+
+
+def can_bill_against_prescription(
+    prescription: Prescription,
+    care_date: datetime.date,
+) -> tuple[bool, str | None]:
+    """
+    Vérifie si une facture peut être rattachée à cette ordonnance pour une date de soin.
+    Retourne (True, None) si OK, (False, reason) sinon.
+    """
+    status = compute_prescription_status(prescription, care_date)
+
+    if status == "canceled":
+        return False, "Ordonnance annulée"
+    if status == "expired":
+        return False, f"Ordonnance expirée depuis le {prescription.end_date}"
+    if status == "completed":
+        return False, "Ordonnance déjà complétée"
+    if prescription.start_date and care_date < prescription.start_date:
+        return False, (
+            f"Date de soin ({care_date}) antérieure au début de "
+            f"l'ordonnance ({prescription.start_date})"
+        )
+
+    return True, None

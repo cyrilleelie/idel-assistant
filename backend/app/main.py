@@ -22,6 +22,7 @@ from app.infrastructure.api.v1 import (
     document_routes,
     invoice_routes,
     patient_routes,
+    prescription_routes,
     schedule_assignment_routes,
     sector_routes,
     slot_routes,
@@ -116,6 +117,7 @@ app.include_router(invoice_routes.router, prefix="/api/v1")
 app.include_router(cotation_routes.router, prefix="/api/v1")
 app.include_router(schedule_assignment_routes.router, prefix="/api/v1")
 app.include_router(care_label_routes.router, prefix="/api/v1")
+app.include_router(prescription_routes.router, prefix="/api/v1")
 app.include_router(admin_routes.router, prefix="/api/v1")
 
 

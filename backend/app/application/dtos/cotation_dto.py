@@ -16,6 +16,7 @@ class SimulateCotationDTO:
     lieu: str  # "domicile" | "cabinet"
     zone_ik: str  # "plaine" | "montagne"
     est_premier_soin_journee: bool
+    bsi_already_billed_today: bool = False  # Anti-doublon forfait BSI multi-IDEL
 
 
 @dataclass
@@ -53,11 +54,12 @@ class DailyBillingItemDTO:
     invoice_id: UUID | None
     invoice_status: str | None
     # Champs ordonnance (ajoutés iter 4)
+    care_protocol_id: UUID | None = None       # Plan de soins lié au RDV
     prescription_id: UUID | None = None
     prescription_status: str | None = None    # "active" | "expiring" | "expired" | None
     prescription_missing: bool = False         # True si le CareProtocol n'a pas d'ordonnance
-    prescription_incomplete: bool = False      # True si ordonnance trouvée mais incomplète (pas de document / champ manquant)
-    prescription_warning: str | None = None   # Message d'alerte si problème
+    prescription_incomplete: bool = False      # True si ordonnance trouvée mais incomplète
+    prescription_warnings: list[str] = field(default_factory=list)  # Tous les problèmes détectés
 
 
 @dataclass

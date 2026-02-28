@@ -47,7 +47,7 @@ class SimulateCotationUseCase:
         patient_ctx = PatientCotationContext(
             has_active_bsi=patient.has_active_bsi,
             bsi_level=patient.bsi_level,
-            bsi_already_billed_today=False,  # Simulation => on ne check pas
+            bsi_already_billed_today=dto.bsi_already_billed_today,
             is_ald=patient.is_ald,
             is_maternity=patient.is_maternity,
             age=age,

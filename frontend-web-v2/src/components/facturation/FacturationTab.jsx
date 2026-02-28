@@ -10,6 +10,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Zap,
+  ExternalLink,
 } from 'lucide-react';
 import { getDailyBilling, createInvoiceFromAppointment, createAllDailyInvoices } from '../../api/cotation';
 import { listInvoices, validateInvoice, cancelInvoice } from '../../api/invoices';
@@ -29,7 +31,7 @@ function statusBadge(status) {
     scheduled: { label: 'Planifie', cls: 'bg-slate-100 text-slate-600' },
     confirmed: { label: 'Confirme', cls: 'bg-blue-100 text-blue-700' },
     completed: { label: 'Termine', cls: 'bg-green-100 text-green-700' },
-    cancelled: { label: 'Annule', cls: 'bg-red-100 text-red-600' },
+    canceled: { label: 'Annule', cls: 'bg-red-100 text-red-600' },
     no_show: { label: 'Absent', cls: 'bg-amber-100 text-amber-700' },
   };
   const s = map[status] || { label: status, cls: 'bg-slate-100 text-slate-600' };
@@ -42,13 +44,13 @@ function invoiceStatusBadge(status) {
     validated: { label: 'Validee', cls: 'bg-green-100 text-green-700' },
     sent: { label: 'Envoyee', cls: 'bg-blue-100 text-blue-700' },
     paid: { label: 'Payee', cls: 'bg-emerald-100 text-emerald-700' },
-    cancelled: { label: 'Annulee', cls: 'bg-red-100 text-red-600' },
+    canceled: { label: 'Annulee', cls: 'bg-red-100 text-red-600' },
   };
   const s = map[status] || { label: status, cls: 'bg-slate-100 text-slate-600' };
   return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>{s.label}</span>;
 }
 
-export default function FacturationTab({ nurses = [] }) {
+export default function FacturationTab({ nurses = [], onNavigateToPrescription }) {
   const [date, setDate] = useState(formatDate(new Date()));
   const [billing, setBilling] = useState(null);
   const [invoices, setInvoices] = useState([]);
@@ -57,8 +59,20 @@ export default function FacturationTab({ nurses = [] }) {
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState({});
   const [expandedInvoiceId, setExpandedInvoiceId] = useState(null);
+  const [visibleStatuses, setVisibleStatuses] = useState(
+    new Set(['draft'])
+    // Seul 'draft' visible par défaut. 'canceled' = orthographe backend US (1 seul 'l')
+  );
 
-  // Build a map userId -> display name for nurse lookup
+  const toggleStatus = (status) => {
+    setVisibleStatuses(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  };
+
   const nurseMap = useMemo(() => {
     const m = new Map();
     for (const n of nurses) {
@@ -110,6 +124,8 @@ export default function FacturationTab({ nurses = [] }) {
     setDate(formatDate(d));
   };
 
+  // ── Actions ──────────────────────────────────────────────────────────────
+
   const handleInvoiceOne = async (appointmentId) => {
     setActionLoading(prev => ({ ...prev, [appointmentId]: true }));
     try {
@@ -131,6 +147,23 @@ export default function FacturationTab({ nurses = [] }) {
       setError(err.response?.data?.detail || 'Erreur lors de la facturation groupee');
     } finally {
       setActionLoading(prev => ({ ...prev, _all: false }));
+    }
+  };
+
+  /** Valide toutes les factures draft auto-générées sans needs_review. */
+  const handleValidateAll = async () => {
+    const toValidate = invoices.filter(
+      inv => inv.status === 'draft' && !inv.metadata?.needs_review
+    );
+    if (toValidate.length === 0) return;
+    setActionLoading(prev => ({ ...prev, _validateAll: true }));
+    try {
+      await Promise.allSettled(toValidate.map(inv => validateInvoice(inv.id)));
+      refresh();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Erreur lors de la validation groupée');
+    } finally {
+      setActionLoading(prev => ({ ...prev, _validateAll: false }));
     }
   };
 
@@ -158,16 +191,34 @@ export default function FacturationTab({ nurses = [] }) {
     }
   };
 
+  // ── Données calculées ─────────────────────────────────────────────────────
+
   const appointments = billing?.items || [];
-  // Seuls les RDV sans blocage ordonnance peuvent être facturés
+
+  // Factures par catégorie
+  const autoReadyInvoices = invoices.filter(
+    inv => inv.status === 'draft' && inv.metadata?.auto_cotation && !inv.metadata?.needs_review
+  );
+  const needsReviewInvoices = invoices.filter(
+    inv => inv.status === 'draft' && inv.metadata?.needs_review
+  );
+  const validatedInvoices = invoices.filter(inv => inv.status !== 'draft' && inv.status !== 'canceled');
+
+  // RDVs complétés sans facture et sans blocage ordonnance → "à compléter"
   const completedNotInvoiced = appointments.filter(a =>
     a.status === 'completed' && !a.invoice_id && !a.prescription_missing && !a.prescription_incomplete
   );
+
+  // Factures filtrées par statut (pour l'affichage)
+  const filteredInvoices = invoices.filter(inv => visibleStatuses.has(inv.status));
+
+  // Stats
   const totalBilled = billing?.total_facture ?? 0;
   const totalNonBilled = billing?.total_non_facture ?? 0;
 
   return (
     <div className="space-y-6">
+
       {/* Header: date nav + actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -200,15 +251,33 @@ export default function FacturationTab({ nurses = [] }) {
             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Boutons d'action principaux */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Bouton principal : Tout valider (factures auto déjà créées) */}
+          {autoReadyInvoices.length > 0 && (
+            <button
+              onClick={handleValidateAll}
+              disabled={actionLoading._validateAll}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              <Check size={16} />
+              {actionLoading._validateAll
+                ? 'Validation...'
+                : `Tout valider (${autoReadyInvoices.length})`}
+            </button>
+          )}
+          {/* Bouton secondaire : Tout facturer (RDVs sans facture) */}
           {completedNotInvoiced.length > 0 && (
             <button
               onClick={handleInvoiceAll}
               disabled={actionLoading._all}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 disabled:opacity-50 transition-colors"
             >
               <Receipt size={16} />
-              {actionLoading._all ? 'Facturation...' : `Tout facturer (${completedNotInvoiced.length})`}
+              {actionLoading._all
+                ? 'Facturation...'
+                : `Tout facturer (${completedNotInvoiced.length})`}
             </button>
           )}
         </div>
@@ -228,23 +297,30 @@ export default function FacturationTab({ nurses = [] }) {
         </div>
       )}
 
-      {/* Summary stats */}
+      {/* Summary stats — 4 indicateurs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <p className="text-xs text-slate-500 mb-1">RDV du jour</p>
           <p className="text-2xl font-semibold text-slate-800">{appointments.length}</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-xs text-slate-500 mb-1">Facturés</p>
-          <p className="text-2xl font-semibold text-blue-600">{totalBilled}</p>
+        <div className="bg-white rounded-xl border border-emerald-200 p-4">
+          <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+            <Zap size={11} className="text-emerald-500" /> Factures auto
+          </p>
+          <p className="text-2xl font-semibold text-emerald-600">{autoReadyInvoices.length}</p>
+          {autoReadyInvoices.length > 0 && (
+            <p className="text-[10px] text-emerald-500 mt-0.5">Prêtes à valider</p>
+          )}
+        </div>
+        <div className="bg-white rounded-xl border border-amber-200 p-4">
+          <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+            <AlertCircle size={11} className="text-amber-500" /> À vérifier
+          </p>
+          <p className="text-2xl font-semibold text-amber-600">{needsReviewInvoices.length}</p>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-xs text-slate-500 mb-1">A facturer</p>
-          <p className="text-2xl font-semibold text-amber-600">{totalNonBilled}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-xs text-slate-500 mb-1">Factures créées</p>
-          <p className="text-2xl font-semibold text-green-600">{invoices.length}</p>
+          <p className="text-xs text-slate-500 mb-1">À compléter</p>
+          <p className="text-2xl font-semibold text-slate-500">{totalNonBilled}</p>
         </div>
       </div>
 
@@ -286,6 +362,7 @@ export default function FacturationTab({ nurses = [] }) {
                     ? new Date(appt.scheduled_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
                     : '--:--';
                   const codes = appt.act_codes || [];
+                  const prescriptionWarnings = appt.prescription_warnings || [];
                   const prescriptionBlocked = appt.prescription_missing || appt.prescription_incomplete;
                   const canInvoice = appt.status === 'completed' && !appt.invoice_id && !prescriptionBlocked;
                   return (
@@ -307,18 +384,29 @@ export default function FacturationTab({ nurses = [] }) {
                       <td className="px-5 py-3">
                         <div className="space-y-1">
                           {statusBadge(appt.status)}
-                          {/* Badge ordonnance */}
-                          {appt.prescription_warning && (
-                            <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
-                              appt.prescription_missing || appt.prescription_incomplete
-                                ? 'bg-red-100 text-red-700'
-                                : appt.prescription_status === 'expiring'
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : 'bg-red-100 text-red-700'
-                            }`}>
-                              <AlertCircle size={10} />
-                              {appt.prescription_warning}
+                          {prescriptionWarnings.length > 0 && (
+                            <div className="space-y-0.5">
+                              {prescriptionWarnings.map((w, i) => (
+                                <div key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  prescriptionBlocked
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                  <AlertCircle size={10} />
+                                  {w}
+                                </div>
+                              ))}
                             </div>
+                          )}
+                          {prescriptionBlocked && onNavigateToPrescription && (
+                            <button
+                              onClick={() => onNavigateToPrescription(appt.patient_id, appt.care_protocol_id)}
+                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+                              title="Ouvrir le plan de soins pour corriger les éléments manquants"
+                            >
+                              <ExternalLink size={10} />
+                              Corriger l'ordonnance
+                            </button>
                           )}
                         </div>
                       </td>
@@ -337,7 +425,7 @@ export default function FacturationTab({ nurses = [] }) {
                           <button
                             onClick={() => canInvoice && handleInvoiceOne(appt.appointment_id)}
                             disabled={!canInvoice || actionLoading[appt.appointment_id]}
-                            title={prescriptionBlocked ? appt.prescription_warning : undefined}
+                            title={prescriptionBlocked ? prescriptionWarnings.join(' · ') : undefined}
                             className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                               canInvoice
                                 ? 'bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50'
@@ -360,8 +448,73 @@ export default function FacturationTab({ nurses = [] }) {
 
       {/* Invoices section */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-slate-100">
+        {/* En-tête : titre + compteurs */}
+        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-700">Factures du jour</h3>
+          {invoices.length > 0 && (
+            <div className="flex items-center gap-3 text-xs text-slate-500">
+              {autoReadyInvoices.length > 0 && (
+                <span className="flex items-center gap-1 text-emerald-600">
+                  <Zap size={11} /> {autoReadyInvoices.length} auto
+                </span>
+              )}
+              {needsReviewInvoices.length > 0 && (
+                <span className="flex items-center gap-1 text-amber-600">
+                  <AlertCircle size={11} /> {needsReviewInvoices.length} à vérifier
+                </span>
+              )}
+              {validatedInvoices.length > 0 && (
+                <span className="flex items-center gap-1 text-green-600">
+                  <Check size={11} /> {validatedInvoices.length} validée{validatedInvoices.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Barre de filtres par statut — toujours affichée pour que l'utilisateur
+            voie quels filtres sont actifs, même si certains statuts ont 0 facture */}
+        <div className="px-5 py-2.5 border-b border-slate-100 flex flex-wrap gap-2">
+          {[
+            { key: 'draft',     label: 'Brouillon', activeClass: 'bg-slate-200 text-slate-700 border-slate-300' },
+            { key: 'validated', label: 'Validée',   activeClass: 'bg-green-100 text-green-700 border-green-300' },
+            { key: 'sent',      label: 'Envoyée',   activeClass: 'bg-blue-100 text-blue-700 border-blue-300' },
+            { key: 'paid',      label: 'Payée',     activeClass: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
+            { key: 'canceled',  label: 'Annulée',   activeClass: 'bg-red-100 text-red-600 border-red-300' },
+          ].map(({ key, label, activeClass }) => {
+            const count = invoices.filter(inv => inv.status === key).length;
+            const isOn = visibleStatuses.has(key);
+            // Pas de factures avec ce statut aujourd'hui : chip grisé non cliquable
+            if (count === 0) {
+              return (
+                <span
+                  key={key}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-slate-50 text-slate-300 border-slate-200 cursor-default select-none"
+                  title="Aucune facture avec ce statut aujourd'hui"
+                >
+                  {label}
+                  <span className="rounded-full px-1 text-[10px] font-semibold">0</span>
+                </span>
+              );
+            }
+            return (
+              <button
+                key={key}
+                onClick={() => toggleStatus(key)}
+                title={isOn ? `Masquer les factures "${label}"` : `Afficher les factures "${label}" (${count})`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
+                  isOn
+                    ? activeClass
+                    : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400 hover:text-slate-600'
+                }`}
+              >
+                {label}
+                <span className={`rounded-full px-1 text-[10px] font-semibold ${isOn ? 'bg-white/50' : ''}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {invoicesLoading ? (
@@ -373,14 +526,26 @@ export default function FacturationTab({ nurses = [] }) {
             <FileText size={32} className="text-slate-300 mb-3" />
             <p className="text-sm text-slate-500">Aucune facture pour cette date</p>
           </div>
+        ) : filteredInvoices.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <FileText size={32} className="text-slate-300 mb-3" />
+            <p className="text-sm text-slate-500">Aucune facture ne correspond aux filtres actifs</p>
+          </div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {invoices.map((inv) => {
+            {filteredInvoices.map((inv) => {
               const isExpanded = expandedInvoiceId === inv.id;
               const lines = inv.lines || [];
+              const isAuto = inv.metadata?.auto_cotation === true;
+              const needsReview = inv.metadata?.needs_review === true;
+              const reviewReason = inv.metadata?.review_reason;
+
               return (
-                <div key={inv.id}>
-                  {/* Invoice header row - clickable */}
+                <div
+                  key={inv.id}
+                  className={needsReview ? 'border-l-2 border-amber-400' : ''}
+                >
+                  {/* Invoice header row */}
                   <button
                     type="button"
                     onClick={() => setExpandedInvoiceId(isExpanded ? null : inv.id)}
@@ -391,12 +556,30 @@ export default function FacturationTab({ nurses = [] }) {
                         <FileText size={16} className="text-slate-400" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-700 truncate">
-                          {inv.invoice_number || 'Brouillon'}
-                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium text-slate-700 truncate">
+                            {inv.invoice_number || 'Brouillon'}
+                          </p>
+                          {/* Badge ⚡ Auto */}
+                          {isAuto && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-emerald-50 text-emerald-600 border border-emerald-200">
+                              <Zap size={9} /> Auto
+                            </span>
+                          )}
+                          {/* Badge ⚠️ À vérifier */}
+                          {needsReview && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-50 text-amber-700 border border-amber-200">
+                              <AlertCircle size={9} /> À vérifier
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-500 truncate">
-                          {getNurseName(inv.idel_id)} - {inv.patient_name || 'Patient'} - {Number(inv.total_amount ?? 0).toFixed(2)} EUR
+                          {getNurseName(inv.idel_id)} — {inv.patient_name || 'Patient'} — {Number(inv.total_amount ?? 0).toFixed(2)} €
                         </p>
+                        {/* Raison needs_review */}
+                        {needsReview && reviewReason && (
+                          <p className="text-[10px] text-amber-600 mt-0.5 truncate">{reviewReason}</p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -408,7 +591,6 @@ export default function FacturationTab({ nurses = [] }) {
                   {/* Expanded detail panel */}
                   {isExpanded && (
                     <div className="px-5 pb-4 bg-slate-50/50 border-t border-slate-100">
-                      {/* Invoice info */}
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 py-3">
                         <div>
                           <p className="text-xs text-slate-400">Soignant</p>
@@ -470,19 +652,19 @@ export default function FacturationTab({ nurses = [] }) {
                       <div className="flex flex-wrap gap-4 mt-3 pt-3 border-t border-slate-200">
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-slate-400">AMO (60%) :</span>
-                          <span className="text-sm font-medium text-slate-700">{Number(inv.total_amo ?? 0).toFixed(2)} EUR</span>
+                          <span className="text-sm font-medium text-slate-700">{Number(inv.total_amo ?? 0).toFixed(2)} €</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-slate-400">AMC (40%) :</span>
-                          <span className="text-sm font-medium text-slate-700">{Number(inv.total_amc ?? 0).toFixed(2)} EUR</span>
+                          <span className="text-sm font-medium text-slate-700">{Number(inv.total_amc ?? 0).toFixed(2)} €</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-slate-400">Patient :</span>
-                          <span className="text-sm font-medium text-slate-700">{Number(inv.total_patient ?? 0).toFixed(2)} EUR</span>
+                          <span className="text-sm font-medium text-slate-700">{Number(inv.total_patient ?? 0).toFixed(2)} €</span>
                         </div>
                         <div className="flex items-center gap-1.5 ml-auto">
                           <span className="text-xs text-slate-500 font-medium">Total :</span>
-                          <span className="text-sm font-semibold text-slate-900">{Number(inv.total_amount ?? 0).toFixed(2)} EUR</span>
+                          <span className="text-sm font-semibold text-slate-900">{Number(inv.total_amount ?? 0).toFixed(2)} €</span>
                         </div>
                       </div>
 

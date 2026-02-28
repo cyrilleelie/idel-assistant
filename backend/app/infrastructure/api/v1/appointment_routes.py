@@ -1,28 +1,44 @@
 """Routes CRUD pour les rendez-vous."""
 
 import datetime
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.use_cases.billing.create_invoice_from_appointment import (
+    CreateInvoiceFromAppointmentUseCase,
+)
 from app.domain.entities.appointment import Appointment
 from app.infrastructure.api.dependencies import (
     AuthContext,
     get_appointment_repository,
+    get_care_catalog_repository,
     get_current_user,
+    get_invoice_line_repository,
+    get_invoice_repository,
     get_patient_repository,
 )
 from app.infrastructure.api.schemas.appointment_schemas import (
     AppointmentCreate,
+    AppointmentCompleteResponse,
     AppointmentListResponse,
     AppointmentResponse,
     AppointmentUpdate,
+    AutoBillingInfo,
     CancelRequest,
 )
+from app.infrastructure.persistence.database import get_db
 from app.infrastructure.persistence.repositories import (
     SQLAlchemyAppointmentRepo,
+    SQLAlchemyCareCatalogRepo,
+    SQLAlchemyInvoiceLineRepo,
+    SQLAlchemyInvoiceRepo,
     SQLAlchemyPatientRepo,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -32,8 +48,8 @@ APPOINTMENT_UPDATABLE_FIELDS = frozenset({
 })
 
 
-def _entity_to_response(appt: Appointment) -> AppointmentResponse:
-    return AppointmentResponse(
+def _appt_base_fields(appt: Appointment) -> dict:
+    return dict(
         id=str(appt.id),
         cabinet_id=str(appt.cabinet_id),
         idel_id=str(appt.idel_id),
@@ -55,6 +71,10 @@ def _entity_to_response(appt: Appointment) -> AppointmentResponse:
         created_at=appt.created_at,
         updated_at=appt.updated_at,
     )
+
+
+def _entity_to_response(appt: Appointment) -> AppointmentResponse:
+    return AppointmentResponse(**_appt_base_fields(appt))
 
 
 @router.get("/", response_model=AppointmentListResponse)
@@ -256,14 +276,22 @@ async def cancel_appointment(
     return _entity_to_response(appt)
 
 
-@router.post("/{appointment_id}/complete", response_model=AppointmentResponse)
+@router.post("/{appointment_id}/complete", response_model=AppointmentCompleteResponse)
 async def complete_appointment(
     appointment_id: UUID,
     request: Request,
     auth: AuthContext = Depends(get_current_user),
     repo: SQLAlchemyAppointmentRepo = Depends(get_appointment_repository),
+    invoice_repo: SQLAlchemyInvoiceRepo = Depends(get_invoice_repository),
+    line_repo: SQLAlchemyInvoiceLineRepo = Depends(get_invoice_line_repository),
+    patient_repo: SQLAlchemyPatientRepo = Depends(get_patient_repository),
+    catalog_repo: SQLAlchemyCareCatalogRepo = Depends(get_care_catalog_repository),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Marque un rendez-vous comme réalisé."""
+    """
+    Marque un rendez-vous comme réalisé et tente de créer une facture brouillon
+    automatiquement. La facturation automatique ne bloque jamais la complétion.
+    """
     request.state.user_id = auth.user_id
     request.state.cabinet_id = auth.cabinet_id
 
@@ -280,6 +308,45 @@ async def complete_appointment(
             detail="Seuls les rendez-vous planifiés peuvent être complétés",
         )
 
+    # 1. Passer le RDV en completed
     appt.status = "completed"
     appt = await repo.update(appt)
-    return _entity_to_response(appt)
+
+    # 2. Tentative de facturation automatique (non-bloquante)
+    auto_billing: AutoBillingInfo | None = None
+    try:
+        use_case = CreateInvoiceFromAppointmentUseCase(
+            appointment_repo=repo,
+            invoice_repo=invoice_repo,
+            line_repo=line_repo,
+            patient_repo=patient_repo,
+            catalog_repo=catalog_repo,
+            db_session=db,
+        )
+        invoice_dto = await use_case.execute(
+            cabinet_id=auth.cabinet_id,
+            appointment_id=appointment_id,
+        )
+        auto_billing = AutoBillingInfo(
+            status="created",
+            invoice_id=str(invoice_dto.id),
+            invoice_number=invoice_dto.invoice_number,
+            invoice_total=float(invoice_dto.total_amount),
+        )
+        logger.info(
+            "Facture brouillon %s créée automatiquement pour le RDV %s",
+            invoice_dto.invoice_number,
+            appointment_id,
+        )
+    except ValueError as exc:
+        # Cas métier attendus : pas de codes actes, facture déjà existante,
+        # ordonnance manquante/invalide → l'IDEL complétera depuis Facturation
+        reason = str(exc)
+        auto_billing = AutoBillingInfo(status="skipped", skip_reason=reason)
+        logger.info("Facturation auto ignorée pour RDV %s : %s", appointment_id, reason)
+    except Exception as exc:
+        # Erreur inattendue : ne pas bloquer la complétion du RDV
+        auto_billing = AutoBillingInfo(status="error", skip_reason=str(exc))
+        logger.error("Erreur facturation auto pour RDV %s : %s", appointment_id, exc, exc_info=True)
+
+    return AppointmentCompleteResponse(**_appt_base_fields(appt), auto_billing=auto_billing)

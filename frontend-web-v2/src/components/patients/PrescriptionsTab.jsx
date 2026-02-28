@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Trash2, ChevronDown, ChevronUp, FileUp, X, File,
   Calendar, Clock, RefreshCw, MessageSquare, Pencil,
@@ -1724,7 +1724,8 @@ export default function PrescriptionsTab({
   onCreateAppointment, onCancelAppointment,
   onSavePrescription, onDeletePrescription, prescriptionsLoading,
   careLabels, careDurations, careLabelCodeMap,
-  cabinetData, patients
+  cabinetData, patients,
+  initialEditProtocolId
 }) {
   const prescriptions = patientForm.prescriptions || [];
   const [expandedId, setExpandedId] = useState(null);
@@ -1780,6 +1781,26 @@ export default function PrescriptionsTab({
     setFormData(null);
     setSaveError('');
   };
+
+  // Deep-link : ouvre automatiquement le formulaire d'édition du plan ciblé
+  // On utilise un ref pour ne s'appliquer qu'une seule fois même si prescriptions
+  // arrive après le premier render (chargement async)
+  const initialEditAppliedRef = useRef(false);
+  useEffect(() => {
+    initialEditAppliedRef.current = false;
+  }, [initialEditProtocolId]);
+
+  useEffect(() => {
+    if (initialEditAppliedRef.current) return;
+    if (!initialEditProtocolId || prescriptions.length === 0) return;
+    const rx = prescriptions.find(p => p._apiId === initialEditProtocolId);
+    if (rx) {
+      initialEditAppliedRef.current = true;
+      setExpandedId(rx.id);
+      startEdit(rx);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEditProtocolId, prescriptions]);
 
   // Auto-save the plan to backend (called on first booking attempt if not yet persisted)
   const ensurePlanSaved = async () => {

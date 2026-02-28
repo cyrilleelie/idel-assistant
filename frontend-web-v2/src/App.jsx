@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { installFrontendLogger } from './utils/frontendLogger';
+installFrontendLogger();
 import { Building2, Calendar, Users, Clock } from 'lucide-react';
 import { getDaysInMonth, formatDate, doSlotsOverlap, isTimeWithinSlot, getDayOfWeekMondayBased } from './utils/dateTime';
 import { defaultConfigs, nurseColors } from './data/defaults';
@@ -28,7 +30,7 @@ import CabinetTab from './components/cabinet/CabinetTab';
 import CreneauxTab from './components/creneaux/CreneauxTab';
 import FacturationTab from './components/facturation/FacturationTab';
 import MaTourneeTab from './components/tournee/MaTourneeTab';
-import AdminBddTab from './components/admin/AdminBddTab';
+import AdministrationScreen from './components/admin/AdministrationScreen';
 import RdvModal from './components/modals/RdvModal';
 
 // --- Sub-tab definitions per screen ---
@@ -156,6 +158,9 @@ export default function App() {
   const handleScreenChange = useCallback((screen) => {
     setActiveScreen(screen);
     setActiveTab(defaultTabForScreen[screen]);
+    if (screen === 'facturation') {
+      setPendingFacturationCount(0);
+    }
   }, []);
 
   // --- ÉTATS (State) ---
@@ -177,6 +182,10 @@ export default function App() {
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [rdvModalParams, setRdvModalParams] = useState(null);
   const [rdvForm, setRdvForm] = useState({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home', careLabels: [], actCodes: [] });
+
+  // Facturation automatique : toast de confirmation + badge
+  const [completionToast, setCompletionToast] = useState(null); // { message, type: 'success'|'info' }
+  const [pendingFacturationCount, setPendingFacturationCount] = useState(0);
   const [rdvError, setRdvError] = useState('');
   const [rdvPrescriptions, setRdvPrescriptions] = useState([]);
   const [rdvPrescriptionsLoading, setRdvPrescriptionsLoading] = useState(false);
@@ -201,13 +210,36 @@ export default function App() {
   const [patientSearch, setPatientSearch] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [patientSubTab, setPatientSubTab] = useState('info');
+  const [initialEditProtocolId, setInitialEditProtocolId] = useState(null);
   const [isEditingPatient, setIsEditingPatient] = useState(false);
   const [patientForm, setPatientForm] = useState({});
   const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
 
-  // Réinitialise la sélection patient à chaque changement d'écran
+  // Navigation programmatique vers un patient (depuis Facturation, etc.)
+  // Stocker l'intention dans un ref pour qu'elle survive au reset de l'effet ci-dessous
+  const pendingPatientNavRef = useRef(null);
+
+  // Réinitialise la sélection patient à chaque changement d'écran,
+  // sauf si une navigation programmatique est en attente (deep-link depuis une autre vue)
   useEffect(() => {
-    setSelectedPatientId(null);
+    const pending = pendingPatientNavRef.current;
+    pendingPatientNavRef.current = null;
+    if (pending) {
+      setSelectedPatientId(pending.patientId);
+      setPatientSubTab(pending.subTab || 'info');
+      setInitialEditProtocolId(pending.protocolId || null);
+      const patient = patients.find(p => p.id === pending.patientId);
+      if (patient) {
+        setPatientForm({ ...patient });
+        loadPrescriptionsForPatient(pending.patientId);
+      }
+    } else {
+      setSelectedPatientId(null);
+      setPatientSubTab('info');
+      setInitialEditProtocolId(null);
+    }
+  // patients et loadPrescriptionsForPatient sont stables, la dépendance activeScreen suffit
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeScreen]);
 
   // --- PRESCRIPTIONS (Care Protocols + ordonnances liées) ---
@@ -993,6 +1025,21 @@ export default function App() {
       const mappedAppt = apptApiToFrontend(updated, pMap);
       assignSlotIds([mappedAppt], getActiveConfigForDate);
       setAppointments(prev => prev.map(a => a.id === id ? mappedAppt : a));
+
+      // Feedback facturation automatique
+      const ab = updated.auto_billing;
+      let toastMsg;
+      if (ab?.status === 'created' && ab.invoice_total != null) {
+        const total = Number(ab.invoice_total).toFixed(2);
+        toastMsg = { message: `RDV terminé · Facture brouillon ${total} € créée`, type: 'success' };
+        setPendingFacturationCount(prev => prev + 1);
+      } else if (ab?.status === 'skipped') {
+        toastMsg = { message: 'RDV terminé · Facture à compléter dans Facturation', type: 'info' };
+      } else {
+        toastMsg = { message: 'RDV marqué comme terminé', type: 'success' };
+      }
+      setCompletionToast(toastMsg);
+      setTimeout(() => setCompletionToast(null), 4500);
     } catch (err) {
       alert(err.response?.data?.detail || 'Erreur lors de la complétion du RDV.');
     }
@@ -1059,7 +1106,12 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-3 md:px-4 md:py-4">
       <div>
 
-        <Header activeScreen={activeScreen} onScreenChange={handleScreenChange} onLogout={handleLogout} />
+        <Header
+          activeScreen={activeScreen}
+          onScreenChange={handleScreenChange}
+          onLogout={handleLogout}
+          pendingFacturationCount={pendingFacturationCount}
+        />
         <InfoBanner cabinet={meData?.cabinet} user={meData?.user} />
 
         <main className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[600px] p-4">
@@ -1126,6 +1178,7 @@ export default function App() {
               careDurations={careDurations}
               careLabelCodeMap={careLabelCodeMap}
               cabinetData={cabinetData}
+              initialEditProtocolId={initialEditProtocolId}
             />
               )}
             </>
@@ -1265,16 +1318,40 @@ export default function App() {
 
           {/* --- Facturation --- */}
           {activeScreen === 'facturation' && (
-            <FacturationTab nurses={nurses} />
+            <FacturationTab
+              nurses={nurses}
+              onNavigateToPrescription={(patientId, careProtocolId) => {
+                pendingPatientNavRef.current = {
+                  patientId,
+                  subTab: 'prescriptions',
+                  protocolId: careProtocolId || null,
+                };
+                handleScreenChange('patients');
+              }}
+            />
           )}
 
-          {/* --- Admin BDD --- */}
-          {activeScreen === 'admin-bdd' && (
-            <AdminBddTab />
+          {/* --- Administration --- */}
+          {activeScreen === 'administration' && (
+            <AdministrationScreen />
           )}
 
         </main>
       </div>
+
+      {/* --- TOAST FACTURATION AUTO --- */}
+      {completionToast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium transition-all animate-in slide-in-from-bottom-2 ${
+            completionToast.type === 'success'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-slate-700 text-white'
+          }`}
+        >
+          {completionToast.type === 'success' ? '✅' : 'ℹ️'}
+          <span>{completionToast.message}</span>
+        </div>
+      )}
 
       {/* --- MODALES --- */}
       <RdvModal

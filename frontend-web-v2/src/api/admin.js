@@ -40,3 +40,15 @@ export async function getFkOptions(tableName, columnName) {
   const { data } = await client.get(`/admin/tables/${tableName}/fk-options/${columnName}`);
   return data;
 }
+
+export async function getLogs({ level, source, limit = 200 } = {}) {
+  const params = { limit };
+  if (level) params.level = level;
+  if (source && source !== 'all') params.source = source;
+  const { data } = await client.get('/admin/logs', { params });
+  return data;
+}
+
+export async function postFrontendLogs(entries) {
+  await client.post('/admin/logs/frontend', entries);
+}

@@ -10,7 +10,7 @@ from app.application.dtos.cotation_dto import DailyBillingItemDTO, DailyBillingR
 from app.domain.repositories.appointment_repository import AppointmentRepository
 from app.domain.repositories.invoice_repository import InvoiceRepository
 from app.domain.repositories.patient_repository import PatientRepository
-from app.domain.rules.prescription_rules import compute_prescription_status, is_prescription_complete_for_billing
+from app.domain.rules.prescription_rules import compute_prescription_status, get_prescription_missing_fields
 
 
 class GetDailyBillingUseCase:
@@ -50,10 +50,11 @@ class GetDailyBillingUseCase:
             limit=200,
         )
 
-        # Index factures par appointment_id
+        # Index factures par appointment_id — les factures annulées sont ignorées
+        # (un RDV dont la seule facture est annulée doit rester facturable)
         invoice_by_appt: dict[UUID, tuple] = {}
         for inv in invoices:
-            if inv.appointment_id:
+            if inv.appointment_id and inv.status != "canceled":
                 invoice_by_appt[inv.appointment_id] = (inv.id, inv.status)
 
         # 3. Charge les ordonnances via care_protocol_id si une session DB est disponible
@@ -92,37 +93,37 @@ class GetDailyBillingUseCase:
             prescription_status = None
             prescription_missing = False
             prescription_incomplete = False
-            prescription_warning = None
+            prescription_warnings: list[str] = []
 
             if appt.care_protocol_id and self._session:
                 prescriptions = prescriptions_by_protocol.get(appt.care_protocol_id, [])
                 if not prescriptions:
                     prescription_missing = True
-                    prescription_warning = "Pas d'ordonnance rattachée au plan de soins"
+                    prescription_warnings = ["Pas d'ordonnance rattachée au plan de soins"]
                 else:
                     # Prend la première ordonnance valide ET complète pour la date
                     for prescription in prescriptions:
                         effective_status = compute_prescription_status(prescription, date)
                         if effective_status in ("expired", "canceled", "completed"):
-                            prescription_warning = "Ordonnance expirée — renouvellement nécessaire"
+                            prescription_warnings = ["Ordonnance expirée — renouvellement nécessaire"]
                             continue
                         # Ordonnance valide côté dates — vérifier la complétude
-                        complete, incomplete_reason = is_prescription_complete_for_billing(prescription)
-                        if not complete:
+                        missing_fields = get_prescription_missing_fields(prescription)
+                        if missing_fields:
                             prescription_incomplete = True
-                            prescription_warning = incomplete_reason
+                            prescription_warnings = missing_fields
                             continue
                         # Ordonnance valide et complète
                         prescription_id = prescription.id
                         prescription_status = effective_status
                         prescription_incomplete = False
-                        prescription_warning = None
+                        prescription_warnings = []
                         if effective_status == "expiring" and prescription.end_date:
                             days_left = (prescription.end_date - date).days
-                            prescription_warning = f"Ordonnance expire dans {days_left} jour(s)"
+                            prescription_warnings = [f"Ordonnance expire dans {days_left} jour(s)"]
                         break
                     if prescription_id is None and not prescription_missing and not prescription_incomplete:
-                        prescription_warning = "Ordonnance expirée — renouvellement nécessaire"
+                        prescription_warnings = ["Ordonnance expirée — renouvellement nécessaire"]
 
             items.append(DailyBillingItemDTO(
                 appointment_id=appt.id,
@@ -135,11 +136,12 @@ class GetDailyBillingUseCase:
                 status=appt.status,
                 invoice_id=invoice_id,
                 invoice_status=invoice_status,
+                care_protocol_id=appt.care_protocol_id,
                 prescription_id=prescription_id,
                 prescription_status=prescription_status,
                 prescription_missing=prescription_missing,
                 prescription_incomplete=prescription_incomplete,
-                prescription_warning=prescription_warning,
+                prescription_warnings=prescription_warnings,
             ))
 
         return DailyBillingResponseDTO(

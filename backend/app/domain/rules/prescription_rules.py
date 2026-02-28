@@ -93,15 +93,30 @@ def is_prescription_complete_for_billing(
 ) -> tuple[bool, str | None]:
     """
     Vérifie qu'une ordonnance est complète pour pouvoir facturer.
-    Conditions obligatoires : document scanné/photo + prescripteur + date de prescription + date de début.
-    Retourne (True, None) si complète, (False, raison) sinon.
+    Retourne (True, None) si complète, (False, première raison) sinon.
+    Utiliser get_prescription_missing_fields pour obtenir toutes les raisons.
     """
-    if not (prescription.document_filename or prescription.document_url):
-        return False, "Document d'ordonnance manquant (scan ou photo requis)"
-    if not prescription.prescriber_name:
-        return False, "Nom du prescripteur manquant sur l'ordonnance"
-    if not prescription.prescription_date:
-        return False, "Date de prescription manquante"
-    if not prescription.start_date:
-        return False, "Date de début des soins manquante"
+    missing = get_prescription_missing_fields(prescription)
+    if missing:
+        return False, missing[0]
     return True, None
+
+
+def get_prescription_missing_fields(
+    prescription: Prescription,
+) -> list[str]:
+    """
+    Retourne la liste de tous les champs manquants ou invalides pour facturer.
+    Retourne une liste vide si l'ordonnance est complète.
+    Conditions : document scanné/photo + prescripteur + date de prescription + date de début.
+    """
+    issues: list[str] = []
+    if not (prescription.document_filename or prescription.document_url):
+        issues.append("Document d'ordonnance manquant (scan ou photo requis)")
+    if not prescription.prescriber_name:
+        issues.append("Nom du prescripteur manquant")
+    if not prescription.prescription_date:
+        issues.append("Date de prescription manquante")
+    if not prescription.start_date:
+        issues.append("Date de début des soins manquante")
+    return issues

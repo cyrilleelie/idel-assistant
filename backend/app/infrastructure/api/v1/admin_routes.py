@@ -6,9 +6,11 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import MetaData, delete, func, insert, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infrastructure.logging.log_handler import get_log_handler
 from app.infrastructure.persistence.database import async_session_factory
 
 logger = logging.getLogger(__name__)
@@ -311,3 +313,39 @@ async def get_fk_options(
 
     result = await session.execute(query)
     return [{"id": row[0], "label": row[1]} for row in result]
+
+
+# ──────────────────────────────── Logs endpoints ────────────────────────────────
+
+
+@router.get("/logs")
+async def get_logs(
+    level: str | None = Query(None, description="Niveau minimum (DEBUG, INFO, WARNING, ERROR, CRITICAL)"),
+    source: str | None = Query(None, description="'backend', 'frontend' ou 'all'"),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    """Retourne les entrées récentes du buffer de logs en mémoire."""
+    handler = get_log_handler()
+    entries = handler.get_entries(min_level=level, source_filter=source, limit=limit)
+    return {"entries": entries, "count": len(entries)}
+
+
+class FrontendLogEntry(BaseModel):
+    timestamp: str
+    level: str
+    logger: str
+    message: str
+
+
+@router.post("/logs/frontend", status_code=201)
+async def receive_frontend_logs(body: list[FrontendLogEntry]):
+    """Reçoit des entrées de log depuis le frontend et les stocke dans le buffer."""
+    handler = get_log_handler()
+    for entry in body:
+        handler.add_frontend_entry(
+            timestamp=entry.timestamp,
+            level=entry.level,
+            logger=entry.logger,
+            message=entry.message,
+        )
+    return {"accepted": len(body)}

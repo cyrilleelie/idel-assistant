@@ -64,3 +64,19 @@ class AppointmentResponse(BaseModel):
 class AppointmentListResponse(BaseModel):
     items: list[AppointmentResponse]
     total: int
+
+
+class AutoBillingInfo(BaseModel):
+    """Résultat de la tentative de facturation automatique lors de la complétion d'un RDV."""
+
+    status: str  # "created" | "skipped" | "error"
+    invoice_id: str | None = None
+    invoice_number: str | None = None
+    invoice_total: float | None = None
+    skip_reason: str | None = None
+
+
+class AppointmentCompleteResponse(AppointmentResponse):
+    """Réponse enrichie du endpoint /complete, avec infos de facturation auto."""
+
+    auto_billing: AutoBillingInfo | None = None

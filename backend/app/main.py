@@ -3,6 +3,10 @@
 import logging
 from contextlib import asynccontextmanager
 
+from app.infrastructure.logging.log_handler import install_log_handler
+
+install_log_handler()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text

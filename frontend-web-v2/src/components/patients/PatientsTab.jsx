@@ -13,7 +13,8 @@ export default function PatientsTab({
   onCreateAppointment, onCancelAppointment,
   onSavePrescription, onDeletePrescription, prescriptionsLoading,
   careLabels, careDurations, careLabelCodeMap,
-  cabinetData
+  cabinetData,
+  initialEditProtocolId
 }) {
   return (
     <div className="max-w-screen-xl mx-auto">
@@ -55,6 +56,7 @@ export default function PatientsTab({
           careLabelCodeMap={careLabelCodeMap}
           cabinetData={cabinetData}
           patients={patients}
+          initialEditProtocolId={initialEditProtocolId}
         />
       )}
     </div>

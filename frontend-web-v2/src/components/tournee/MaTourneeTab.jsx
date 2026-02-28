@@ -1,10 +1,14 @@
 import React, { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Plus, X, Pencil, CheckCircle2, XCircle, CircleDot, Route, Car, Home, Building2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Plus, X, Pencil, CheckCircle2, XCircle, CircleDot, Route, Car, Home, Building2, FlaskConical } from 'lucide-react';
 import { formatDate } from '../../utils/dateTime';
 import { listCareProtocols } from '../../api/care-protocols';
 import { protocolApiToFrontend } from '../../utils/prescriptionMapper';
 
 const TourneeMap = lazy(() => import('../agendas/TourneeMap'));
+
+// ── DEV FLAG — mettre à false pour désactiver le sélecteur d'infirmier ──────
+const DEV_NURSE_SWITCHER = true;
+// ────────────────────────────────────────────────────────────────────────────
 
 const VISIBLE_STATUSES = new Set(['scheduled', 'completed']);
 
@@ -22,8 +26,17 @@ export default function MaTourneeTab({
   const [dayRef, setDayRef] = useState(null); // null = not yet initialized
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [slotLegs, setSlotLegs] = useState({}); // { [slotId]: [{distanceText, durationText}] | null }
+  const [devSelectedNurseId, setDevSelectedNurseId] = useState(null); // DEV only
 
   const myNurse = useMemo(() => nurses.find(n => n.userId === meUserId), [nurses, meUserId]);
+
+  // Infirmier affiché : sélection DEV si activée, sinon l'infirmier connecté
+  const viewedNurse = useMemo(() => {
+    if (DEV_NURSE_SWITCHER && devSelectedNurseId) {
+      return nurses.find(n => n.userId === devSelectedNurseId) || myNurse;
+    }
+    return myNurse;
+  }, [nurses, myNurse, devSelectedNurseId]);
 
   const patientsMap = useMemo(() => {
     const m = new Map();
@@ -31,10 +44,10 @@ export default function MaTourneeTab({
     return m;
   }, [patients]);
 
-  // All visible appointments for this nurse (scheduled + completed)
+  // All visible appointments for the viewed nurse (scheduled + completed)
   const myAppointments = useMemo(
-    () => appointments.filter(a => a.nurseId === myNurse?.userId && VISIBLE_STATUSES.has(a.status)),
-    [appointments, myNurse?.userId],
+    () => appointments.filter(a => a.nurseId === viewedNurse?.userId && VISIBLE_STATUSES.has(a.status)),
+    [appointments, viewedNurse?.userId],
   );
 
   // Sorted unique dates that have appointments
@@ -168,6 +181,26 @@ export default function MaTourneeTab({
 
   return (
     <div className="space-y-6">
+      {/* Sélecteur infirmier DEV */}
+      {DEV_NURSE_SWITCHER && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm">
+          <FlaskConical size={14} className="text-amber-500 shrink-0" />
+          <span className="text-amber-700 font-medium">Dev —</span>
+          <span className="text-amber-600">Voir la tournée de :</span>
+          <select
+            value={devSelectedNurseId || meUserId}
+            onChange={e => setDevSelectedNurseId(e.target.value)}
+            className="ml-1 border border-amber-300 rounded px-2 py-0.5 bg-white text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            {nurses.map(n => (
+              <option key={n.userId} value={n.userId}>
+                {n.firstName} {n.lastName}{n.userId === meUserId ? ' (moi)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Navigation jour — date centrée */}
       <div className="flex items-center justify-center bg-slate-50 p-3 rounded-lg border border-slate-100 gap-4">
         <button onClick={prevDay} className="p-2 hover:bg-white rounded shadow-sm border border-transparent hover:border-slate-200 transition-all"><ChevronLeft size={20} /></button>
@@ -189,8 +222,8 @@ export default function MaTourneeTab({
           {/* En-tête infirmier */}
           <div className="p-4 border-b border-slate-200 bg-slate-50 rounded-t-xl">
             <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
-              <div className={`w-4 h-4 rounded-full ${myNurse.color.split(' ')[0]}`}></div>
-              {myNurse.firstName} {myNurse.lastName}
+              <div className={`w-4 h-4 rounded-full ${viewedNurse.color.split(' ')[0]}`}></div>
+              {viewedNurse.firstName} {viewedNurse.lastName}
               <span className="ml-2 text-sm font-normal text-slate-400">{dayAppts.length} RDV</span>
               <span className="ml-auto text-xs font-medium text-slate-400 flex items-center gap-1"><Route size={14} /> Itinéraire</span>
             </h3>
@@ -291,7 +324,7 @@ export default function MaTourneeTab({
                         })}
                       </div>
 
-                      <button onClick={() => openRdvModal(dateStr, slot.id, myNurse.userId)} className="w-full bg-white hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded text-xs py-1.5 font-medium transition-colors flex items-center justify-center gap-1">
+                      <button onClick={() => openRdvModal(dateStr, slot.id, viewedNurse.userId)} className="w-full bg-white hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded text-xs py-1.5 font-medium transition-colors flex items-center justify-center gap-1">
                         <Plus size={14} /> Ajouter RDV
                       </button>
                     </div>

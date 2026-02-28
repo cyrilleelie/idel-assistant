@@ -6,10 +6,10 @@ const screens = [
   { id: 'agendas', label: 'Agenda', icon: CalendarDays },
   { id: 'tournee', label: 'Ma Tournée', icon: Route },
   { id: 'facturation', label: 'Facturation', icon: Receipt },
-  { id: 'admin-bdd', label: 'Admin BDD', icon: Database },
+  { id: 'administration', label: 'Administration', icon: Database },
 ];
 
-export default function Header({ activeScreen, onScreenChange, onLogout }) {
+export default function Header({ activeScreen, onScreenChange, onLogout, pendingFacturationCount = 0 }) {
   return (
     <header className="bg-white border-b border-slate-200 shadow-sm -mx-3 md:-mx-4 -mt-3 md:-mt-4 mb-6 px-3 md:px-4">
       <div className="flex items-center justify-center h-14 gap-8">
@@ -22,20 +22,29 @@ export default function Header({ activeScreen, onScreenChange, onLogout }) {
 
         {/* Navigation ecrans */}
         <nav className="flex items-center gap-1">
-          {screens.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => onScreenChange(id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeScreen === id
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <Icon size={16} />
-              {label}
-            </button>
-          ))}
+          {screens.map(({ id, label, icon: Icon }) => {
+            const isFact = id === 'facturation';
+            const showBadge = isFact && pendingFacturationCount > 0;
+            return (
+              <button
+                key={id}
+                onClick={() => onScreenChange(id)}
+                className={`relative flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  activeScreen === id
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Icon size={16} />
+                {label}
+                {showBadge && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-emerald-500 text-white text-[10px] font-bold px-1">
+                    {pendingFacturationCount > 9 ? '9+' : pendingFacturationCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
         {/* Deconnexion */}

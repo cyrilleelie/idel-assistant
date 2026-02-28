@@ -74,11 +74,13 @@ class DailyBillingItemResponse(BaseModel):
     status: str
     invoice_id: str | None
     invoice_status: str | None
+    care_protocol_id: str | None = None
     # Champs ordonnance (iter 4)
     prescription_id: str | None = None
     prescription_status: str | None = None
     prescription_missing: bool = False
-    prescription_warning: str | None = None
+    prescription_incomplete: bool = False
+    prescription_warnings: list[str] = []
 
 
 class DailyBillingResponse(BaseModel):
@@ -255,10 +257,12 @@ async def get_daily_billing(
                 status=item.status,
                 invoice_id=str(item.invoice_id) if item.invoice_id else None,
                 invoice_status=item.invoice_status,
+                care_protocol_id=str(item.care_protocol_id) if item.care_protocol_id else None,
                 prescription_id=str(item.prescription_id) if item.prescription_id else None,
                 prescription_status=item.prescription_status,
                 prescription_missing=item.prescription_missing,
-                prescription_warning=item.prescription_warning,
+                prescription_incomplete=item.prescription_incomplete,
+                prescription_warnings=item.prescription_warnings,
             )
             for item in result.items
         ],

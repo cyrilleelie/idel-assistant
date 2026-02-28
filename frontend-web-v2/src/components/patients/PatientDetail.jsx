@@ -15,7 +15,8 @@ export default function PatientDetail({
   onCreateAppointment, onCancelAppointment,
   onSavePrescription, onDeletePrescription, prescriptionsLoading,
   careLabels, careDurations, careLabelCodeMap,
-  cabinetData, patients
+  cabinetData, patients,
+  initialEditProtocolId
 }) {
   const isInactive = patientForm.active === false;
   return (
@@ -203,6 +204,7 @@ export default function PatientDetail({
             careLabelCodeMap={careLabelCodeMap}
             cabinetData={cabinetData}
             patients={patients}
+            initialEditProtocolId={initialEditProtocolId}
           />
         )}
 

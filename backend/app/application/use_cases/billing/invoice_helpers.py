@@ -47,4 +47,10 @@ def invoice_entity_to_dto(invoice: Invoice) -> InvoiceDTO:
         lines=[line_entity_to_dto(l) for l in invoice.lines],
         created_at=invoice.created_at,
         updated_at=invoice.updated_at,
+        payment_date=invoice.payment_date,
+        payment_reference=invoice.payment_reference,
+        payment_amount=invoice.payment_amount,
+        rejection_code=invoice.rejection_code,
+        rejected_at=invoice.rejected_at,
+        corrected_invoice_id=invoice.corrected_invoice_id,
     )

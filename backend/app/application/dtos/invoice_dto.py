@@ -75,6 +75,12 @@ class InvoiceDTO:
     lines: list[InvoiceLineDTO]
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    payment_date: datetime.date | None = None
+    payment_reference: str | None = None
+    payment_amount: Decimal | None = None
+    rejection_code: str | None = None
+    rejected_at: datetime.datetime | None = None
+    corrected_invoice_id: UUID | None = None
 
 
 @dataclass
@@ -88,3 +94,90 @@ class InvoiceListDTO:
 @dataclass
 class InvoiceValidationErrorDTO:
     errors: list[str]
+
+
+# --- Stats DTOs ---
+
+
+@dataclass
+class DailyBreakdownDTO:
+    date: datetime.date
+    total: Decimal
+    count: int
+
+
+@dataclass
+class ActStatsDTO:
+    act_code: str
+    act_label: str
+    count: int
+    total: Decimal
+    percentage: Decimal
+
+
+@dataclass
+class MonthlyStatsDTO:
+    period: str  # YYYY-MM
+    total_invoiced: Decimal
+    total_pending: Decimal
+    total_paid: Decimal
+    total_rejected: Decimal
+    num_invoices: int
+    num_working_days: int
+    avg_daily_revenue: Decimal
+    daily_breakdown: list[DailyBreakdownDTO]
+    top_acts: list[ActStatsDTO]
+
+
+@dataclass
+class PeriodComparisonDTO:
+    period1: MonthlyStatsDTO
+    period2: MonthlyStatsDTO
+    evolution_invoiced: Decimal | None
+    evolution_paid: Decimal | None
+    evolution_rejected: Decimal | None
+
+
+@dataclass
+class IdelStatsDTO:
+    idel_id: UUID
+    idel_name: str
+    total_invoiced: Decimal
+    num_invoices: int
+    percentage_of_cabinet: Decimal
+
+
+@dataclass
+class MarkPaidDTO:
+    invoice_ids: list[UUID]
+    payment_date: datetime.date
+    payment_reference: str | None = None
+    payment_amount: Decimal | None = None
+
+
+@dataclass
+class MarkPaidResultDTO:
+    marked_paid: int
+    errors: list[str]
+
+
+@dataclass
+class RejectInvoiceDTO:
+    rejection_reason: str
+    rejection_code: str | None = None
+
+
+@dataclass
+class InvoiceLineInputDTO:
+    act_code: str
+    act_label: str
+    coefficient: Decimal = Decimal("1")
+    base_rate: Decimal = Decimal("0.00")
+    quantity: Decimal = Decimal("1")
+    supplements: dict | None = None
+
+
+@dataclass
+class CorrectAndResubmitDTO:
+    lines: list[InvoiceLineInputDTO]
+    prescription_id: UUID | None = None

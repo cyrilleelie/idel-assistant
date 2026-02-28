@@ -1,6 +1,7 @@
 from sqlalchemy import Date, ForeignKey, Index, Integer, Numeric, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from decimal import Decimal
 
 from app.infrastructure.persistence.models.base import Base
 
@@ -32,6 +33,18 @@ class InvoiceModel(Base):
     paid_at = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     appointment_id: Mapped[str | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("appointments.id", ondelete="SET NULL"), nullable=True, index=True)
     metadata_ = mapped_column("metadata", JSONB, nullable=True)
+    # Paiement
+    payment_date = mapped_column(Date, nullable=True)
+    payment_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    payment_amount = mapped_column(Numeric(10, 2), nullable=True)
+    # Rejet
+    rejection_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    rejected_at = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    corrected_invoice_id: Mapped[str | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("invoices.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
@@ -48,6 +61,7 @@ class InvoiceModel(Base):
         Index("ix_invoices_cabinet_id_status", "cabinet_id", "status"),
         Index("ix_invoices_cabinet_id_patient_id", "cabinet_id", "patient_id"),
         Index("ix_invoices_cabinet_id_care_date", "cabinet_id", "care_date"),
+        Index("ix_invoices_corrected_invoice_id", "corrected_invoice_id"),
     )
 
 

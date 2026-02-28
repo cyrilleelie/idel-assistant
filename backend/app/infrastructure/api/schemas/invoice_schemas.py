@@ -109,6 +109,12 @@ class InvoiceResponse(BaseModel):
     lines: list[InvoiceLineResponse]
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    payment_date: datetime.date | None = None
+    payment_reference: str | None = None
+    payment_amount: Decimal | None = None
+    rejection_code: str | None = None
+    rejected_at: datetime.datetime | None = None
+    corrected_invoice_id: str | None = None
 
     model_config = ConfigDict(json_schema_extra={"examples": [
         {
@@ -147,3 +153,85 @@ class InvoiceListResponse(BaseModel):
 
 class InvoiceValidationErrorResponse(BaseModel):
     errors: list[str]
+
+
+# --- Stats schemas ---
+
+
+class DailyBreakdownResponse(BaseModel):
+    date: datetime.date
+    total: Decimal
+    count: int
+
+
+class ActStatsResponse(BaseModel):
+    act_code: str
+    act_label: str
+    count: int
+    total: Decimal
+    percentage: Decimal
+
+
+class MonthlyStatsResponse(BaseModel):
+    period: str
+    total_invoiced: Decimal
+    total_pending: Decimal
+    total_paid: Decimal
+    total_rejected: Decimal
+    num_invoices: int
+    num_working_days: int
+    avg_daily_revenue: Decimal
+    daily_breakdown: list[DailyBreakdownResponse]
+    top_acts: list[ActStatsResponse]
+
+
+class PeriodComparisonResponse(BaseModel):
+    period1: MonthlyStatsResponse
+    period2: MonthlyStatsResponse
+    evolution_invoiced: Decimal | None
+    evolution_paid: Decimal | None
+    evolution_rejected: Decimal | None
+
+
+class IdelStatsResponse(BaseModel):
+    idel_id: str
+    idel_name: str
+    total_invoiced: Decimal
+    num_invoices: int
+    percentage_of_cabinet: Decimal
+
+
+class MarkPaidRequest(BaseModel):
+    invoice_ids: list[UUID]
+    payment_date: datetime.date
+    payment_reference: str | None = None
+    payment_amount: Decimal | None = None
+
+
+class MarkPaidResultResponse(BaseModel):
+    marked_paid: int
+    errors: list[str]
+
+
+class RejectInvoiceRequest(BaseModel):
+    rejection_reason: str
+    rejection_code: str | None = None
+
+
+class InvoiceLineInputRequest(BaseModel):
+    act_code: str
+    act_label: str
+    coefficient: Decimal = Decimal("1")
+    base_rate: Decimal = Decimal("0.00")
+    quantity: Decimal = Decimal("1")
+    supplements: dict | None = None
+
+
+class CorrectAndResubmitRequest(BaseModel):
+    lines: list[InvoiceLineInputRequest]
+    prescription_id: UUID | None = None
+
+
+class RejectedInvoiceResponse(BaseModel):
+    invoice: InvoiceResponse
+    correction_invoice_id: str | None

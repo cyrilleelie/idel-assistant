@@ -33,6 +33,24 @@ class InvoiceRepository(ABC):
     @abstractmethod
     async def get_next_sequence(self, cabinet_id: UUID, year: int, month: int) -> int: ...
 
+    @abstractmethod
+    async def list_unpaid(
+        self,
+        cabinet_id: UUID,
+        date_from: datetime.date | None = None,
+        date_to: datetime.date | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[Invoice], int]: ...
+
+    @abstractmethod
+    async def list_rejected(
+        self,
+        cabinet_id: UUID,
+        date_from: datetime.date | None = None,
+        date_to: datetime.date | None = None,
+    ) -> list[tuple[Invoice, UUID | None]]: ...
+
 
 class InvoiceLineRepository(ABC):
     @abstractmethod

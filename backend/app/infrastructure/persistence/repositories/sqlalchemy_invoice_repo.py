@@ -2,6 +2,8 @@ import datetime
 from decimal import Decimal
 from uuid import UUID
 
+from uuid import UUID as StdUUID
+
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -55,6 +57,12 @@ class SQLAlchemyInvoiceRepo(InvoiceRepository):
             transmitted_at=model.transmitted_at,
             paid_at=model.paid_at,
             metadata=model.metadata_,
+            payment_date=model.payment_date,
+            payment_reference=model.payment_reference,
+            payment_amount=Decimal(str(model.payment_amount)) if model.payment_amount is not None else None,
+            rejection_code=model.rejection_code,
+            rejected_at=model.rejected_at,
+            corrected_invoice_id=model.corrected_invoice_id,
             lines=lines,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -129,6 +137,12 @@ class SQLAlchemyInvoiceRepo(InvoiceRepository):
             transmitted_at=entity.transmitted_at,
             paid_at=entity.paid_at,
             metadata_=entity.metadata,
+            payment_date=entity.payment_date,
+            payment_reference=entity.payment_reference,
+            payment_amount=entity.payment_amount,
+            rejection_code=entity.rejection_code,
+            rejected_at=entity.rejected_at,
+            corrected_invoice_id=entity.corrected_invoice_id,
         )
         self._session.add(model)
         await self._session.flush()
@@ -162,6 +176,12 @@ class SQLAlchemyInvoiceRepo(InvoiceRepository):
         model.metadata_ = entity.metadata
         model.prescription_id = entity.prescription_id
         model.appointment_id = entity.appointment_id
+        model.payment_date = entity.payment_date
+        model.payment_reference = entity.payment_reference
+        model.payment_amount = entity.payment_amount
+        model.rejection_code = entity.rejection_code
+        model.rejected_at = entity.rejected_at
+        model.corrected_invoice_id = entity.corrected_invoice_id
 
         await self._session.flush()
         return await self.get_by_id(entity.id, entity.cabinet_id)  # type: ignore[return-value]
@@ -179,6 +199,85 @@ class SQLAlchemyInvoiceRepo(InvoiceRepository):
         await self._session.delete(model)
         await self._session.flush()
         return True
+
+    async def list_unpaid(
+        self,
+        cabinet_id: UUID,
+        date_from: datetime.date | None = None,
+        date_to: datetime.date | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[Invoice], int]:
+        """Retourne les factures en attente de paiement (validated + transmitted)."""
+        query = select(InvoiceModel).where(
+            InvoiceModel.cabinet_id == cabinet_id,
+            InvoiceModel.status.in_(["validated", "transmitted"]),
+        )
+        if date_from is not None:
+            query = query.where(InvoiceModel.care_date >= date_from)
+        if date_to is not None:
+            query = query.where(InvoiceModel.care_date <= date_to)
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self._session.execute(count_query)
+        total = total_result.scalar_one()
+
+        query = (
+            query.options(selectinload(InvoiceModel.lines))
+            .order_by(InvoiceModel.care_date.asc(), InvoiceModel.created_at.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(query)
+        models = result.scalars().unique().all()
+        return [self._model_to_entity(m) for m in models], total
+
+    async def list_rejected(
+        self,
+        cabinet_id: UUID,
+        date_from: datetime.date | None = None,
+        date_to: datetime.date | None = None,
+    ) -> list[tuple[Invoice, UUID | None]]:
+        """Retourne les factures rejetées avec l'ID de la facture corrective si elle existe.
+
+        Le tuple est (invoice, corrected_by_invoice_id).
+        corrected_by_invoice_id est l'ID de la nouvelle facture qui corrige celle-ci.
+        """
+        query = select(InvoiceModel).where(
+            InvoiceModel.cabinet_id == cabinet_id,
+            InvoiceModel.status == "rejected",
+        )
+        if date_from is not None:
+            query = query.where(InvoiceModel.care_date >= date_from)
+        if date_to is not None:
+            query = query.where(InvoiceModel.care_date <= date_to)
+
+        query = (
+            query.options(selectinload(InvoiceModel.lines))
+            .order_by(InvoiceModel.rejected_at.desc().nullslast())
+        )
+        result = await self._session.execute(query)
+        rejected_models = result.scalars().unique().all()
+
+        if not rejected_models:
+            return []
+
+        # Cherche les factures correctives (celles qui ont corrected_invoice_id pointant vers les rejetées)
+        rejected_ids = [m.id for m in rejected_models]
+        correction_result = await self._session.execute(
+            select(InvoiceModel.corrected_invoice_id, InvoiceModel.id)
+            .where(
+                InvoiceModel.cabinet_id == cabinet_id,
+                InvoiceModel.corrected_invoice_id.in_(rejected_ids),
+            )
+        )
+        # Map : rejected_id -> correction_invoice_id
+        correction_map: dict = {row[0]: row[1] for row in correction_result.all()}
+
+        return [
+            (self._model_to_entity(m), correction_map.get(m.id))
+            for m in rejected_models
+        ]
 
     async def get_next_sequence(self, cabinet_id: UUID, year: int, month: int) -> int:
         """Retourne le prochain numero sequentiel pour le mois donne.

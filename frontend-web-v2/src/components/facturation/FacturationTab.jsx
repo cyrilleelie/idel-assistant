@@ -12,10 +12,14 @@ import {
   ChevronDown,
   Zap,
   ExternalLink,
+  BarChart2,
+  TriangleAlert,
 } from 'lucide-react';
 import { getDailyBilling, createInvoiceFromAppointment, createAllDailyInvoices } from '../../api/cotation';
-import { listInvoices, validateInvoice, cancelInvoice } from '../../api/invoices';
+import { listInvoices, validateInvoice, cancelInvoice, listRejectedInvoices } from '../../api/invoices';
 import ExpiringPrescriptionsAlert from '../prescriptions/ExpiringPrescriptionsAlert';
+import SyntheseTab from './SyntheseTab';
+import RejetsTab from './RejetsTab';
 
 function formatDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -50,7 +54,34 @@ function invoiceStatusBadge(status) {
   return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>{s.label}</span>;
 }
 
+function formatMonth(ym) {
+  const [y, m] = ym.split('-');
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+}
+
 export default function FacturationTab({ nurses = [], onNavigateToPrescription }) {
+  // Onglets principaux
+  const [activeFactTab, setActiveFactTab] = useState('jour'); // 'jour' | 'synthese' | 'rejets'
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [rejetsCount, setRejetsCount] = useState(0);
+
+  // Charge le compteur de rejets non corrigés
+  const loadRejetsCount = useCallback(async () => {
+    try {
+      const list = await listRejectedInvoices();
+      const uncorrected = (list || []).filter(r => !r.correction_invoice_id);
+      setRejetsCount(uncorrected.length);
+    } catch {
+      setRejetsCount(0);
+    }
+  }, []);
+
+  useEffect(() => { loadRejetsCount(); }, [loadRejetsCount]);
+
   const [date, setDate] = useState(formatDate(new Date()));
   const [billing, setBilling] = useState(null);
   const [invoices, setInvoices] = useState([]);
@@ -216,8 +247,86 @@ export default function FacturationTab({ nurses = [], onNavigateToPrescription }
   const totalBilled = billing?.total_facture ?? 0;
   const totalNonBilled = billing?.total_non_facture ?? 0;
 
+  // Callback depuis SyntheseTab : navigue vers "Du jour" à une date donnée
+  const handleNavigateToJour = useCallback((dateStr) => {
+    setDate(dateStr);
+    setActiveFactTab('jour');
+  }, []);
+
+  // Callback depuis SyntheseTab : navigue vers l'onglet Rejets
+  const handleNavigateToRejets = useCallback(() => {
+    setActiveFactTab('rejets');
+  }, []);
+
   return (
     <div className="space-y-6">
+
+      {/* Barre d'onglets */}
+      <div className="border-b border-slate-200">
+        <nav className="-mb-px flex gap-1">
+          <button
+            onClick={() => setActiveFactTab('jour')}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeFactTab === 'jour'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+            }`}
+          >
+            <Receipt size={15} />
+            Du jour
+          </button>
+          <button
+            onClick={() => setActiveFactTab('synthese')}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeFactTab === 'synthese'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+            }`}
+          >
+            <BarChart2 size={15} />
+            Synthèse
+          </button>
+          <button
+            onClick={() => setActiveFactTab('rejets')}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeFactTab === 'rejets'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+            }`}
+          >
+            <TriangleAlert size={15} />
+            Rejets
+            {rejetsCount > 0 && (
+              <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold bg-red-500 text-white">
+                {rejetsCount}
+              </span>
+            )}
+          </button>
+        </nav>
+      </div>
+
+      {/* Contenu onglet Synthèse */}
+      {activeFactTab === 'synthese' && (
+        <SyntheseTab
+          nurses={nurses}
+          period={selectedMonth}
+          onPeriodChange={setSelectedMonth}
+          onNavigateToJour={handleNavigateToJour}
+          onNavigateToRejets={handleNavigateToRejets}
+        />
+      )}
+
+      {/* Contenu onglet Rejets */}
+      {activeFactTab === 'rejets' && (
+        <RejetsTab
+          onNavigateToJour={handleNavigateToJour}
+          onRejetsCountChange={setRejetsCount}
+        />
+      )}
+
+      {/* Contenu onglet Du jour (contenu original, inchangé) */}
+      {activeFactTab === 'jour' && (
+      <div className="space-y-6">
 
       {/* Header: date nav + actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -697,6 +806,8 @@ export default function FacturationTab({ nurses = [], onNavigateToPrescription }
           </div>
         )}
       </div>
+      </div>
+      )}
     </div>
   );
 }

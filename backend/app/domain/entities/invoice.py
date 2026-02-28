@@ -52,6 +52,12 @@ class Invoice:
     paid_at: datetime.datetime | None = None
     appointment_id: UUID | None = None
     metadata: dict | None = None
+    payment_date: datetime.date | None = None
+    payment_reference: str | None = None
+    payment_amount: Decimal | None = None
+    rejection_code: str | None = None
+    rejected_at: datetime.datetime | None = None
+    corrected_invoice_id: UUID | None = None
     lines: list[InvoiceLine] = field(default_factory=list)
     id: UUID = field(default_factory=uuid4)
     created_at: datetime.datetime = field(default_factory=lambda: datetime.datetime.now(datetime.UTC))
@@ -90,3 +96,33 @@ class Invoice:
         if self.status not in ("draft", "validated"):
             raise ValueError(f"Impossible d'annuler une facture en statut '{self.status}'")
         self.status = "canceled"
+
+    def reject(self, reason: str, code: str | None = None) -> None:
+        """Passe la facture en statut rejeté. Uniquement depuis validated ou transmitted."""
+        if self.status not in ("validated", "transmitted"):
+            raise ValueError(
+                f"Impossible de rejeter une facture en statut '{self.status}' "
+                "(statut attendu : validated ou transmitted)"
+            )
+        self.status = "rejected"
+        self.rejection_reason = reason
+        self.rejection_code = code
+        self.rejected_at = datetime.datetime.now(datetime.UTC)
+
+    def mark_paid(
+        self,
+        payment_date: datetime.date,
+        reference: str | None = None,
+        amount: Decimal | None = None,
+    ) -> None:
+        """Marque la facture comme payée. Uniquement depuis validated ou transmitted."""
+        if self.status not in ("validated", "transmitted"):
+            raise ValueError(
+                f"Impossible de marquer payée une facture en statut '{self.status}' "
+                "(statut attendu : validated ou transmitted)"
+            )
+        self.status = "paid"
+        self.payment_date = payment_date
+        self.payment_reference = reference
+        self.payment_amount = amount
+        self.paid_at = datetime.datetime.now(datetime.UTC)

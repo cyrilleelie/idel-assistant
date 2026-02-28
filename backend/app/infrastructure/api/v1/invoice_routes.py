@@ -5,20 +5,31 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.dtos.invoice_dto import (
     AddInvoiceLineDTO,
+    CorrectAndResubmitDTO,
     CreateInvoiceDTO,
+    InvoiceLineInputDTO,
     InvoiceValidationErrorDTO,
+    MarkPaidDTO,
+    RejectInvoiceDTO,
     UpdateInvoiceDTO,
     UpdateInvoiceLineDTO,
 )
 from app.application.use_cases.billing.add_invoice_line import AddInvoiceLineUseCase
 from app.application.use_cases.billing.cancel_invoice import CancelInvoiceUseCase
+from app.application.use_cases.billing.compare_periods import ComparePeriodsUseCase
+from app.application.use_cases.billing.correct_and_resubmit import CorrectAndResubmitUseCase
 from app.application.use_cases.billing.create_invoice import CreateInvoiceUseCase
 from app.application.use_cases.billing.delete_invoice import DeleteInvoiceUseCase
 from app.application.use_cases.billing.get_invoice import GetInvoiceUseCase
+from app.application.use_cases.billing.get_monthly_stats import GetMonthlyStatsUseCase
+from app.application.use_cases.billing.get_stats_per_idel import GetStatsPerIdelUseCase
 from app.application.use_cases.billing.list_invoices import ListInvoicesUseCase
+from app.application.use_cases.billing.mark_invoices_paid import MarkInvoicesPaidUseCase
+from app.application.use_cases.billing.reject_invoice import RejectInvoiceUseCase
 from app.application.use_cases.billing.remove_invoice_line import RemoveInvoiceLineUseCase
 from app.application.use_cases.billing.update_invoice import UpdateInvoiceUseCase
 from app.application.use_cases.billing.update_invoice_line import UpdateInvoiceLineUseCase
@@ -33,14 +44,23 @@ from app.infrastructure.api.dependencies import (
 )
 from app.infrastructure.api.schemas.invoice_schemas import (
     AddInvoiceLineRequest,
+    CorrectAndResubmitRequest,
     CreateInvoiceRequest,
+    IdelStatsResponse,
     InvoiceListResponse,
     InvoiceLineResponse,
     InvoiceResponse,
     InvoiceValidationErrorResponse,
+    MarkPaidRequest,
+    MarkPaidResultResponse,
+    MonthlyStatsResponse,
+    PeriodComparisonResponse,
+    RejectInvoiceRequest,
+    RejectedInvoiceResponse,
     UpdateInvoiceLineRequest,
     UpdateInvoiceRequest,
 )
+from app.infrastructure.persistence.database import get_db
 from app.infrastructure.persistence.repositories import (
     SQLAlchemyCareCatalogRepo,
     SQLAlchemyInvoiceLineRepo,
@@ -94,7 +114,212 @@ def _dto_to_response(dto) -> InvoiceResponse:
         lines=[_line_dto_to_response(l) for l in dto.lines],
         created_at=dto.created_at,
         updated_at=dto.updated_at,
+        payment_date=dto.payment_date,
+        payment_reference=dto.payment_reference,
+        payment_amount=dto.payment_amount,
+        rejection_code=dto.rejection_code,
+        rejected_at=dto.rejected_at,
+        corrected_invoice_id=str(dto.corrected_invoice_id) if dto.corrected_invoice_id else None,
     )
+
+
+# --- Stats (déclarées avant /{invoice_id} pour éviter capture par la route paramétrique) ---
+
+
+@router.get("/stats/monthly", response_model=MonthlyStatsResponse)
+async def get_monthly_stats(
+    request: Request,
+    period: str = Query(..., description="Période YYYY-MM, ex: 2026-02"),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Statistiques mensuelles : totaux par statut, répartition journalière, top actes."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    use_case = GetMonthlyStatsUseCase(db)
+    dto = await use_case.execute(auth.cabinet_id, period)
+
+    return MonthlyStatsResponse(
+        period=dto.period,
+        total_invoiced=dto.total_invoiced,
+        total_pending=dto.total_pending,
+        total_paid=dto.total_paid,
+        total_rejected=dto.total_rejected,
+        num_invoices=dto.num_invoices,
+        num_working_days=dto.num_working_days,
+        avg_daily_revenue=dto.avg_daily_revenue,
+        daily_breakdown=[
+            {"date": b.date, "total": b.total, "count": b.count}
+            for b in dto.daily_breakdown
+        ],
+        top_acts=[
+            {
+                "act_code": a.act_code,
+                "act_label": a.act_label,
+                "count": a.count,
+                "total": a.total,
+                "percentage": a.percentage,
+            }
+            for a in dto.top_acts
+        ],
+    )
+
+
+@router.get("/stats/compare", response_model=PeriodComparisonResponse)
+async def compare_periods(
+    request: Request,
+    period1: str = Query(..., description="Première période YYYY-MM"),
+    period2: str = Query(..., description="Deuxième période YYYY-MM"),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Comparaison de deux périodes mensuelles avec évolutions en %."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    use_case = ComparePeriodsUseCase(db)
+    dto = await use_case.execute(auth.cabinet_id, period1, period2)
+
+    def _monthly_to_response(m):
+        return MonthlyStatsResponse(
+            period=m.period,
+            total_invoiced=m.total_invoiced,
+            total_pending=m.total_pending,
+            total_paid=m.total_paid,
+            total_rejected=m.total_rejected,
+            num_invoices=m.num_invoices,
+            num_working_days=m.num_working_days,
+            avg_daily_revenue=m.avg_daily_revenue,
+            daily_breakdown=[
+                {"date": b.date, "total": b.total, "count": b.count}
+                for b in m.daily_breakdown
+            ],
+            top_acts=[
+                {
+                    "act_code": a.act_code,
+                    "act_label": a.act_label,
+                    "count": a.count,
+                    "total": a.total,
+                    "percentage": a.percentage,
+                }
+                for a in m.top_acts
+            ],
+        )
+
+    return PeriodComparisonResponse(
+        period1=_monthly_to_response(dto.period1),
+        period2=_monthly_to_response(dto.period2),
+        evolution_invoiced=dto.evolution_invoiced,
+        evolution_paid=dto.evolution_paid,
+        evolution_rejected=dto.evolution_rejected,
+    )
+
+
+@router.get("/stats/per-idel", response_model=list[IdelStatsResponse])
+async def get_stats_per_idel(
+    request: Request,
+    period: str = Query(..., description="Période YYYY-MM"),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Statistiques de facturation par IDEL pour la période donnée."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    use_case = GetStatsPerIdelUseCase(db)
+    stats = await use_case.execute(auth.cabinet_id, period)
+
+    return [
+        IdelStatsResponse(
+            idel_id=str(s.idel_id),
+            idel_name=s.idel_name,
+            total_invoiced=s.total_invoiced,
+            num_invoices=s.num_invoices,
+            percentage_of_cabinet=s.percentage_of_cabinet,
+        )
+        for s in stats
+    ]
+
+
+@router.post("/mark-paid", response_model=MarkPaidResultResponse)
+async def mark_invoices_paid(
+    body: MarkPaidRequest,
+    request: Request,
+    auth: AuthContext = Depends(get_current_user),
+    repo: SQLAlchemyInvoiceRepo = Depends(get_invoice_repository),
+):
+    """Marque un lot de factures comme payées."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    dto = MarkPaidDTO(
+        invoice_ids=list(body.invoice_ids),
+        payment_date=body.payment_date,
+        payment_reference=body.payment_reference,
+        payment_amount=body.payment_amount,
+    )
+    use_case = MarkInvoicesPaidUseCase(repo)
+    result = await use_case.execute(auth.cabinet_id, dto)
+    return MarkPaidResultResponse(marked_paid=result.marked_paid, errors=result.errors)
+
+
+@router.get("/unpaid", response_model=InvoiceListResponse)
+async def list_unpaid_invoices(
+    request: Request,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    auth: AuthContext = Depends(get_current_user),
+    repo: SQLAlchemyInvoiceRepo = Depends(get_invoice_repository),
+):
+    """Liste les factures en attente de paiement (validated + transmitted)."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    items, total = await repo.list_unpaid(
+        cabinet_id=auth.cabinet_id,
+        date_from=date_from,
+        date_to=date_to,
+        offset=offset,
+        limit=limit,
+    )
+    from app.application.use_cases.billing.invoice_helpers import invoice_entity_to_dto
+    dtos = [invoice_entity_to_dto(inv) for inv in items]
+    return InvoiceListResponse(
+        items=[_dto_to_response(d) for d in dtos],
+        total=total,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get("/rejected", response_model=list[RejectedInvoiceResponse])
+async def list_rejected_invoices(
+    request: Request,
+    date_from: datetime.date | None = None,
+    date_to: datetime.date | None = None,
+    auth: AuthContext = Depends(get_current_user),
+    repo: SQLAlchemyInvoiceRepo = Depends(get_invoice_repository),
+):
+    """Liste les factures rejetées avec indication si une correction existe."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    pairs = await repo.list_rejected(
+        cabinet_id=auth.cabinet_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    from app.application.use_cases.billing.invoice_helpers import invoice_entity_to_dto
+    return [
+        RejectedInvoiceResponse(
+            invoice=_dto_to_response(invoice_entity_to_dto(inv)),
+            correction_invoice_id=str(correction_id) if correction_id else None,
+        )
+        for inv, correction_id in pairs
+    ]
 
 
 # --- Invoice CRUD ---
@@ -136,7 +361,7 @@ async def list_invoices(
     date_from: datetime.date | None = None,
     date_to: datetime.date | None = None,
     offset: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     auth: AuthContext = Depends(get_current_user),
     repo: SQLAlchemyInvoiceRepo = Depends(get_invoice_repository),
 ):
@@ -375,4 +600,71 @@ async def remove_invoice_line(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    return _dto_to_response(result)
+
+
+# --- Invoice lifecycle : reject + correct-and-resubmit ---
+
+
+@router.post("/{invoice_id}/reject", response_model=InvoiceResponse)
+async def reject_invoice(
+    invoice_id: UUID,
+    body: RejectInvoiceRequest,
+    request: Request,
+    auth: AuthContext = Depends(get_current_user),
+    repo: SQLAlchemyInvoiceRepo = Depends(get_invoice_repository),
+):
+    """Rejette une facture validée ou transmise (ex : refus CPAM)."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    dto = RejectInvoiceDTO(
+        rejection_reason=body.rejection_reason,
+        rejection_code=body.rejection_code,
+    )
+    use_case = RejectInvoiceUseCase(repo)
+    try:
+        result = await use_case.execute(invoice_id, auth.cabinet_id, dto)
+    except ValueError as e:
+        detail = str(e)
+        code = status.HTTP_409_CONFLICT if "statut" in detail else status.HTTP_404_NOT_FOUND
+        raise HTTPException(status_code=code, detail=detail)
+    return _dto_to_response(result)
+
+
+@router.post("/{invoice_id}/correct-and-resubmit", response_model=InvoiceResponse)
+async def correct_and_resubmit(
+    invoice_id: UUID,
+    body: CorrectAndResubmitRequest,
+    request: Request,
+    auth: AuthContext = Depends(get_current_user),
+    repo: SQLAlchemyInvoiceRepo = Depends(get_invoice_repository),
+):
+    """Crée une nouvelle facture corrigeant une facture rejetée."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    from decimal import Decimal as D
+    lines_dto = [
+        InvoiceLineInputDTO(
+            act_code=l.act_code,
+            act_label=l.act_label,
+            coefficient=l.coefficient,
+            base_rate=l.base_rate,
+            quantity=l.quantity,
+            supplements=l.supplements,
+        )
+        for l in body.lines
+    ]
+    dto = CorrectAndResubmitDTO(
+        lines=lines_dto,
+        prescription_id=body.prescription_id,
+    )
+    use_case = CorrectAndResubmitUseCase(repo)
+    try:
+        result = await use_case.execute(invoice_id, auth.cabinet_id, dto)
+    except ValueError as e:
+        detail = str(e)
+        code = status.HTTP_409_CONFLICT if "statut" in detail else status.HTTP_404_NOT_FOUND
+        raise HTTPException(status_code=code, detail=detail)
     return _dto_to_response(result)

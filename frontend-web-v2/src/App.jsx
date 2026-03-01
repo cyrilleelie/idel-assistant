@@ -19,6 +19,7 @@ import { fetchMe } from './api/auth';
 import { fetchCabinet, updateCabinet } from './api/cabinet';
 import { listCareLabels } from './api/care-labels';
 import { listCareActCodes } from './api/cotation';
+import ChatPanel from './components/agent/ChatPanel';
 import Header from './components/Header';
 import InfoBanner from './components/InfoBanner';
 import LoginPage from './components/LoginPage';
@@ -49,6 +50,9 @@ const defaultTabForScreen = {
 };
 
 export default function App() {
+  // --- AGENT IA ---
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
   // --- AUTH ---
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('access_token'));
   const [userRole, setUserRole] = useState(() => getUserRole());
@@ -1369,6 +1373,22 @@ export default function App() {
         onPatientChange={loadRdvPrescriptions}
         patientsWithActivePlans={patientsWithActivePlans}
       />
+
+      {/* --- AGENT IA --- */}
+      {isAuthenticated && (
+        <>
+          <button
+            onClick={() => setIsChatOpen(true)}
+            className="fixed bottom-6 left-6 z-40 bg-blue-600 hover:bg-blue-700 active:bg-blue-800
+              text-white rounded-full px-4 py-3 shadow-lg flex items-center gap-2
+              text-sm font-medium transition-colors select-none"
+            title="Ouvrir l'assistant IA"
+          >
+            🤖 <span className="hidden sm:inline">Assistant</span>
+          </button>
+          <ChatPanel isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+        </>
+      )}
 
     </div>
   );

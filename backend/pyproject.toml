@@ -26,6 +26,8 @@ dependencies = [
     "email-validator>=2.1,<2.2",
     "python-multipart>=0.0.22",
     "fpdf2>=2.8.7",
+    "pydantic-ai>=0.4.3",
+    "mistralai>=1.12.4",
 ]
 
 [dependency-groups]

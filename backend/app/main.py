@@ -15,6 +15,7 @@ from app.config import settings
 from app.infrastructure.api.middleware import AuditMiddleware
 from app.infrastructure.api.v1 import (
     admin_routes,
+    agent_routes,
     appointment_routes,
     auth_routes,
     cabinet_member_routes,
@@ -127,6 +128,7 @@ app.include_router(prescription_routes.router, prefix="/api/v1")
 app.include_router(rpps_doctor_routes.router, prefix="/api/v1")
 app.include_router(admin_routes.router, prefix="/api/v1")
 app.include_router(fse_routes.router, prefix="/api/v1")
+app.include_router(agent_routes.router, prefix="/api/v1")
 
 
 @app.get("/health")

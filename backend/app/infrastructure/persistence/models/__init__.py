@@ -1,3 +1,4 @@
+from app.infrastructure.persistence.models.agent_audit_log_model import AgentAuditLogModel
 from app.infrastructure.persistence.models.appointment_model import AppointmentModel
 from app.infrastructure.persistence.models.audit_log_model import AuditLogModel
 from app.infrastructure.persistence.models.base import Base
@@ -14,6 +15,7 @@ from app.infrastructure.persistence.models.transmission_model import Transmissio
 from app.infrastructure.persistence.models.user_model import CabinetMemberModel, UserModel
 
 __all__ = [
+    "AgentAuditLogModel",
     "AppointmentModel",
     "AuditLogModel",
     "Base",

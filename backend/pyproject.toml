@@ -28,6 +28,7 @@ dependencies = [
     "fpdf2>=2.8.7",
     "pydantic-ai>=0.4.3",
     "mistralai>=1.12.4",
+    "openai>=1.65,<2",
 ]
 
 [dependency-groups]

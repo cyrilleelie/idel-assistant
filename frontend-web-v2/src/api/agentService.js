@@ -47,6 +47,47 @@ export async function getAgentHealth() {
 }
 
 /**
+ * Construit l'URL WebSocket pour le pipeline voix complet.
+ * Même logique que buildWsUrl mais pointe sur /agent/voice.
+ *
+ * @returns {string} URL WebSocket voix
+ */
+export function buildVoiceWsUrl() {
+  const token = getWsToken();
+  if (import.meta.env.DEV) {
+    return `ws://localhost:8000/api/v1/agent/voice?token=${encodeURIComponent(token)}`;
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  return `${protocol}//${host}/api/v1/agent/voice?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Transcrit un blob audio via l'endpoint REST POST /agent/transcribe.
+ *
+ * @param {Blob} audioBlob - Données audio (webm/opus recommandé)
+ * @returns {Promise<{text: string, confidence: number, duration_seconds: number, provider: string, warning: string|null}>}
+ */
+export async function transcribeAudio(audioBlob) {
+  const formData = new FormData();
+  formData.append('audio', audioBlob, 'recording.webm');
+
+  const token = localStorage.getItem('access_token') || '';
+  const response = await fetch('/api/v1/agent/transcribe', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `Transcription error ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Efface l'historique de session côté Redis.
  * @param {string} sessionId
  */

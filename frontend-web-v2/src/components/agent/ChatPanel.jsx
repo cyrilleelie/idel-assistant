@@ -2,14 +2,16 @@
  * Panneau de chat glissant (drawer) pour l'agent IA.
  * S'ouvre depuis la droite, occupe toute la hauteur.
  * Iter B : mode selector (5 onglets) + support ToolResultCards.
+ * Iter C : contrôles TTS, bandeau RGPD voix, gestion erreurs micro.
  */
 import { useEffect, useRef, useState } from 'react';
-import { X, RefreshCw } from 'lucide-react';
+import { X, RefreshCw, Volume2, VolumeX, Square } from 'lucide-react';
 
 import AgentStatusBadge from './AgentStatusBadge';
 import ChatInput from './ChatInput';
 import ChatMessage from './ChatMessage';
 import { useAgentWebSocket } from '../../hooks/useAgentWebSocket';
+import { useVoicePlayback } from '../../hooks/useVoicePlayback';
 
 const MODES = [
   {
@@ -70,6 +72,64 @@ const MODES = [
 ];
 
 /**
+ * Bandeau d'information RGPD affiché lors de la première utilisation du micro.
+ * Affiché une seule fois par session (state local React).
+ */
+function VoicePrivacyNotice({ onDismiss }) {
+  return (
+    <div className="mx-3 mb-2 p-2 bg-amber-50 border border-amber-200
+                    rounded-lg text-xs text-amber-800 flex items-start gap-2">
+      <span className="text-amber-500 mt-0.5 flex-shrink-0">ℹ️</span>
+      <div className="flex-1">
+        <strong>Mode voix (phase pilote)</strong> — L'audio est traité par
+        un service tiers (OpenAI Whisper). La migration vers un traitement
+        100% local est prévue prochainement.
+      </div>
+      <button
+        onClick={onDismiss}
+        className="text-amber-400 hover:text-amber-600 flex-shrink-0 ml-1"
+        aria-label="Fermer l'avertissement"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Contrôles de lecture TTS dans le header.
+ */
+function TTSControls({ isPlaying, isMuted, onToggleMute, onStop }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {isPlaying && !isMuted && (
+        <span className="text-xs text-blue-400 animate-pulse select-none mr-1">
+          Lecture...
+        </span>
+      )}
+      <button
+        onClick={onToggleMute}
+        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+        title={isMuted ? 'Activer le son' : 'Couper le son'}
+        aria-label={isMuted ? 'Activer le son' : 'Couper le son'}
+      >
+        {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+      </button>
+      {isPlaying && !isMuted && (
+        <button
+          onClick={onStop}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          title="Arrêter la lecture"
+          aria-label="Arrêter la lecture audio"
+        >
+          <Square className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
  * @param {{
  *   isOpen: boolean,
  *   onClose: () => void,
@@ -89,7 +149,11 @@ export default function ChatPanel({ isOpen, onClose }) {
     disconnect,
   } = useAgentWebSocket();
 
+  const { isPlaying, isMuted, playChunk, stopPlayback, toggleMute } = useVoicePlayback();
+
   const [activeMode, setActiveMode] = useState('general');
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
+  const [voiceError, setVoiceError] = useState(null);
   const messagesEndRef = useRef(null);
 
   const currentMode = MODES.find((m) => m.id === activeMode) || MODES[0];
@@ -100,13 +164,24 @@ export default function ChatPanel({ isOpen, onClose }) {
       connect();
     } else {
       disconnect();
+      stopPlayback(); // Arrête la lecture TTS si on ferme le panneau
     }
-  }, [isOpen, connect, disconnect]);
+  }, [isOpen, connect, disconnect, stopPlayback]);
 
   // Auto-scroll vers le bas à chaque nouveau message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const handleVoiceWarning = () => {
+    // Affiche le bandeau RGPD à la première utilisation du micro
+    setShowPrivacyNotice(true);
+  };
+
+  const handleVoiceError = (msg) => {
+    setVoiceError(msg);
+    setTimeout(() => setVoiceError(null), 5000);
+  };
 
   const status = isConnected ? 'online' : 'offline';
 
@@ -139,7 +214,14 @@ export default function ChatPanel({ isOpen, onClose }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
+            {/* Contrôles TTS */}
+            <TTSControls
+              isPlaying={isPlaying}
+              isMuted={isMuted}
+              onToggleMute={toggleMute}
+              onStop={stopPlayback}
+            />
             <button
               onClick={clearHistory}
               title="Nouvelle conversation"
@@ -174,6 +256,18 @@ export default function ChatPanel({ isOpen, onClose }) {
             </button>
           ))}
         </div>
+
+        {/* Bandeau RGPD voix (première utilisation du micro uniquement) */}
+        {showPrivacyNotice && (
+          <VoicePrivacyNotice onDismiss={() => setShowPrivacyNotice(false)} />
+        )}
+
+        {/* Erreur micro */}
+        {voiceError && (
+          <div className="mx-3 mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+            🎤 {voiceError}
+          </div>
+        )}
 
         {/* Zone messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-1 bg-gray-50">
@@ -212,7 +306,7 @@ export default function ChatPanel({ isOpen, onClose }) {
             />
           ))}
 
-          {/* Erreur */}
+          {/* Erreur WebSocket */}
           {error && (
             <div className="mx-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
               ⚠️ {error}
@@ -222,11 +316,13 @@ export default function ChatPanel({ isOpen, onClose }) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
+        {/* Input avec bouton micro intégré */}
         <ChatInput
           onSend={sendMessage}
           disabled={!isConnected || isStreaming}
           placeholder={messages.length === 0 ? currentMode.placeholder : undefined}
+          onVoiceWarning={handleVoiceWarning}
+          onVoiceError={handleVoiceError}
         />
       </div>
     </>

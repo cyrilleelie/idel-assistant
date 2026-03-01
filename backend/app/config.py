@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     agent_max_history_messages: int = 20
     agent_max_tool_calls_per_request: int = 10
 
+    # Agent IA / Voix — itération C (cloud)
+    openai_api_key: str = ""                      # Whisper STT
+    elevenlabs_api_key: str = ""                  # TTS
+    elevenlabs_voice_id: str = "charlotte"        # ID voix française ElevenLabs
+    tts_enabled: bool = True                      # Peut être désactivé globalement
+    stt_provider: str = "whisper_cloud"           # "whisper_cloud" | "faster_whisper_local"
+    tts_provider: str = "elevenlabs"              # "elevenlabs" | "kokoro_local"
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

@@ -1,9 +1,11 @@
 /**
  * Zone de saisie du chat agent IA.
  * Enter = envoyer, Shift+Enter = nouvelle ligne.
+ * Itération C : bouton microphone push-to-talk intégré à gauche.
  */
 import { useRef, useState } from 'react';
 import { Send } from 'lucide-react';
+import VoiceInput from './VoiceInput';
 
 const MAX_CHARS = 2000;
 
@@ -12,9 +14,11 @@ const MAX_CHARS = 2000;
  *   onSend: (text: string) => void,
  *   disabled: boolean,
  *   placeholder?: string,
+ *   onVoiceWarning?: (msg: string) => void,
+ *   onVoiceError?: (msg: string) => void,
  * }} props
  */
-export default function ChatInput({ onSend, disabled, placeholder }) {
+export default function ChatInput({ onSend, disabled, placeholder, onVoiceWarning, onVoiceError }) {
   const [text, setText] = useState('');
   const textareaRef = useRef(null);
 
@@ -34,18 +38,37 @@ export default function ChatInput({ onSend, disabled, placeholder }) {
     }
   };
 
+  // Insère la transcription dans le champ (l'IDEL peut relire et corriger avant envoi)
+  const handleTranscript = (transcribedText) => {
+    setText((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
+    textareaRef.current?.focus();
+  };
+
   const remaining = MAX_CHARS - text.length;
 
   return (
     <div className="border-t border-gray-200 bg-white p-3">
       <div className="flex gap-2 items-end">
+        {/* Bouton microphone push-to-talk */}
+        <VoiceInput
+          onTranscript={handleTranscript}
+          onWarning={onVoiceWarning}
+          onError={onVoiceError}
+          disabled={disabled}
+        />
+
+        {/* Champ de saisie */}
         <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? 'L\'assistant répond...' : (placeholder || 'Posez votre question...')}
+            placeholder={
+              disabled
+                ? "L'assistant répond..."
+                : (placeholder || 'Écris ou maintiens 🎤 pour dicter...')
+            }
             disabled={disabled}
             rows={1}
             className={`w-full resize-none rounded-xl border px-3 py-2 text-sm leading-relaxed outline-none transition-colors
@@ -72,6 +95,7 @@ export default function ChatInput({ onSend, disabled, placeholder }) {
           )}
         </div>
 
+        {/* Bouton envoyer */}
         <button
           onClick={handleSend}
           disabled={!canSend}

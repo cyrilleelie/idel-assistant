@@ -436,7 +436,7 @@ export default function App() {
   const activePatients = patients.filter(p => p.active !== false);
 
   const openNewPatient = () => {
-    setPatientForm({ firstName: '', lastName: '', phone: '', email: '', address: '', ssn: '', doctorName: '', doctorContact: '', antecedents: '', notes: '', prescriptions: [] });
+    setPatientForm({ firstName: '', lastName: '', phone: '', email: '', address: '', ssn: '', doctorName: '', doctorContact: '', antecedents: '', notes: '', prescriptions: [], amo_code: '', amo_center: '', amc_code: '', amc_name: '', amc_contract: '', exoneration_type: '', birth_rank: null });
     setSelectedPatientId('new');
     setIsEditingPatient(true);
     setPatientSubTab('info');

@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.dtos.invoice_dto import (
@@ -19,6 +20,11 @@ from app.application.dtos.invoice_dto import (
     UpdateInvoiceLineDTO,
 )
 from app.application.use_cases.billing.add_invoice_line import AddInvoiceLineUseCase
+from app.application.use_cases.billing.export_csv import ExportCSVUseCase
+from app.application.use_cases.billing.export_fec import ExportFECUseCase
+from app.application.use_cases.billing.export_quarterly_pdf import ExportQuarterlyPDFUseCase
+from app.application.use_cases.billing.export_recettes import ExportRecettesUseCase
+from app.application.use_cases.billing.get_quarterly_summary import GetQuarterlySummaryUseCase
 from app.application.use_cases.billing.cancel_invoice import CancelInvoiceUseCase
 from app.application.use_cases.billing.compare_periods import ComparePeriodsUseCase
 from app.application.use_cases.billing.correct_and_resubmit import CorrectAndResubmitUseCase
@@ -320,6 +326,170 @@ async def list_rejected_invoices(
         )
         for inv, correction_id in pairs
     ]
+
+
+# --- Export comptable ---
+
+
+@router.get("/export/csv")
+async def export_invoices_csv(
+    request: Request,
+    date_from: datetime.date = Query(..., description="Date début (YYYY-MM-DD)"),
+    date_to: datetime.date = Query(..., description="Date fin (YYYY-MM-DD)"),
+    invoice_status: str | None = Query(None, alias="status", description="Statuts séparés par virgule (ex: validated,paid)"),
+    idel_id: UUID | None = Query(None),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    patient_repo: SQLAlchemyPatientRepo = Depends(get_patient_repository),
+):
+    """Export CSV des factures — séparateur ; UTF-8 BOM, format comptable français."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    if invoice_status:
+        statuses = [s.strip() for s in invoice_status.split(",") if s.strip()]
+    else:
+        statuses = ["validated", "transmitted", "paid"]
+
+    use_case = ExportCSVUseCase(db, patient_repo)
+    content = await use_case.execute(
+        cabinet_id=auth.cabinet_id,
+        date_from=date_from,
+        date_to=date_to,
+        statuses=statuses,
+        idel_id=idel_id,
+    )
+
+    filename = f"factures_{date_from}_{date_to}.csv"
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/export/fec")
+async def export_fec(
+    request: Request,
+    year: int = Query(..., description="Exercice comptable (ex: 2026)"),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export FEC (Fichier des Écritures Comptables) — format fiscal normalisé."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    use_case = ExportFECUseCase(db)
+    content = await use_case.execute(cabinet_id=auth.cabinet_id, year=year)
+
+    filename = f"CabinetFEC{year}1231.txt"
+    return Response(
+        content=content,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/export/recettes")
+async def export_livre_recettes(
+    request: Request,
+    date_from: datetime.date = Query(...),
+    date_to: datetime.date = Query(...),
+    idel_id: UUID | None = Query(None),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    patient_repo: SQLAlchemyPatientRepo = Depends(get_patient_repository),
+):
+    """Export livre des recettes — factures payées uniquement, format BNC."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    use_case = ExportRecettesUseCase(db, patient_repo)
+    content = await use_case.execute(
+        cabinet_id=auth.cabinet_id,
+        date_from=date_from,
+        date_to=date_to,
+        idel_id=idel_id,
+    )
+
+    filename = f"livre_recettes_{date_from}_{date_to}.csv"
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/quarterly-summary")
+async def get_quarterly_summary(
+    request: Request,
+    year: int = Query(...),
+    quarter: int = Query(..., ge=1, le=4),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Récapitulatif trimestriel en JSON (URSSAF / CARPIMKO)."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    use_case = GetQuarterlySummaryUseCase(db)
+    try:
+        dto = await use_case.execute(auth.cabinet_id, year, quarter)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+    return {
+        "year": dto.year,
+        "quarter": dto.quarter,
+        "period_start": dto.period_start.isoformat(),
+        "period_end": dto.period_end.isoformat(),
+        "total_honoraires": str(dto.total_honoraires),
+        "total_indemnites_deplacement": str(dto.total_indemnites_deplacement),
+        "total_ik": str(dto.total_ik),
+        "total_brut": str(dto.total_brut),
+        "num_invoices": dto.num_invoices,
+        "num_invoices_paid": dto.num_invoices_paid,
+        "num_patients": dto.num_patients,
+        "num_working_days": dto.num_working_days,
+        "cotisations_estimees": str(dto.cotisations_estimees) if dto.cotisations_estimees else None,
+        "monthly_breakdown": [
+            {
+                "month": mb.month,
+                "honoraires": str(mb.honoraires),
+                "indemnites": str(mb.indemnites),
+                "ik": str(mb.ik),
+                "total": str(mb.total),
+                "num_invoices": mb.num_invoices,
+            }
+            for mb in dto.monthly_breakdown
+        ],
+    }
+
+
+@router.get("/export/quarterly-pdf")
+async def export_quarterly_pdf(
+    request: Request,
+    year: int = Query(...),
+    quarter: int = Query(..., ge=1, le=4),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export PDF du récapitulatif trimestriel."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    use_case = ExportQuarterlyPDFUseCase(db)
+    try:
+        content = await use_case.execute(auth.cabinet_id, year, quarter)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+    filename = f"recap_trimestriel_{year}-T{quarter}.pdf"
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # --- Invoice CRUD ---

@@ -7,6 +7,9 @@ from uuid import UUID, uuid4
 class Cabinet:
     name: str
     address: str
+    finess: str = ""                        # Numéro FINESS établissement (9 chiffres)
+    siren: str = ""                         # Numéro SIREN (9 chiffres)
+    siret: str = ""                         # Numéro SIRET (14 chiffres)
     plan: str = "solo"  # solo | cabinet | cabinet_plus
     subscription_status: str = "trial"  # trial | active | canceled
     lat: float | None = None

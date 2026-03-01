@@ -68,3 +68,56 @@ export async function listRejectedInvoices(params = {}) {
   const { data } = await client.get('/invoices/rejected', { params });
   return data;
 }
+
+// --- Export comptable ---
+
+/**
+ * Télécharge un fichier depuis l'API et déclenche le téléchargement navigateur.
+ * Récupère le nom de fichier depuis Content-Disposition si disponible.
+ */
+export async function downloadFile(url, params, defaultFilename) {
+  const response = await client.get(url, { params, responseType: 'blob' });
+  const contentDisposition = response.headers['content-disposition'];
+  let filename = defaultFilename;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?([^";\s]+)"?/);
+    if (match) filename = match[1];
+  }
+  const blob = new Blob([response.data]);
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+}
+
+export async function downloadExportCSV(params = {}) {
+  const { date_from, date_to } = params;
+  const filename = `factures_${date_from}_${date_to}.csv`;
+  await downloadFile('/invoices/export/csv', params, filename);
+}
+
+export async function downloadExportFEC(year) {
+  await downloadFile('/invoices/export/fec', { year }, `CabinetFEC${year}1231.txt`);
+}
+
+export async function downloadExportRecettes(params = {}) {
+  const { date_from, date_to } = params;
+  const filename = `livre_recettes_${date_from}_${date_to}.csv`;
+  await downloadFile('/invoices/export/recettes', params, filename);
+}
+
+export async function getQuarterlySummary(year, quarter) {
+  const { data } = await client.get('/invoices/quarterly-summary', { params: { year, quarter } });
+  return data;
+}
+
+export async function downloadQuarterlyPDF(year, quarter) {
+  await downloadFile(
+    '/invoices/export/quarterly-pdf',
+    { year, quarter },
+    `recap_trimestriel_${year}-T${quarter}.pdf`,
+  );
+}

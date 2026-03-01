@@ -14,12 +14,16 @@ import {
   ExternalLink,
   BarChart2,
   TriangleAlert,
+  Download,
+  Send,
 } from 'lucide-react';
 import { getDailyBilling, createInvoiceFromAppointment, createAllDailyInvoices } from '../../api/cotation';
 import { listInvoices, validateInvoice, cancelInvoice, listRejectedInvoices } from '../../api/invoices';
 import ExpiringPrescriptionsAlert from '../prescriptions/ExpiringPrescriptionsAlert';
 import SyntheseTab from './SyntheseTab';
 import RejetsTab from './RejetsTab';
+import ExportSection from './ExportSection';
+import TransmissionTab from './TransmissionTab';
 
 function formatDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -62,7 +66,7 @@ function formatMonth(ym) {
 
 export default function FacturationTab({ nurses = [], onNavigateToPrescription }) {
   // Onglets principaux
-  const [activeFactTab, setActiveFactTab] = useState('jour'); // 'jour' | 'synthese' | 'rejets'
+  const [activeFactTab, setActiveFactTab] = useState('jour'); // 'jour' | 'synthese' | 'rejets' | 'exports' | 'transmission'
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -302,6 +306,28 @@ export default function FacturationTab({ nurses = [], onNavigateToPrescription }
               </span>
             )}
           </button>
+          <button
+            onClick={() => setActiveFactTab('exports')}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeFactTab === 'exports'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+            }`}
+          >
+            <Download size={15} />
+            Exports
+          </button>
+          <button
+            onClick={() => setActiveFactTab('transmission')}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              activeFactTab === 'transmission'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+            }`}
+          >
+            <Send size={15} />
+            Transmission
+          </button>
         </nav>
       </div>
 
@@ -322,6 +348,16 @@ export default function FacturationTab({ nurses = [], onNavigateToPrescription }
           onNavigateToJour={handleNavigateToJour}
           onRejetsCountChange={setRejetsCount}
         />
+      )}
+
+      {/* Contenu onglet Exports & Comptabilité */}
+      {activeFactTab === 'exports' && (
+        <ExportSection period={selectedMonth} />
+      )}
+
+      {/* Contenu onglet Transmission SESAM-Vitale */}
+      {activeFactTab === 'transmission' && (
+        <TransmissionTab />
       )}
 
       {/* Contenu onglet Du jour (contenu original, inchangé) */}

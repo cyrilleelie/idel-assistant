@@ -10,6 +10,9 @@ class CabinetModel(Base):
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    finess: Mapped[str | None] = mapped_column(String(9), nullable=True)
+    siren: Mapped[str | None] = mapped_column(String(9), nullable=True)
+    siret: Mapped[str | None] = mapped_column(String(14), nullable=True)
     address: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     lat: Mapped[float | None] = mapped_column(Numeric(10, 8), nullable=True)
     lon: Mapped[float | None] = mapped_column(Numeric(11, 8), nullable=True)

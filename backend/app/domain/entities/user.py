@@ -10,6 +10,9 @@ class User:
     first_name: str
     last_name: str
     rpps: str
+    adeli: str = ""                         # Numéro ADELI (9 chiffres)
+    am_number: str = ""                     # Numéro d'identification AM (convention CPAM)
+    convention_zone: int | None = None      # Zone conventionnelle: 1, 2 ou 3
     phone: str = ""
     photo_url: str = ""
     work_hours_start: datetime.time = datetime.time(7, 0)

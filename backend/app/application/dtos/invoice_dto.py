@@ -181,3 +181,42 @@ class InvoiceLineInputDTO:
 class CorrectAndResubmitDTO:
     lines: list[InvoiceLineInputDTO]
     prescription_id: UUID | None = None
+
+
+# --- Export / Récapitulatif trimestriel ---
+
+
+@dataclass
+class MonthlyBreakdownDTO:
+    month: str          # "2026-01"
+    honoraires: Decimal
+    indemnites: Decimal
+    ik: Decimal
+    total: Decimal
+    num_invoices: int
+
+
+@dataclass
+class QuarterlySummaryDTO:
+    year: int
+    quarter: int                            # 1–4
+    period_start: datetime.date
+    period_end: datetime.date
+
+    # Ventilation des recettes
+    total_honoraires: Decimal
+    total_indemnites_deplacement: Decimal
+    total_ik: Decimal
+    total_brut: Decimal
+
+    # Détail par mois
+    monthly_breakdown: list[MonthlyBreakdownDTO]
+
+    # Compteurs
+    num_invoices: int
+    num_invoices_paid: int
+    num_patients: int
+    num_working_days: int
+
+    # Estimation URSSAF (~45%)
+    cotisations_estimees: Decimal | None = None

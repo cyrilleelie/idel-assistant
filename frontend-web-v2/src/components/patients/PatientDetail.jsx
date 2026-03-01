@@ -125,9 +125,69 @@ export default function PatientDetail({
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-slate-800 border-b border-slate-100 pb-2">Administratif Médical</h3>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">N° Sécurité Sociale</label>
-                {isEditingPatient ? <input type="text" value={patientForm.ssn} onChange={e => setPatientForm({...patientForm, ssn: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none tracking-widest" placeholder="1 80 12 75..." /> : <div className="text-sm font-mono tracking-widest text-slate-800">{patientForm.ssn || '-'}</div>}
+                <label className="block text-xs font-medium text-slate-500 mb-1">N° Sécurité Sociale (NIR)</label>
+                {isEditingPatient ? <input type="text" value={patientForm.ssn} onChange={e => setPatientForm({...patientForm, ssn: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none tracking-widest" placeholder="1 80 12 75 000 000 00" maxLength={15} /> : <div className="text-sm font-mono tracking-widest text-slate-800">{patientForm.ssn || '-'}</div>}
               </div>
+
+              {/* Section SESAM-Vitale / Assurance */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 space-y-3">
+                <h4 className="font-medium text-sm text-blue-800 flex items-center gap-2">
+                  <span className="text-base">🏥</span> Assurance Maladie (SESAM-Vitale)
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Code organisme AMO</label>
+                    {isEditingPatient ? (
+                      <input type="text" value={patientForm.amo_code || ''} onChange={e => setPatientForm({...patientForm, amo_code: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" placeholder="750100001" maxLength={9} />
+                    ) : <div className="text-sm font-mono text-slate-700">{patientForm.amo_code || '-'}</div>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Centre gestionnaire</label>
+                    {isEditingPatient ? (
+                      <input type="text" value={patientForm.amo_center || ''} onChange={e => setPatientForm({...patientForm, amo_center: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="CPAM Paris" />
+                    ) : <div className="text-sm text-slate-700">{patientForm.amo_center || '-'}</div>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Type d'exonération</label>
+                    {isEditingPatient ? (
+                      <select value={patientForm.exoneration_type || ''} onChange={e => setPatientForm({...patientForm, exoneration_type: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                        <option value="">Aucune</option>
+                        <option value="ALD">ALD (Affection Longue Durée)</option>
+                        <option value="MAT">MAT (Maternité)</option>
+                        <option value="AT">AT (Accident du Travail)</option>
+                        <option value="100">100% (autres cas)</option>
+                      </select>
+                    ) : <div className="text-sm text-slate-700">{patientForm.exoneration_type || 'Aucune'}</div>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Rang de naissance</label>
+                    {isEditingPatient ? (
+                      <input type="number" value={patientForm.birth_rank || ''} onChange={e => setPatientForm({...patientForm, birth_rank: e.target.value ? parseInt(e.target.value) : null})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="1" min={1} max={9} />
+                    ) : <div className="text-sm text-slate-700">{patientForm.birth_rank || '-'}</div>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-blue-200">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Mutuelle (code AMC)</label>
+                    {isEditingPatient ? (
+                      <input type="text" value={patientForm.amc_code || ''} onChange={e => setPatientForm({...patientForm, amc_code: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Code AMC" maxLength={10} />
+                    ) : <div className="text-sm font-mono text-slate-700">{patientForm.amc_code || '-'}</div>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Nom de la mutuelle</label>
+                    {isEditingPatient ? (
+                      <input type="text" value={patientForm.amc_name || ''} onChange={e => setPatientForm({...patientForm, amc_name: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="MGEN, Harmonie..." />
+                    ) : <div className="text-sm text-slate-700">{patientForm.amc_name || '-'}</div>}
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">N° contrat AMC</label>
+                    {isEditingPatient ? (
+                      <input type="text" value={patientForm.amc_contract || ''} onChange={e => setPatientForm({...patientForm, amc_contract: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Numéro de contrat" />
+                    ) : <div className="text-sm font-mono text-slate-700">{patientForm.amc_contract || '-'}</div>}
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-4 space-y-3">
                 <h4 className="font-medium text-sm text-slate-700 flex items-center gap-2"><Stethoscope size={16} className="text-blue-600"/> Médecin Traitant</h4>
                 <div>

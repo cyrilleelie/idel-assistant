@@ -21,6 +21,14 @@ export function patientApiToFrontend(p) {
     notes: p.notes || '',
     active: p.status === 'active',
     prescriptions: [], // loaded separately via care-protocols API
+    // SESAM-Vitale / Assurance
+    amo_code: p.amo_code || '',
+    amo_center: p.amo_center || '',
+    amc_code: p.amc_code || '',
+    amc_name: p.amc_name || '',
+    amc_contract: p.amc_contract || '',
+    exoneration_type: p.exoneration_type || '',
+    birth_rank: p.birth_rank ?? null,
     // Preserve backend-only fields for round-trip
     _apiBirthDate: p.birth_date ?? null,
     _apiSectorId: p.sector_id ?? null,
@@ -46,6 +54,14 @@ export function patientFrontendToApiCreate(form) {
     doctor_contact: form.doctorContact || '',
     pathologies: form.antecedents ? form.antecedents.split('\n').filter(Boolean) : [],
     notes: form.notes || '',
+    // SESAM-Vitale
+    amo_code: form.amo_code || '',
+    amo_center: form.amo_center || '',
+    amc_code: form.amc_code || '',
+    amc_name: form.amc_name || '',
+    amc_contract: form.amc_contract || '',
+    exoneration_type: form.exoneration_type || '',
+    birth_rank: form.birth_rank ?? null,
   };
 }
 
@@ -62,6 +78,14 @@ export function patientFrontendToApiUpdate(form) {
     doctor_contact: form.doctorContact || '',
     pathologies: form.antecedents ? form.antecedents.split('\n').filter(Boolean) : [],
     notes: form.notes || '',
+    // SESAM-Vitale
+    amo_code: form.amo_code || '',
+    amo_center: form.amo_center || '',
+    amc_code: form.amc_code || '',
+    amc_name: form.amc_name || '',
+    amc_contract: form.amc_contract || '',
+    exoneration_type: form.exoneration_type || '',
+    birth_rank: form.birth_rank ?? null,
   };
   // Preserve backend-only fields if present
   if (form._apiBirthDate !== undefined) payload.birth_date = form._apiBirthDate;

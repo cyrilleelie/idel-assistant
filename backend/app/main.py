@@ -24,6 +24,7 @@ from app.infrastructure.api.v1 import (
     care_protocol_routes,
     cotation_routes,
     document_routes,
+    fse_routes,
     invoice_routes,
     patient_routes,
     prescription_routes,
@@ -125,6 +126,7 @@ app.include_router(care_label_routes.router, prefix="/api/v1")
 app.include_router(prescription_routes.router, prefix="/api/v1")
 app.include_router(rpps_doctor_routes.router, prefix="/api/v1")
 app.include_router(admin_routes.router, prefix="/api/v1")
+app.include_router(fse_routes.router, prefix="/api/v1")
 
 
 @app.get("/health")

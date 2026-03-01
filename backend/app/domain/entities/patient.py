@@ -25,6 +25,15 @@ class Patient:
     doctor_rpps: str = ""       # Numéro RPPS du médecin traitant (11 chiffres)
     doctor_contact: str = ""    # Contact medecin
     notes: str = ""
+    # SESAM-Vitale / assurance complémentaire
+    birth_rank: int | None = None           # Rang de naissance (jumeaux etc.)
+    insured_nir: str = ""                   # NIR de l'assuré (si différent du patient)
+    amo_code: str = ""                      # Code organisme AMO (9 chiffres)
+    amo_center: str = ""                    # Centre gestionnaire AMO
+    amc_code: str = ""                      # Code organisme AMC (mutuelle)
+    amc_name: str = ""                      # Nom de la mutuelle
+    amc_contract: str = ""                  # Numéro de contrat AMC
+    exoneration_type: str = ""              # Type d'exonération: "ALD", "MAT", "AT", ""
     is_ald: bool = False
     is_maternity: bool = False
     has_active_bsi: bool = False

@@ -1,10 +1,17 @@
 /**
  * Hook de gestion du WebSocket pour le chat agent IA.
  *
- * Protocole serveur :
- *   {"type": "token",  "content": "..."}  → token de texte (streaming)
- *   {"type": "end",    "usage": {...}}    → fin de génération
- *   {"type": "error",  "message": "..."} → erreur
+ * Protocole serveur (Iter B) :
+ *   {"type": "token",                "content": "..."}
+ *   {"type": "end",                  "usage": {...}}
+ *   {"type": "error",                "message": "..."}
+ *   {"type": "tool_result",          "tool": "...", "data": {...}}
+ *   {"type": "confirmation_required","action": {"id","action_type","label","expires_at"}}
+ *
+ * Protocole client (Iter B) :
+ *   {"type": "text",    "content": "...", "session_id": "..."}
+ *   {"type": "confirm", "action_id": "...", "session_id": "..."}
+ *   {"type": "cancel",  "action_id": "...", "session_id": "..."}
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -15,11 +22,13 @@ const RECONNECT_DELAY_MS = 2000;
 
 /**
  * @typedef {Object} ChatMessage
- * @property {string} id         - UUID unique
+ * @property {string} id                   - UUID unique
  * @property {'user'|'assistant'} role
  * @property {string} content
- * @property {number} timestamp  - Date.now()
+ * @property {number} timestamp            - Date.now()
  * @property {boolean} isStreaming
+ * @property {{tool: string, data: object}|null} toolResult
+ * @property {{id: string, action_type: string, label: string, expires_at: string}|null} pendingConfirmation
  */
 
 /**
@@ -29,7 +38,11 @@ const RECONNECT_DELAY_MS = 2000;
  *   isStreaming: boolean,
  *   error: string|null,
  *   sendMessage: (text: string) => void,
+ *   confirmAction: (actionId: string) => void,
+ *   cancelAction: (actionId: string) => void,
  *   clearHistory: () => void,
+ *   connect: () => void,
+ *   disconnect: () => void,
  *   sessionId: string,
  * }}
  */
@@ -102,6 +115,8 @@ export function useAgentWebSocket() {
                 content: data.content,
                 timestamp: Date.now(),
                 isStreaming: true,
+                toolResult: null,
+                pendingConfirmation: null,
               },
             ];
           });
@@ -121,6 +136,26 @@ export function useAgentWebSocket() {
             const last = prev[prev.length - 1];
             if (last?.role === 'assistant' && last.isStreaming) {
               return [...prev.slice(0, -1), { ...last, isStreaming: false }];
+            }
+            return prev;
+          });
+        } else if (data.type === 'tool_result') {
+          // Attacher le résultat d'outil au dernier message assistant
+          setMessages((prev) => {
+            const lastIdx = prev.length - 1;
+            if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+              const updated = { ...prev[lastIdx], toolResult: { tool: data.tool, data: data.data } };
+              return [...prev.slice(0, lastIdx), updated];
+            }
+            return prev;
+          });
+        } else if (data.type === 'confirmation_required') {
+          // Attacher la confirmation en attente au dernier message assistant
+          setMessages((prev) => {
+            const lastIdx = prev.length - 1;
+            if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+              const updated = { ...prev[lastIdx], pendingConfirmation: data.action };
+              return [...prev.slice(0, lastIdx), updated];
             }
             return prev;
           });
@@ -151,12 +186,45 @@ export function useAgentWebSocket() {
           content: trimmed,
           timestamp: Date.now(),
           isStreaming: false,
+          toolResult: null,
+          pendingConfirmation: null,
         },
       ]);
 
       setIsStreaming(true);
       setError(null);
-      wsRef.current.send(JSON.stringify({ message: trimmed, session_id: sessionId }));
+      // Nouveau protocole Iter B : type "text"
+      wsRef.current.send(JSON.stringify({ type: 'text', content: trimmed, session_id: sessionId }));
+    },
+    [sessionId]
+  );
+
+  /** Confirme une action en attente. */
+  const confirmAction = useCallback(
+    (actionId) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      setIsStreaming(true);
+      setError(null);
+      wsRef.current.send(JSON.stringify({ type: 'confirm', action_id: actionId, session_id: sessionId }));
+    },
+    [sessionId]
+  );
+
+  /** Annule une action en attente. */
+  const cancelAction = useCallback(
+    (actionId) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      setIsStreaming(true);
+      setError(null);
+      wsRef.current.send(JSON.stringify({ type: 'cancel', action_id: actionId, session_id: sessionId }));
+      // Retirer la pendingConfirmation du message concerné
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.pendingConfirmation?.id === actionId
+            ? { ...msg, pendingConfirmation: null }
+            : msg
+        )
+      );
     },
     [sessionId]
   );
@@ -179,6 +247,8 @@ export function useAgentWebSocket() {
     isStreaming,
     error,
     sendMessage,
+    confirmAction,
+    cancelAction,
     clearHistory,
     connect,
     disconnect,

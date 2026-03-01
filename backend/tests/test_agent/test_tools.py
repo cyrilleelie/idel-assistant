@@ -224,7 +224,7 @@ class TestGetInvoicesPending:
         inv.invoice_date = datetime.date.today()
         inv.payment_amount = None
 
-        deps.invoice_repo.list_unpaid = AsyncMock(return_value=[inv])
+        deps.invoice_repo.list_unpaid = AsyncMock(return_value=([inv], 1))
         ctx = make_run_context(deps)
 
         with patch("app.infrastructure.agent.tools.invoice_tools.log_tool_call", new=AsyncMock()):

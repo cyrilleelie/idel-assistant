@@ -1,7 +1,9 @@
 /**
  * Bulle de message dans le chat agent IA.
  * Supporte un rendu Markdown minimal : **gras** et listes à puces.
+ * Iter B : affiche les ToolResultCards quand un outil a retourné un résultat.
  */
+import { ToolResultCard } from './ToolResultCard';
 
 /**
  * Convertit du Markdown minimal en éléments React.
@@ -58,10 +60,19 @@ function renderInline(text) {
 
 /**
  * @param {{
- *   message: {role: string, content: string, timestamp: number, isStreaming: boolean}
+ *   message: {
+ *     role: string,
+ *     content: string,
+ *     timestamp: number,
+ *     isStreaming: boolean,
+ *     toolResult: {tool: string, data: object}|null,
+ *     pendingConfirmation: {id: string, action_type: string, label: string, expires_at: string}|null,
+ *   },
+ *   onConfirm: (actionId: string) => void,
+ *   onCancel: (actionId: string) => void,
  * }} props
  */
-export default function ChatMessage({ message }) {
+export default function ChatMessage({ message, onConfirm, onCancel }) {
   const isUser = message.role === 'user';
 
   return (
@@ -74,7 +85,7 @@ export default function ChatMessage({ message }) {
           {isUser ? 'Vous' : '🤖 Assistant'}
         </div>
 
-        {/* Bulle */}
+        {/* Bulle texte */}
         <div
           className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
             isUser
@@ -91,6 +102,17 @@ export default function ChatMessage({ message }) {
             <span className="inline-block w-2 h-4 bg-gray-500 ml-0.5 animate-pulse rounded-sm align-middle" />
           )}
         </div>
+
+        {/* ToolResultCard (Iter B) — visible uniquement pour les messages assistant */}
+        {!isUser && message.toolResult && (
+          <ToolResultCard
+            tool={message.toolResult.tool}
+            data={message.toolResult.data}
+            pendingConfirmation={message.pendingConfirmation}
+            onConfirm={onConfirm}
+            onCancel={onCancel}
+          />
+        )}
 
         {/* Horodatage */}
         <div

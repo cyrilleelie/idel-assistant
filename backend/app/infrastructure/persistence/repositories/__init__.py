@@ -41,6 +41,9 @@ from app.infrastructure.persistence.repositories.sqlalchemy_tournee_repo import 
 from app.infrastructure.persistence.repositories.sqlalchemy_rpps_doctor_repo import (
     SQLAlchemyRppsDoctorRepo,
 )
+from app.infrastructure.persistence.repositories.sqlalchemy_transmission_repo import (
+    SQLAlchemyTransmissionRepo,
+)
 from app.infrastructure.persistence.repositories.sqlalchemy_user_repo import (
     SQLAlchemyUserRepo,
 )
@@ -60,6 +63,7 @@ __all__ = [
     "SQLAlchemyScheduleAssignmentRepo",
     "SQLAlchemySectorRepo",
     "SQLAlchemyRppsDoctorRepo",
+    "SQLAlchemyTransmissionRepo",
     "SQLAlchemyTourneeRepo",
     "SQLAlchemyUserRepo",
 ]

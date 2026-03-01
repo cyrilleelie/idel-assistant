@@ -86,6 +86,195 @@ async def get_tournee_today(ctx: RunContext[AgentDeps]) -> dict:
     return result
 
 
+# ── Outil actif : réoptimisation tournée (Iter B) ────────────────────────────
+
+
+async def reoptimize_tournee(
+    ctx: RunContext[AgentDeps],
+    raison: str,
+) -> dict:
+    """Réoptimise la tournée du jour après l'annulation d'un stop.
+
+    Identifie le stop annulé par correspondance floue sur la raison,
+    le retire de la tournée et recalcule les métriques (distance, durée).
+
+    Args:
+        raison: Description de l'annulation, ex: "M. Dupont a annulé" ou "stop 3 annulé".
+    """
+    logger.info("[AGENT TOOL] reoptimize_tournee appelé (raison=%s)", raison[:60])
+    start = time.monotonic()
+    tool_input = {"raison": raison}
+    cabinet_id = ctx.deps.context.cabinet_id
+    user_id = ctx.deps.context.user_id
+    today = datetime.date.today()
+
+    try:
+        tournee = await ctx.deps.tournee_repo.get_by_date(
+            cabinet_id=cabinet_id,
+            idel_id=user_id,
+            date=today,
+        )
+
+        if tournee is None:
+            result = {
+                "error": "Aucune tournée générée pour aujourd'hui — impossible de réoptimiser."
+            }
+            return await _log_tournee(ctx, tool_input, result, start)
+
+        stops = await ctx.deps.tournee_repo.get_stops(tournee.id)
+        if not stops:
+            result = {"error": "La tournée est vide."}
+            return await _log_tournee(ctx, tool_input, result, start)
+
+        # Chercher le stop à annuler par correspondance floue
+        raison_lower = raison.lower()
+        cancelled_stop = None
+        cancelled_idx = -1
+
+        for idx, s in enumerate(stops):
+            # Match sur numéro de stop
+            if str(s.stop_order) in raison_lower:
+                cancelled_stop = s
+                cancelled_idx = idx
+                break
+            # Match sur appointment_id
+            if str(s.appointment_id)[:8].lower() in raison_lower:
+                cancelled_stop = s
+                cancelled_idx = idx
+                break
+
+        # Fallback : chercher via le patient associé au RDV
+        if cancelled_stop is None:
+            for idx, s in enumerate(stops):
+                try:
+                    apt = await ctx.deps.appointment_repo.get_by_id(s.appointment_id)
+                    if apt:
+                        patient = await ctx.deps.patient_repo.get_by_id(apt.patient_id)
+                        if patient:
+                            # Chercher le nom dans la raison (décrypté)
+                            nom = getattr(patient, "last_name", "") or ""
+                            prenom = getattr(patient, "first_name", "") or ""
+                            if nom and nom.lower() in raison_lower:
+                                cancelled_stop = s
+                                cancelled_idx = idx
+                                break
+                            if prenom and prenom.lower() in raison_lower:
+                                cancelled_stop = s
+                                cancelled_idx = idx
+                                break
+                except Exception:
+                    pass
+
+        if cancelled_stop is None:
+            result = {
+                "error": (
+                    f"Stop non identifié depuis la raison '{raison}'. "
+                    "Précise le numéro de passage ou le nom du patient."
+                ),
+                "stops_disponibles": [
+                    {"order": s.stop_order, "appointment_id": str(s.appointment_id)}
+                    for s in stops
+                ],
+            }
+            return await _log_tournee(ctx, tool_input, result, start)
+
+        # Calculer les métriques avant/après
+        dist_avant = float(tournee.total_distance_km or 0)
+        dur_avant = tournee.total_duration_minutes or 0
+
+        # Distance supprimée : celle du stop annulé + la prochaine (approximation)
+        dist_supprimee = float(cancelled_stop.distance_from_previous_km or 0)
+        if cancelled_idx + 1 < len(stops):
+            dist_supprimee += float(stops[cancelled_idx + 1].distance_from_previous_km or 0)
+            # La prochaine distancera maintenant depuis le précédent
+            if cancelled_idx > 0:
+                dist_supprimee -= float(stops[cancelled_idx - 1].distance_from_previous_km or 0) * 0.3
+
+        dist_apres = max(0.0, dist_avant - dist_supprimee)
+        # Durée : ~3 min/km + 20 min par soin
+        dur_soin = 20
+        dur_apres = max(0, dur_avant - dur_soin - int(dist_supprimee * 3))
+
+        stops_restants = [s for i, s in enumerate(stops) if i != cancelled_idx]
+        # Renuméroter
+        nouveau_ordre = [
+            {
+                "order": i + 1,
+                "appointment_id": str(s.appointment_id),
+                "estimated_arrival": s.estimated_arrival.isoformat() if s.estimated_arrival else None,
+                "status": s.status,
+                "changed": (i + 1) != s.stop_order,
+            }
+            for i, s in enumerate(stops_restants)
+        ]
+
+        result = {
+            "tournee_id": str(tournee.id),
+            "date": today.isoformat(),
+            "cancelled_stop": {
+                "order": cancelled_stop.stop_order,
+                "appointment_id": str(cancelled_stop.appointment_id),
+            },
+            "avant": {
+                "total_stops": len(stops),
+                "distance_km": round(dist_avant, 1),
+                "duration_min": dur_avant,
+            },
+            "apres": {
+                "total_stops": len(stops_restants),
+                "distance_km": round(dist_apres, 1),
+                "duration_min": dur_apres,
+            },
+            "economies": {
+                "distance_km": round(dist_avant - dist_apres, 1),
+                "duration_min": dur_avant - dur_apres,
+            },
+            "nouveau_ordre": nouveau_ordre,
+            "action_pending": {
+                "action_type": "validate_tournee_reoptimized",
+                "label": (
+                    f"Valider la réoptimisation — "
+                    f"-{round(dist_avant - dist_apres, 1)} km / -{dur_avant - dur_apres} min"
+                ),
+                "data": {
+                    "tournee_id": str(tournee.id),
+                    "cancelled_appointment_id": str(cancelled_stop.appointment_id),
+                    "nouveau_ordre": [s["appointment_id"] for s in nouveau_ordre],
+                    "dist_apres": round(dist_apres, 1),
+                    "dur_apres": dur_apres,
+                },
+            },
+        }
+
+        ctx.deps.pending_tool_results.append({
+            "tool_name": "reoptimize_tournee",
+            "data": result,
+        })
+
+    except Exception as exc:
+        logger.warning("Erreur reoptimize_tournee", exc_info=True)
+        result = {"error": f"Erreur réoptimisation : {type(exc).__name__}: {exc}"}
+
+    return await _log_tournee(ctx, tool_input, result, start)
+
+
+async def _log_tournee(
+    ctx: RunContext[AgentDeps],
+    tool_input: dict,
+    result: dict,
+    start: float,
+) -> dict:
+    duration_ms = int((time.monotonic() - start) * 1000)
+    try:
+        await log_tool_call(
+            ctx.deps.db, ctx.deps.context, "reoptimize_tournee",
+            tool_input, result, ctx.deps.context.session_id, duration_ms,
+        )
+    except Exception:
+        pass
+    return result
+
+
 async def get_slot_suggestions(
     ctx: RunContext[AgentDeps],
     duration_minutes: int = 30,

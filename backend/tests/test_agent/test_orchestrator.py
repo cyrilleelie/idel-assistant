@@ -23,6 +23,9 @@ def make_deps(context: AgentContext) -> AgentDeps:
     deps = MagicMock(spec=AgentDeps)
     deps.context = context
     deps.db = AsyncMock()
+    deps.pending_tool_results = []  # Iter B : liste mutable attendue par l'orchestrateur
+    deps.appointment_repo = AsyncMock()
+    deps.invoice_repo = AsyncMock()
     return deps
 
 
@@ -68,7 +71,7 @@ class TestAgentOrchestrator:
 
         with patch("app.infrastructure.agent.orchestrator.agent_memory.get_history", new=AsyncMock(return_value=[])):
             with patch("app.infrastructure.agent.orchestrator.agent_memory.save_message", new=AsyncMock()):
-                async for chunk in orchestrator.run_streaming("Bonjour", deps):
+                async for chunk in orchestrator.run_streaming({"type": "text", "content": "Bonjour"}, deps):
                     data = json.loads(chunk)
                     if data["type"] == "token":
                         tokens.append(data["content"])
@@ -102,7 +105,7 @@ class TestAgentOrchestrator:
         events = []
         with patch("app.infrastructure.agent.orchestrator.agent_memory.get_history", new=AsyncMock(return_value=[])):
             with patch("app.infrastructure.agent.orchestrator.agent_memory.save_message", new=AsyncMock()):
-                async for chunk in orchestrator.run_streaming("test", deps):
+                async for chunk in orchestrator.run_streaming({"type": "text", "content": "test"}, deps):
                     events.append(json.loads(chunk))
 
         assert any(e["type"] == "error" for e in events)
@@ -145,10 +148,10 @@ class TestAgentOrchestrator:
 
         with patch("app.infrastructure.agent.orchestrator.agent_memory.get_history", new=AsyncMock(return_value=[])):
             with patch("app.infrastructure.agent.orchestrator.agent_memory.save_message", side_effect=mock_save):
-                async for _ in orchestrator.run_streaming("Ma question", deps):
+                async for _ in orchestrator.run_streaming({"type": "text", "content": "Ma question"}, deps):
                     pass
 
         assert len(save_calls) == 2
-        assert save_calls[0] == (context.session_id, "user", "Ma question")
+        assert save_calls[0] == (context.session_id, "user", "Ma question")  # content extrait du dict
         assert save_calls[1][1] == "assistant"
         assert "Réponse" in save_calls[1][2]

@@ -19,6 +19,7 @@ from app.infrastructure.persistence.repositories import (
     SQLAlchemyCareCatalogRepo,
     SQLAlchemyInvoiceRepo,
     SQLAlchemyPatientRepo,
+    SQLAlchemyTransmissionRepo,
     SQLAlchemyTourneeRepo,
 )
 from app.infrastructure.security.jwt_handler import TokenError, verify_token
@@ -202,11 +203,18 @@ async def agent_chat(
     try:
         while True:
             data = await websocket.receive_json()
-            message = data.get("message", "").strip()
+
+            # Rétrocompatibilité : {"message": "..."} → {"type": "text", "content": "..."}
+            if "type" not in data and "message" in data:
+                data = {"type": "text", "content": data["message"], "session_id": data.get("session_id", "default")}
+
             session_id = data.get("session_id", "default")
 
-            if not message:
-                continue
+            # Pour les types "text" : vérifier que le contenu n'est pas vide
+            if data.get("type", "text") == "text":
+                content = (data.get("content") or data.get("message", "")).strip()
+                if not content:
+                    continue
 
             context = AgentContext(
                 user_id=user_id,
@@ -223,9 +231,10 @@ async def agent_chat(
                 tournee_repo=SQLAlchemyTourneeRepo(db),
                 care_catalog_repo=SQLAlchemyCareCatalogRepo(db),
                 key_manager=km,
+                transmission_repo=SQLAlchemyTransmissionRepo(db, km),
             )
 
-            async for chunk in orchestrator.run_streaming(message, deps):
+            async for chunk in orchestrator.run_streaming(data, deps):
                 await websocket.send_text(chunk)
 
     except WebSocketDisconnect:

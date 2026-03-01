@@ -11,9 +11,10 @@ const MAX_CHARS = 2000;
  * @param {{
  *   onSend: (text: string) => void,
  *   disabled: boolean,
+ *   placeholder?: string,
  * }} props
  */
-export default function ChatInput({ onSend, disabled }) {
+export default function ChatInput({ onSend, disabled, placeholder }) {
   const [text, setText] = useState('');
   const textareaRef = useRef(null);
 
@@ -44,7 +45,7 @@ export default function ChatInput({ onSend, disabled }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? 'L\'assistant répond...' : 'Posez votre question...'}
+            placeholder={disabled ? 'L\'assistant répond...' : (placeholder || 'Posez votre question...')}
             disabled={disabled}
             rows={1}
             className={`w-full resize-none rounded-xl border px-3 py-2 text-sm leading-relaxed outline-none transition-colors

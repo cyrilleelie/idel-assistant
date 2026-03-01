@@ -35,15 +35,16 @@ async def get_appointments_today(ctx: RunContext[AgentDeps]) -> dict:
                     "scheduled_at": a.scheduled_at.isoformat() if a.scheduled_at else None,
                     "duration_minutes": a.duration_minutes,
                     "status": a.status,
-                    "care_label": a.care_label or "",
-                    "address": a.address or "",
+                    "care_labels": a.care_labels,
+                    "care_type": a.care_type,
+                    "location_type": a.location_type,
                 }
                 for a in appointments
             ],
         }
     except Exception as exc:
         logger.warning("Erreur get_appointments_today", exc_info=True)
-        result = {"error": f"Impossible de récupérer les RDV : {type(exc).__name__}"}
+        result = {"error": f"Impossible de récupérer les RDV : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:
@@ -100,7 +101,8 @@ async def get_appointments_week(ctx: RunContext[AgentDeps], start_date: str | No
                     "scheduled_at": a.scheduled_at.isoformat() if a.scheduled_at else None,
                     "duration_minutes": a.duration_minutes,
                     "status": a.status,
-                    "care_label": a.care_label or "",
+                    "care_labels": a.care_labels,
+                    "care_type": a.care_type,
                 }
                 for a in all_appointments
             ],
@@ -109,7 +111,7 @@ async def get_appointments_week(ctx: RunContext[AgentDeps], start_date: str | No
         result = {"error": "Format de date invalide (YYYY-MM-DD attendu)."}
     except Exception as exc:
         logger.warning("Erreur get_appointments_week", exc_info=True)
-        result = {"error": f"Erreur : {type(exc).__name__}"}
+        result = {"error": f"Erreur : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:

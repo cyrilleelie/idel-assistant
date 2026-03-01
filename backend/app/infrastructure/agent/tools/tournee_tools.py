@@ -44,7 +44,8 @@ async def get_tournee_today(ctx: RunContext[AgentDeps]) -> dict:
                         "scheduled_at": a.scheduled_at.isoformat() if a.scheduled_at else None,
                         "patient_id": str(a.patient_id),
                         "status": a.status,
-                        "care_label": a.care_label or "",
+                        "care_labels": a.care_labels,
+                        "care_type": a.care_type,
                     }
                     for a in appointments
                 ],
@@ -57,21 +58,21 @@ async def get_tournee_today(ctx: RunContext[AgentDeps]) -> dict:
                 "tournee_id": str(tournee.id),
                 "total_stops": len(stops),
                 "estimated_distance_km": float(tournee.total_distance_km or 0),
-                "estimated_duration_min": tournee.total_duration_min or 0,
+                "estimated_duration_min": tournee.total_duration_minutes or 0,
                 "stops": [
                     {
                         "order": s.stop_order,
                         "appointment_id": str(s.appointment_id),
-                        "patient_id": str(s.patient_id),
-                        "scheduled_at": s.scheduled_at.isoformat() if s.scheduled_at else None,
-                        "care_label": s.care_label or "",
+                        "estimated_arrival": s.estimated_arrival.isoformat() if s.estimated_arrival else None,
+                        "status": s.status,
+                        "distance_from_previous_km": s.distance_from_previous_km,
                     }
                     for s in stops
                 ],
             }
     except Exception as exc:
         logger.warning("Erreur get_tournee_today", exc_info=True)
-        result = {"error": f"Impossible de récupérer la tournée : {type(exc).__name__}"}
+        result = {"error": f"Impossible de récupérer la tournée : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:
@@ -143,7 +144,7 @@ async def get_slot_suggestions(
         result = {"error": "Format de date invalide (YYYY-MM-DD attendu)."}
     except Exception as exc:
         logger.warning("Erreur get_slot_suggestions", exc_info=True)
-        result = {"error": f"Erreur suggestions créneaux : {type(exc).__name__}"}
+        result = {"error": f"Erreur suggestions créneaux : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:

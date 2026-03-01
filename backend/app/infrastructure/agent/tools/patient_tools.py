@@ -45,7 +45,7 @@ async def search_patients(ctx: RunContext[AgentDeps], query: str) -> dict:
         }
     except Exception as exc:
         logger.warning("Erreur search_patients", exc_info=True)
-        result = {"error": f"Erreur lors de la recherche patients : {type(exc).__name__}"}
+        result = {"error": f"Erreur lors de la recherche patients : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:
@@ -91,7 +91,7 @@ async def get_patient_details(ctx: RunContext[AgentDeps], patient_id: str) -> di
         result = {"error": "Identifiant patient invalide (UUID attendu)."}
     except Exception as exc:
         logger.warning("Erreur get_patient_details", exc_info=True)
-        result = {"error": f"Erreur : {type(exc).__name__}"}
+        result = {"error": f"Erreur : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:

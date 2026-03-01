@@ -35,7 +35,7 @@ async def get_ngap_act(ctx: RunContext[AgentDeps], code: str) -> dict:
             }
     except Exception as exc:
         logger.warning("Erreur get_ngap_act", exc_info=True)
-        result = {"error": f"Impossible de récupérer l'acte NGAP : {type(exc).__name__}"}
+        result = {"error": f"Impossible de récupérer l'acte NGAP : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:
@@ -82,7 +82,7 @@ async def explain_act_code(ctx: RunContext[AgentDeps], code: str) -> dict:
             }
     except Exception as exc:
         logger.warning("Erreur explain_act_code", exc_info=True)
-        result = {"error": f"Erreur lors de la recherche : {type(exc).__name__}"}
+        result = {"error": f"Erreur lors de la recherche : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:

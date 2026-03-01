@@ -142,8 +142,9 @@ class AgentOrchestrator:
                 )
 
         except Exception as exc:
-            logger.error("Erreur lors de l'exécution de l'agent", exc_info=True)
-            yield json.dumps({"type": "error", "message": f"Erreur agent : {type(exc).__name__}"})
+            logger.warning("Erreur lors de l'exécution de l'agent", exc_info=True)
+            detail = str(exc) if str(exc) else type(exc).__name__
+            yield json.dumps({"type": "error", "message": f"Erreur agent : {detail}"})
             return
 
         # Sauvegarder dans Redis

@@ -14,12 +14,13 @@ logger = logging.getLogger(__name__)
 
 async def get_invoices_pending(ctx: RunContext[AgentDeps]) -> dict:
     """Retourne la liste des factures en attente de paiement (validées ou transmises)."""
+    logger.info("[AGENT TOOL] get_invoices_pending appelé")
     start = time.monotonic()
     tool_input = {}
     cabinet_id = ctx.deps.context.cabinet_id
     try:
-        invoices = await ctx.deps.invoice_repo.list_unpaid(
-            cabinet_id=cabinet_id, skip=0, limit=50
+        invoices, _total = await ctx.deps.invoice_repo.list_unpaid(
+            cabinet_id=cabinet_id, offset=0, limit=50
         )
         total_amount = sum(float(inv.total_amount or 0) for inv in invoices)
         result = {
@@ -39,7 +40,7 @@ async def get_invoices_pending(ctx: RunContext[AgentDeps]) -> dict:
         }
     except Exception as exc:
         logger.warning("Erreur get_invoices_pending", exc_info=True)
-        result = {"error": f"Impossible de récupérer les factures : {type(exc).__name__}"}
+        result = {"error": f"Impossible de récupérer les factures : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:
@@ -64,6 +65,7 @@ async def get_billing_stats(
         month: Mois (1-12). Défaut : mois courant.
         year: Année (ex: 2026). Défaut : année courante.
     """
+    logger.info("[AGENT TOOL] get_billing_stats appelé (month=%s, year=%s)", month, year)
     start = time.monotonic()
     today = datetime.date.today()
     month = month or today.month
@@ -73,7 +75,7 @@ async def get_billing_stats(
     try:
         invoices, total = await ctx.deps.invoice_repo.list_invoices(
             cabinet_id=cabinet_id,
-            skip=0,
+            offset=0,
             limit=500,
         )
 
@@ -106,7 +108,7 @@ async def get_billing_stats(
         }
     except Exception as exc:
         logger.warning("Erreur get_billing_stats", exc_info=True)
-        result = {"error": f"Erreur statistiques facturation : {type(exc).__name__}"}
+        result = {"error": f"Erreur statistiques facturation : {type(exc).__name__}: {exc}"}
 
     duration_ms = int((time.monotonic() - start) * 1000)
     try:

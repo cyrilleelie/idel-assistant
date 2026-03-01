@@ -16,16 +16,24 @@ function getWsToken() {
 
 /**
  * Construit l'URL WebSocket pour le chat agent.
- * En développement : ws://localhost:8000 (via proxy Vite)
- * En production : wss://<domain>
  *
- * @param {string} sessionId - Identifiant de session unique
+ * En développement : connexion DIRECTE au backend (ws://localhost:8000).
+ * Le proxy WebSocket de Vite est instable (ECONNRESET/ECONNREFUSED),
+ * on le contourne donc entièrement pour les WebSocket.
+ *
+ * En production : même domaine (wss://<domain>).
+ *
+ * @param {string} sessionId - Identifiant de session unique (non utilisé dans l'URL)
  * @returns {string} URL WebSocket complète
  */
 export function buildWsUrl(sessionId) {
   const token = getWsToken();
+  if (import.meta.env.DEV) {
+    // Connexion directe au backend en développement (bypass proxy Vite)
+    return `ws://localhost:8000/api/v1/agent/chat?token=${encodeURIComponent(token)}`;
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host; // localhost:5173 en dev → proxy Vite vers :8000
+  const host = window.location.host;
   return `${protocol}//${host}/api/v1/agent/chat?token=${encodeURIComponent(token)}`;
 }
 

@@ -110,15 +110,31 @@ async def agent_chat(
       server → {"type": "token", "content": "..."}  (streaming)
       server → {"type": "end", "usage": {...}}
       server → {"type": "error", "message": "..."}
+
+    IMPORTANT : websocket.accept() DOIT être appelé avant tout websocket.close()
+    avec un code personnalisé. Sinon Starlette envoie un TCP RST → ECONNRESET.
     """
-    # --- Authentifier le JWT manuellement ---
+    logger.info("[WS] Nouvelle tentative de connexion WebSocket")
+
+    # --- Accepter d'abord, authentifier ensuite ---
+    # Le handshake doit être complété avant tout envoi de close code.
+    await websocket.accept()
+    logger.info("[WS] Connexion acceptée au niveau TCP, authentification en cours")
+
+    # --- Vérifier le JWT ---
     try:
         payload = verify_token(token)
-    except TokenError:
+    except TokenError as exc:
+        logger.warning("[WS] JWT invalide : %s", exc)
+        await websocket.close(code=4001)
+        return
+    except Exception:
+        logger.exception("[WS] Erreur inattendue lors de verify_token")
         await websocket.close(code=4001)
         return
 
     if payload.get("type") != "access":
+        logger.warning("[WS] Token n'est pas un access token")
         await websocket.close(code=4001)
         return
 
@@ -126,6 +142,7 @@ async def agent_chat(
     if jti:
         try:
             if await is_token_blacklisted(jti):
+                logger.warning("[WS] Token révoqué (jti=%s)", jti)
                 await websocket.close(code=4001)
                 return
         except Exception:
@@ -134,6 +151,7 @@ async def agent_chat(
     user_id_str = payload.get("sub")
     cabinet_id_str = payload.get("cabinet_id")
     if not user_id_str or not cabinet_id_str:
+        logger.warning("[WS] sub ou cabinet_id manquant dans le token")
         await websocket.close(code=4001)
         return
 
@@ -141,29 +159,42 @@ async def agent_chat(
         user_id = UUID(user_id_str)
         cabinet_id = UUID(cabinet_id_str)
     except ValueError:
+        logger.warning("[WS] UUID invalide dans le token")
         await websocket.close(code=4001)
         return
 
     # Vérifier membership cabinet
-    result = await db.execute(
-        select(CabinetMemberModel).where(
-            CabinetMemberModel.cabinet_id == cabinet_id,
-            CabinetMemberModel.user_id == user_id,
-            CabinetMemberModel.is_active.is_(True),
+    try:
+        result = await db.execute(
+            select(CabinetMemberModel).where(
+                CabinetMemberModel.cabinet_id == cabinet_id,
+                CabinetMemberModel.user_id == user_id,
+                CabinetMemberModel.is_active.is_(True),
+            )
         )
-    )
-    member = result.scalar_one_or_none()
+        member = result.scalar_one_or_none()
+    except Exception:
+        logger.exception("[WS] Erreur DB lors de la vérification membership")
+        await websocket.close(code=1011)
+        return
+
     if member is None:
+        logger.warning("[WS] Membership cabinet introuvable (user=%s, cabinet=%s)", user_id_str, cabinet_id_str)
         await websocket.close(code=4003)
         return
 
     # Activer RLS
-    await db.execute(
-        text("SELECT set_config('app.current_cabinet_id', :cid, true)"),
-        {"cid": str(cabinet_id)},
-    )
+    try:
+        await db.execute(
+            text("SELECT set_config('app.current_cabinet_id', :cid, true)"),
+            {"cid": str(cabinet_id)},
+        )
+    except Exception:
+        logger.exception("[WS] Erreur DB lors de set_config RLS")
+        await websocket.close(code=1011)
+        return
 
-    await websocket.accept()
+    logger.info("[WS] Authentification OK (user=%s, cabinet=%s, role=%s)", user_id, cabinet_id, member.role)
 
     km = KeyManager(settings.encryption_master_key)
     orchestrator = get_orchestrator()

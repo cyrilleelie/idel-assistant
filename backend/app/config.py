@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     llm_provider: str = "mistral_cloud"
     llm_model_name: str = "mistral-large-latest"
     llm_base_url: str = "https://api.mistral.ai/v1"
-    llm_temperature: float = 0.3
+    llm_temperature: float = 0.1
     llm_max_tokens: int = 2048
     agent_session_ttl_seconds: int = 14400  # 4h
     agent_max_history_messages: int = 20

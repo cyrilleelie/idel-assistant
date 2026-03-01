@@ -429,12 +429,17 @@ class AgentOrchestrator:
         yield json.dumps({"type": "end", "usage": {}})
 
     async def _get_daily_context(self, deps: AgentDeps) -> str:
-        """Charge le contexte journalier depuis Redis (cache 15 min).
+        """Injecte les données réelles du cabinet dans le contexte (cache Redis 5 min).
 
-        Clé : agent:daily:{cabinet_id}:{date}
+        Approche RAG : on charge les vrais RDV du jour depuis la BD et on les injecte
+        dans le system prompt. Le LLM lit les faits réels au lieu de les inventer.
+
+        SAVEPOINTs (begin_nested) : évite la corruption de session SQLAlchemy si une
+        requête échoue — la transaction externe (et son RLS set_config) reste intacte.
         """
-        today = datetime.date.today().isoformat()
-        cache_key = f"agent:daily:{deps.context.cabinet_id}:{today}"
+        today = datetime.date.today()
+        today_iso = today.isoformat()
+        cache_key = f"agent:daily:{deps.context.cabinet_id}:{today_iso}"
 
         try:
             r = await get_redis()
@@ -444,34 +449,50 @@ class AgentOrchestrator:
         except Exception:
             pass
 
-        parts: list[str] = []
+        sections: list[str] = []
 
+        # SAVEPOINT 1 : liste complète des RDV du jour (ancrage factuel anti-hallucination)
         try:
-            _, total_rdv = await deps.appointment_repo.list_by_date(
-                cabinet_id=deps.context.cabinet_id,
-                date=datetime.date.today(),
-                skip=0,
-                limit=1,
-            )
-            parts.append(f"- RDV aujourd'hui : {total_rdv}")
+            async with deps.db.begin_nested():
+                appointments, total_rdv = await deps.appointment_repo.list_by_date(
+                    cabinet_id=deps.context.cabinet_id,
+                    date=today,
+                    skip=0,
+                    limit=50,
+                )
+            if total_rdv == 0:
+                sections.append(f"RDV du {today_iso} : Aucun rendez-vous planifié.")
+            else:
+                rdv_lines = [f"RDV du {today_iso} ({total_rdv} au total) :"]
+                for a in appointments:
+                    heure = a.scheduled_at.strftime("%H:%M") if a.scheduled_at else "?h"
+                    soins = ", ".join(a.care_labels) if a.care_labels else (a.care_type or "soin")
+                    dur = f"{a.duration_minutes} min" if a.duration_minutes else ""
+                    rdv_lines.append(
+                        f"  {heure} — {soins}" + (f" ({dur})" if dur else "") + f" [{a.status}]"
+                    )
+                sections.append("\n".join(rdv_lines))
         except Exception:
-            pass
+            logger.debug("_get_daily_context: impossible de charger les RDV", exc_info=True)
+            sections.append(f"RDV du {today_iso} : données non disponibles.")
 
+        # SAVEPOINT 2 : factures en attente (count)
         try:
-            _, total_unpaid = await deps.invoice_repo.list_unpaid(
-                cabinet_id=deps.context.cabinet_id,
-                offset=0,
-                limit=1,
-            )
-            parts.append(f"- Factures en attente de paiement : {total_unpaid}")
+            async with deps.db.begin_nested():
+                _, total_unpaid = await deps.invoice_repo.list_unpaid(
+                    cabinet_id=deps.context.cabinet_id,
+                    offset=0,
+                    limit=1,
+                )
+            sections.append(f"Factures en attente de paiement : {total_unpaid}")
         except Exception:
-            pass
+            logger.debug("_get_daily_context: impossible de charger les factures", exc_info=True)
 
-        result = "\n".join(parts) if parts else "Non disponible."
+        result = "\n\n".join(sections) if sections else "Données non disponibles."
 
         try:
             r = await get_redis()
-            await r.setex(cache_key, 900, result)  # TTL 15 min
+            await r.setex(cache_key, 300, result)  # TTL 5 min (fraîcheur accrue)
         except Exception:
             pass
 

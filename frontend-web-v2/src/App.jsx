@@ -20,6 +20,7 @@ import { fetchCabinet, updateCabinet } from './api/cabinet';
 import { listCareLabels } from './api/care-labels';
 import { listCareActCodes } from './api/cotation';
 import ChatPanel from './components/agent/ChatPanel';
+import AgentMonitorWidget from './components/agent/AgentMonitorWidget';
 import Header from './components/Header';
 import InfoBanner from './components/InfoBanner';
 import LoginPage from './components/LoginPage';
@@ -1387,6 +1388,7 @@ export default function App() {
             🤖 <span className="hidden sm:inline">Assistant</span>
           </button>
           <ChatPanel isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+          {userRole === 'admin' && <AgentMonitorWidget />}
         </>
       )}
 

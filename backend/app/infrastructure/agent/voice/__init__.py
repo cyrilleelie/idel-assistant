@@ -1,10 +1,14 @@
-"""Sous-module voix de l'agent IA — STT + TTS cloud (itération C).
+"""Sous-module voix de l'agent IA — STT + TTS cloud et self-hosted.
 
 Providers cloud (itération C) :
   - STT : OpenAI Whisper API (WhisperCloudSTT)
   - TTS : ElevenLabs API (ElevenLabsTTS)
 
-Interfaces abstraites (itération D : migration GPU self-hosted) :
+Providers self-hosted GPU (itération D) :
+  - STT : faster-whisper via micro-service (FasterWhisperLocalSTT)
+  - TTS : Kokoro-82M via micro-service (KokoroLocalTTS)
+
+Interfaces abstraites :
   - STTProvider, TTSProvider dans base.py
 
 Fonctionnalités :

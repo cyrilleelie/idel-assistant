@@ -1,10 +1,12 @@
 """Routes FastAPI pour l'agent IA : WebSocket streaming, voix et health check.
 
-Itération C — ajout de la modalité vocale :
+Itération D — providers cloud et self-hosted GPU via factory.
   POST /agent/transcribe  — STT (audio → texte), pipeline REST push-to-talk
   WS   /agent/voice       — pipeline voix complet (audio ↔ agent ↔ audio)
+  GET  /agent/health       — statut complet des providers + métriques
 """
 
+import asyncio
 import json
 import logging
 from uuid import UUID, uuid4
@@ -16,12 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.infrastructure.agent.audit import log_tool_call
 from app.infrastructure.agent.context import AgentContext, AgentDeps
+from app.infrastructure.agent.factory import create_llm_provider, create_stt_provider, create_tts_provider
+from app.infrastructure.agent.metrics import get_latency_stats
 from app.infrastructure.agent.orchestrator import AgentOrchestrator, create_idel_agent
-from app.infrastructure.agent.providers import LLMConfig, MistralCloudProvider
 from app.infrastructure.agent.voice.base import STTProvider, TTSProvider
 from app.infrastructure.agent.voice.pseudonymizer import pseudonymize_transcript
-from app.infrastructure.agent.voice.tts_elevenlabs import ElevenLabsTTS, split_into_sentences
-from app.infrastructure.agent.voice.stt_whisper_cloud import WhisperCloudSTT
+from app.infrastructure.agent.voice.tts_elevenlabs import split_into_sentences
 from app.infrastructure.agent.voice.vad import trim_silence
 from app.infrastructure.api.dependencies import AuthContext, get_current_user
 from app.infrastructure.persistence.database import get_db
@@ -52,37 +54,25 @@ _tts_provider: TTSProvider | None = None
 def get_orchestrator() -> AgentOrchestrator:
     global _orchestrator
     if _orchestrator is None:
-        llm_config = LLMConfig(
-            model_name=settings.llm_model_name,
-            base_url=settings.llm_base_url,
-            temperature=settings.llm_temperature,
-            max_tokens=settings.llm_max_tokens,
-        )
-        provider = MistralCloudProvider(
-            api_key=settings.mistral_api_key,
-            config=llm_config,
-        )
+        provider = create_llm_provider(settings)
         agent = create_idel_agent(provider)
         _orchestrator = AgentOrchestrator(agent, model_name=settings.llm_model_name)
     return _orchestrator
 
 
 def get_stt_provider() -> STTProvider | None:
-    """Retourne le provider STT configuré, ou None si non configuré."""
+    """Retourne le provider STT configuré via la factory."""
     global _stt_provider
-    if _stt_provider is None and settings.openai_api_key:
-        _stt_provider = WhisperCloudSTT(api_key=settings.openai_api_key)
+    if _stt_provider is None:
+        _stt_provider = create_stt_provider(settings)
     return _stt_provider
 
 
 def get_tts_provider() -> TTSProvider | None:
-    """Retourne le provider TTS configuré, ou None si non configuré."""
+    """Retourne le provider TTS configuré via la factory."""
     global _tts_provider
-    if _tts_provider is None and settings.elevenlabs_api_key and settings.tts_enabled:
-        _tts_provider = ElevenLabsTTS(
-            api_key=settings.elevenlabs_api_key,
-            voice_id=settings.elevenlabs_voice_id,
-        )
+    if _tts_provider is None:
+        _tts_provider = create_tts_provider(settings)
     return _tts_provider
 
 
@@ -91,19 +81,29 @@ def get_tts_provider() -> TTSProvider | None:
 
 @router.get("/health")
 async def agent_health(current_user: AuthContext = Depends(get_current_user)):
-    """Vérifie que les providers LLM, STT, TTS et Redis sont accessibles."""
-    llm_config = LLMConfig(
-        model_name=settings.llm_model_name,
-        base_url=settings.llm_base_url,
-        temperature=settings.llm_temperature,
-        max_tokens=settings.llm_max_tokens,
-    )
-    provider = MistralCloudProvider(
-        api_key=settings.mistral_api_key,
-        config=llm_config,
-    )
+    """Health check complet de l'agent avec statuts des providers et métriques.
 
-    llm_ok = await provider.health_check() if settings.mistral_api_key else False
+    Utilisé par le widget AgentMonitorWidget (itération D) et les alertes.
+    """
+    llm_provider = create_llm_provider(settings)
+    stt = get_stt_provider()
+    tts = get_tts_provider()
+
+    # Health checks en parallèle (timeout 3s chacun)
+    async def _safe_health(provider, name: str) -> bool:
+        if provider is None:
+            return False
+        try:
+            return await asyncio.wait_for(provider.health_check(), timeout=3.0)
+        except Exception:
+            logger.warning("Health check %s échoué", name)
+            return False
+
+    llm_ok, stt_ok, tts_ok = await asyncio.gather(
+        _safe_health(llm_provider, "llm"),
+        _safe_health(stt, "stt"),
+        _safe_health(tts, "tts"),
+    )
 
     redis_ok = False
     try:
@@ -113,29 +113,44 @@ async def agent_health(current_user: AuthContext = Depends(get_current_user)):
     except Exception:
         pass
 
-    stt = get_stt_provider()
-    tts = get_tts_provider()
-    stt_is_local = stt.is_local if stt else None
-    tts_is_local = tts.is_local if tts else None
+    # Métriques de latence depuis Redis
+    latency_stats = {}
+    if redis_ok:
+        try:
+            r = await get_redis()
+            latency_stats = await get_latency_stats(r)
+        except Exception:
+            logger.debug("Impossible de charger les métriques de latence")
 
-    voice_warning = None
-    if stt and not stt.is_local:
-        voice_warning = "Audio traité par services tiers — migration GPU prévue (itération D)"
+    llm_is_local = getattr(llm_provider, "is_local", False)
+    stt_is_local = stt.is_local if stt else False
+    tts_is_local = tts.is_local if tts else False
+
+    overall_status = "ok" if all([llm_ok, redis_ok]) else "degraded"
 
     return {
-        "status": "ok" if redis_ok else "degraded",
-        "provider_llm": settings.llm_provider,
-        "model": settings.llm_model_name,
-        "llm_reachable": llm_ok,
+        "status": overall_status,
+        "providers": {
+            "llm": {
+                "name": settings.llm_provider,
+                "model": settings.llm_model_name,
+                "is_local": llm_is_local,
+                "healthy": llm_ok,
+            },
+            "stt": {
+                "name": settings.stt_provider,
+                "is_local": stt_is_local,
+                "healthy": stt_ok,
+            },
+            "tts": {
+                "name": settings.tts_provider if settings.tts_enabled else "disabled",
+                "is_local": tts_is_local,
+                "healthy": tts_ok,
+            },
+        },
+        "metrics": latency_stats,
         "redis_ok": redis_ok,
-        "api_key_configured": bool(settings.mistral_api_key),
-        "provider_stt": settings.stt_provider,
-        "provider_tts": settings.tts_provider if settings.tts_enabled else "disabled",
-        "stt_configured": bool(settings.openai_api_key),
-        "tts_configured": bool(settings.elevenlabs_api_key) and settings.tts_enabled,
-        "stt_is_local": stt_is_local,
-        "tts_is_local": tts_is_local,
-        "warning": voice_warning,
+        "hds_compliant": llm_is_local and stt_is_local,
     }
 
 
@@ -238,7 +253,7 @@ async def transcribe_audio(
     }
 
 
-# ── WebSocket chat (itérations A/B — inchangé) ───────────────────────────────
+# ── WebSocket chat (itérations A/B + TTS itération D) ────────────────────────
 
 
 @router.websocket("/chat")
@@ -247,7 +262,7 @@ async def agent_chat(
     token: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """WebSocket pour le chat agent IA (texte).
+    """WebSocket pour le chat agent IA (texte + TTS optionnel).
 
     Authentification via query param ?token=<JWT> (headers non disponibles
     lors du handshake WebSocket).
@@ -256,10 +271,13 @@ async def agent_chat(
       client → {"type": "text", "content": "...", "session_id": "..."}
       client → {"type": "confirm", "action_id": "...", "session_id": "..."}
       client → {"type": "cancel", "action_id": "...", "session_id": "..."}
+      client → {"type": "toggle_tts", "enabled": true|false}
       client → {"message": "...", "session_id": "..."}  (rétrocompat)
-      server → {"type": "token", "content": "..."}      (streaming)
+      server → {"type": "token", "content": "..."}      (streaming texte)
       server → {"type": "tool_result", "tool": "...", "data": {...}}
       server → {"type": "confirmation_required", "action": {...}}
+      server → {"type": "audio_chunk"} + message binaire (TTS audio)
+      server → {"type": "audio_end"}                     (fin TTS)
       server → {"type": "end"}
       server → {"type": "error", "message": "..."}
 
@@ -275,6 +293,16 @@ async def agent_chat(
 
     km = KeyManager(settings.encryption_master_key)
     orchestrator = get_orchestrator()
+    tts = get_tts_provider()
+    tts_enabled = tts is not None  # Activé par défaut si Kokoro est configuré
+
+    # Compteur de session chat
+    try:
+        from app.infrastructure.agent.metrics import record_session as _rec_sess
+        _r = await get_redis()
+        await _rec_sess(_r)
+    except Exception:
+        pass
 
     session_id = "default"
     try:
@@ -288,9 +316,17 @@ async def agent_chat(
                     "session_id": data.get("session_id", "default"),
                 }
 
+            msg_type = data.get("type", "text")
+
+            # Toggle TTS on/off depuis le client
+            if msg_type == "toggle_tts":
+                tts_enabled = bool(data.get("enabled", True))
+                logger.debug("[WS/chat] TTS %s", "activé" if tts_enabled else "désactivé")
+                continue
+
             session_id = data.get("session_id", "default")
 
-            if data.get("type", "text") == "text":
+            if msg_type == "text":
                 content = (data.get("content") or data.get("message", "")).strip()
                 if not content:
                     continue
@@ -313,8 +349,27 @@ async def agent_chat(
                 transmission_repo=SQLAlchemyTransmissionRepo(db, km),
             )
 
+            # Accumule la réponse texte complète pour la synthèse TTS
+            full_response = ""
             async for chunk in orchestrator.run_streaming(data, deps):
                 await websocket.send_text(chunk)
+                try:
+                    parsed = json.loads(chunk)
+                    if parsed.get("type") == "token":
+                        full_response += parsed.get("content", "")
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
+            # Synthèse TTS sur la réponse complète (si activé et texte non vide)
+            if tts_enabled and tts and full_response.strip():
+                logger.info("[WS/chat] TTS: synthèse de %d chars via %s", len(full_response), tts.provider_name)
+                await _stream_tts(websocket, tts, full_response.strip())
+            elif not tts_enabled:
+                logger.debug("[WS/chat] TTS désactivé par le client")
+            elif not tts:
+                logger.debug("[WS/chat] TTS: aucun provider configuré")
+            elif not full_response.strip():
+                logger.debug("[WS/chat] TTS: réponse vide, pas de synthèse")
 
     except WebSocketDisconnect:
         logger.info("[WS/chat] Client déconnecté (session=%s)", session_id)
@@ -385,6 +440,14 @@ async def agent_voice(
     session_id = str(uuid4())
     context: AgentContext | None = None
 
+    # Compteur de session voix
+    try:
+        from app.infrastructure.agent.metrics import record_session as _rec_sess
+        _r = await get_redis()
+        await _rec_sess(_r)
+    except Exception:
+        pass
+
     try:
         while True:
             message = await websocket.receive()
@@ -416,9 +479,18 @@ async def agent_voice(
                 # Supprime les silences en début/fin
                 audio_data = trim_silence(audio_data)
 
-                # STT — transcription Whisper
+                # STT — transcription (Whisper cloud ou faster-whisper local)
+                import time as _time
+                _stt_start = _time.monotonic()
                 try:
                     transcript = await stt.transcribe(audio_data, language="fr")
+                    _stt_ms = (_time.monotonic() - _stt_start) * 1000
+                    try:
+                        from app.infrastructure.agent.metrics import record_latency as _rec_lat
+                        _r = await get_redis()
+                        await _rec_lat(_r, "stt_latency_ms", _stt_ms)
+                    except Exception:
+                        pass
                 except Exception as exc:
                     logger.error("[WS/voice] STT error: %s", exc)
                     await websocket.send_text(
@@ -619,20 +691,39 @@ async def _stream_tts(
     text: str,
 ) -> None:
     """
-    Synthétise un fragment de texte et envoie les chunks audio au client.
+    Synthétise un texte et envoie l'audio complet au client.
 
-    Protocole : message JSON {"type": "audio_chunk"} suivi immédiatement
-    des données binaires du chunk MP3. Répété pour chaque chunk.
-    Termine par {"type": "audio_end"}.
+    Kokoro génère un WAV complet en mémoire. On bufferise tous les chunks
+    HTTP et on envoie un seul message binaire au client, car
+    AudioContext.decodeAudioData() nécessite un fichier audio complet.
 
+    Protocole : {"type": "audio_chunk"} → données binaires → {"type": "audio_end"}.
     Ne bloque pas le pipeline si TTS échoue.
     """
     try:
+        import time as _time
+        from app.infrastructure.agent.metrics import record_latency as _rec_lat
+
+        _tts_start = _time.monotonic()
+        audio_buffer = bytearray()
         async for audio_chunk in tts.synthesize(text):
-            # Signal JSON + données binaires
+            audio_buffer.extend(audio_chunk)
+
+        _tts_ms = (_time.monotonic() - _tts_start) * 1000
+
+        if audio_buffer:
+            logger.info("[TTS] Audio généré: %d octets en %.0fms", len(audio_buffer), _tts_ms)
+            try:
+                _r = await get_redis()
+                await _rec_lat(_r, "tts_ttfb_ms", _tts_ms)
+            except Exception:
+                pass
             await websocket.send_text(json.dumps({"type": "audio_chunk"}))
-            await websocket.send_bytes(audio_chunk)
+            await websocket.send_bytes(bytes(audio_buffer))
+        else:
+            logger.warning("[TTS] Aucun audio produit pour: '%s...'", text[:60])
+
         await websocket.send_text(json.dumps({"type": "audio_end"}))
     except Exception as exc:
-        logger.error("[TTS] Synthèse échouée pour '%s...' : %s", text[:30], exc)
+        logger.error("[TTS] Synthèse échouée pour '%s...' : %s", text[:30], exc, exc_info=True)
         # Ne pas propager — le texte a déjà été envoyé, l'audio est optionnel

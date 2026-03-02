@@ -1,0 +1,58 @@
+version: '3.9'
+
+# Stack locale CPU-only pour faster-whisper + Kokoro (sans vLLM).
+# Usage : docker compose -f docker-compose.cpu.yml up -d
+#
+# faster-whisper sera ~5-10x plus lent qu'en GPU mais fonctionnel.
+# Kokoro tourne déjà sur CPU — aucune différence de performance.
+# vLLM n'est pas inclus (Mistral 24B nécessite un GPU).
+
+services:
+
+  whisper:
+    build:
+      context: .
+      dockerfile: Dockerfile.whisper
+    container_name: idel-whisper
+    environment:
+      - MODELS_DIR=/models
+      - WHISPER_DEVICE=cpu
+      - COMPUTE_TYPE=int8
+      - NUM_WORKERS=1
+      - WHISPER_MODEL=small
+    volumes:
+      - ${MODELS_DIR:-./models}:/models:ro
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  kokoro:
+    build:
+      context: .
+      dockerfile: Dockerfile.kokoro
+    container_name: idel-kokoro
+    ports:
+      - "127.0.0.1:8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  nginx-gpu:
+    image: nginx:alpine
+    container_name: idel-nginx-gpu
+    volumes:
+      - ./nginx-cpu.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:9000:9000"
+    depends_on:
+      - whisper
+      - kokoro
+    restart: unless-stopped

@@ -37,9 +37,7 @@ export function useVoicePlayback() {
 
   const getAudioContext = useCallback(() => {
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: 44100,
-      });
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
     }
     // Réactive le contexte si suspendu (politique autoplay navigateur)
     if (audioCtxRef.current.state === 'suspended') {
@@ -47,6 +45,14 @@ export function useVoicePlayback() {
     }
     return audioCtxRef.current;
   }, []);
+
+  /**
+   * Pré-initialise l'AudioContext lors d'un geste utilisateur.
+   * Appeler depuis un onClick/onKeyDown pour satisfaire la politique autoplay.
+   */
+  const warmup = useCallback(() => {
+    getAudioContext();
+  }, [getAudioContext]);
 
   const playQueue = useCallback(() => {
     if (queueRef.current.length === 0) {
@@ -83,12 +89,14 @@ export function useVoicePlayback() {
    * @param {ArrayBuffer} audioData - Données MP3 brutes
    */
   const playChunk = useCallback(async (audioData) => {
+    console.log('[useVoicePlayback] playChunk appelé, taille:', audioData.byteLength, 'muted:', isMutedRef.current);
     if (isMutedRef.current) return;
 
     const ctx = getAudioContext();
+    console.log('[useVoicePlayback] AudioContext state:', ctx.state, 'sampleRate:', ctx.sampleRate);
 
     try {
-      let dataToDecodeChunks;
+      let dataToDecode;
 
       if (isSafari()) {
         // Safari : bufferiser 2 chunks avant de décoder
@@ -104,20 +112,24 @@ export function useVoicePlayback() {
           offset += chunk.byteLength;
         }
         safariBufferRef.current = [];
-        dataToDecodeChunks = combined.buffer;
+        dataToDecode = combined.buffer;
       } else {
-        dataToDecodeChunks = audioData;
+        dataToDecode = audioData;
       }
 
-      const buffer = await ctx.decodeAudioData(dataToDecodeChunks);
+      const buffer = await ctx.decodeAudioData(dataToDecode);
+      console.log('[useVoicePlayback] Audio décodé: durée=%.2fs, channels=%d, sampleRate=%d',
+        buffer.duration, buffer.numberOfChannels, buffer.sampleRate);
       queueRef.current.push(buffer);
 
       if (!isPlayingRef.current) {
         playQueue();
       }
     } catch (err) {
-      // Chunk MP3 incomplet ou corrompu → ignore et passe au suivant
-      console.warn('[useVoicePlayback] Chunk audio ignoré (décodage impossible):', err.message);
+      console.warn('[useVoicePlayback] Décodage audio échoué:', err.message);
+      // Affiche les premiers octets pour diagnostic (header WAV/MP3)
+      const header = new Uint8Array(audioData.slice(0, 16));
+      console.warn('[useVoicePlayback] Header (hex):', Array.from(header).map(b => b.toString(16).padStart(2, '0')).join(' '));
     }
   }, [getAudioContext, playQueue]);
 
@@ -159,6 +171,7 @@ export function useVoicePlayback() {
     playChunk,
     stopPlayback,
     toggleMute,
+    warmup,
     isPlaying,
     isMuted,
   };

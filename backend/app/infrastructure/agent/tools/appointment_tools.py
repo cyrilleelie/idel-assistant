@@ -46,14 +46,16 @@ def _label_proximite(score: float) -> str:
 
 
 async def get_appointments_today(ctx: RunContext[AgentDeps]) -> dict:
-    """Récupère tous les rendez-vous du jour pour le cabinet."""
+    """Récupère les rendez-vous du jour de l'IDEL connectée (pas tout le cabinet)."""
     start = time.monotonic()
     tool_input = {}
     cabinet_id = ctx.deps.context.cabinet_id
+    user_id = ctx.deps.context.user_id
     today = datetime.date.today()
     try:
         appointments, total = await ctx.deps.appointment_repo.list_by_date(
             cabinet_id=cabinet_id,
+            idel_id=user_id,
             date=today,
             skip=0,
             limit=100,
@@ -92,7 +94,7 @@ async def get_appointments_today(ctx: RunContext[AgentDeps]) -> dict:
 
 
 async def get_appointments_week(ctx: RunContext[AgentDeps], start_date: str | None = None) -> dict:
-    """Récupère les rendez-vous pour la semaine courante ou à partir d'une date donnée.
+    """Récupère les rendez-vous de la semaine de l'IDEL connectée.
 
     Args:
         start_date: Date de début au format YYYY-MM-DD (optionnel, défaut = lundi de la semaine courante).
@@ -100,6 +102,7 @@ async def get_appointments_week(ctx: RunContext[AgentDeps], start_date: str | No
     start = time.monotonic()
     tool_input = {"start_date": start_date}
     cabinet_id = ctx.deps.context.cabinet_id
+    user_id = ctx.deps.context.user_id
     try:
         if start_date:
             week_start = datetime.date.fromisoformat(start_date)
@@ -116,6 +119,7 @@ async def get_appointments_week(ctx: RunContext[AgentDeps], start_date: str | No
             day = week_start + datetime.timedelta(days=delta)
             apts, cnt = await ctx.deps.appointment_repo.list_by_date(
                 cabinet_id=cabinet_id,
+                idel_id=user_id,
                 date=day,
                 skip=0,
                 limit=50,

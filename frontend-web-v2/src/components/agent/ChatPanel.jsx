@@ -12,6 +12,7 @@ import ChatInput from './ChatInput';
 import ChatMessage from './ChatMessage';
 import { useAgentWebSocket } from '../../hooks/useAgentWebSocket';
 import { useVoicePlayback } from '../../hooks/useVoicePlayback';
+import { getAgentHealth } from '../../api/agentService';
 
 const MODES = [
   {
@@ -136,6 +137,8 @@ function TTSControls({ isPlaying, isMuted, onToggleMute, onStop }) {
  * }} props
  */
 export default function ChatPanel({ isOpen, onClose }) {
+  const { isPlaying, isMuted, playChunk, stopPlayback, toggleMute, warmup } = useVoicePlayback();
+
   const {
     messages,
     isConnected,
@@ -147,14 +150,31 @@ export default function ChatPanel({ isOpen, onClose }) {
     clearHistory,
     connect,
     disconnect,
-  } = useAgentWebSocket();
-
-  const { isPlaying, isMuted, playChunk, stopPlayback, toggleMute } = useVoicePlayback();
+    toggleTts,
+  } = useAgentWebSocket({ onAudioChunk: playChunk });
 
   const [activeMode, setActiveMode] = useState('general');
   const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
   const [voiceError, setVoiceError] = useState(null);
+  const [sttIsLocal, setSttIsLocal] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Vérifie si le STT est local (GPU) — masque le bandeau RGPD dans ce cas
+  useEffect(() => {
+    getAgentHealth()
+      .then((data) => {
+        if (data?.providers?.stt?.is_local) {
+          setSttIsLocal(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Wrapper sendMessage : initialise l'AudioContext (geste utilisateur) avant envoi
+  const handleSend = (text) => {
+    warmup(); // Pré-initialise AudioContext pendant le geste utilisateur (autoplay policy)
+    sendMessage(text);
+  };
 
   const currentMode = MODES.find((m) => m.id === activeMode) || MODES[0];
 
@@ -219,8 +239,21 @@ export default function ChatPanel({ isOpen, onClose }) {
             <TTSControls
               isPlaying={isPlaying}
               isMuted={isMuted}
-              onToggleMute={toggleMute}
-              onStop={stopPlayback}
+              onToggleMute={() => {
+                const willBeMuted = !isMuted;
+                if (willBeMuted) {
+                  toggleMute();
+                } else {
+                  warmup(); // Ré-initialise AudioContext avant de réactiver le son
+                  toggleMute();
+                }
+                // Informe le serveur d'arrêter/reprendre la synthèse
+                toggleTts(!willBeMuted);
+              }}
+              onStop={() => {
+                stopPlayback();
+                toggleTts(false);
+              }}
             />
             <button
               onClick={clearHistory}
@@ -257,8 +290,8 @@ export default function ChatPanel({ isOpen, onClose }) {
           ))}
         </div>
 
-        {/* Bandeau RGPD voix (première utilisation du micro uniquement) */}
-        {showPrivacyNotice && (
+        {/* Bandeau RGPD voix (uniquement si STT cloud et première utilisation du micro) */}
+        {showPrivacyNotice && !sttIsLocal && (
           <VoicePrivacyNotice onDismiss={() => setShowPrivacyNotice(false)} />
         )}
 
@@ -284,7 +317,7 @@ export default function ChatPanel({ isOpen, onClose }) {
                 {currentMode.suggestions.map((suggestion) => (
                   <button
                     key={suggestion}
-                    onClick={() => sendMessage(suggestion)}
+                    onClick={() => handleSend(suggestion)}
                     disabled={!isConnected || isStreaming}
                     className="w-full text-left text-xs bg-white border border-gray-200 rounded-lg px-3 py-2
                       text-gray-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700
@@ -318,7 +351,7 @@ export default function ChatPanel({ isOpen, onClose }) {
 
         {/* Input avec bouton micro intégré */}
         <ChatInput
-          onSend={sendMessage}
+          onSend={handleSend}
           disabled={!isConnected || isStreaming}
           placeholder={messages.length === 0 ? currentMode.placeholder : undefined}
           onVoiceWarning={handleVoiceWarning}

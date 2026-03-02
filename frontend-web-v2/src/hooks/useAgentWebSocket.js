@@ -43,10 +43,11 @@ const RECONNECT_DELAY_MS = 2000;
  *   clearHistory: () => void,
  *   connect: () => void,
  *   disconnect: () => void,
+ *   toggleTts: (enabled: boolean) => void,
  *   sessionId: string,
  * }}
  */
-export function useAgentWebSocket() {
+export function useAgentWebSocket({ onAudioChunk } = {}) {
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -57,12 +58,21 @@ export function useAgentWebSocket() {
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef(null);
 
+  const onAudioChunkRef = useRef(onAudioChunk);
+  useEffect(() => {
+    onAudioChunkRef.current = onAudioChunk;
+  }, [onAudioChunk]);
+
+  // Flag: le prochain message binaire est un chunk audio TTS
+  const expectingAudioRef = useRef(false);
+
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
     const url = buildWsUrl(sessionId);
     const ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer'; // recevoir les chunks audio en ArrayBuffer
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -94,6 +104,16 @@ export function useAgentWebSocket() {
     };
 
     ws.onmessage = (event) => {
+      // Message binaire = chunk audio TTS (suit un {"type":"audio_chunk"})
+      if (event.data instanceof ArrayBuffer) {
+        console.log('[WS] Binaire reçu:', event.data.byteLength, 'octets, expecting:', expectingAudioRef.current, 'callback:', !!onAudioChunkRef.current);
+        if (expectingAudioRef.current && onAudioChunkRef.current) {
+          onAudioChunkRef.current(event.data);
+        }
+        expectingAudioRef.current = false;
+        return;
+      }
+
       try {
         const data = JSON.parse(event.data);
 
@@ -159,6 +179,12 @@ export function useAgentWebSocket() {
             }
             return prev;
           });
+        } else if (data.type === 'audio_chunk') {
+          console.log('[WS] audio_chunk reçu — prochain message binaire attendu');
+          expectingAudioRef.current = true;
+        } else if (data.type === 'audio_end') {
+          console.log('[WS] audio_end reçu');
+          expectingAudioRef.current = false;
         }
       } catch {
         // Ignorer les messages malformés
@@ -229,6 +255,15 @@ export function useAgentWebSocket() {
     [sessionId]
   );
 
+  /** Active ou désactive la synthèse vocale côté serveur. */
+  const toggleTts = useCallback(
+    (enabled) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      wsRef.current.send(JSON.stringify({ type: 'toggle_tts', enabled }));
+    },
+    []
+  );
+
   const clearHistory = useCallback(() => {
     setMessages([]);
     setError(null);
@@ -252,6 +287,7 @@ export function useAgentWebSocket() {
     clearHistory,
     connect,
     disconnect,
+    toggleTts,
     sessionId,
   };
 }

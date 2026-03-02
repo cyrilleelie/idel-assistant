@@ -26,9 +26,10 @@ async def get_tournee_today(ctx: RunContext[AgentDeps]) -> dict:
             date=today,
         )
         if tournee is None:
-            # Pas de tournée générée — retourner les RDV du jour à la place
+            # Pas de tournée générée — retourner les RDV du jour de l'IDEL
             appointments, total = await ctx.deps.appointment_repo.list_by_date(
                 cabinet_id=cabinet_id,
+                idel_id=user_id,
                 date=today,
                 skip=0,
                 limit=100,

@@ -8,11 +8,13 @@ import datetime
 import json
 import logging
 import re
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from pydantic_ai import Agent
 from pydantic_ai import messages as pai_messages
+from sqlalchemy import text
 
 from app.infrastructure.agent import memory as agent_memory
 from app.infrastructure.agent.confirmation import (
@@ -21,6 +23,7 @@ from app.infrastructure.agent.confirmation import (
     store_pending_action,
 )
 from app.infrastructure.agent.context import AgentDeps
+from app.infrastructure.agent.metrics import record_action, record_latency, record_session
 from app.infrastructure.agent.prompts import build_system_prompt_v2
 from app.infrastructure.agent.providers.base import LLMProvider
 from app.infrastructure.agent.tools.appointment_tools import (
@@ -313,8 +316,13 @@ class AgentOrchestrator:
             yield json.dumps({"type": "end", "usage": {}})
             return
 
-        # Contexte journalier (cache Redis 15 min)
+        # Contexte journalier (cache Redis 5 min)
         deps.context.daily_context_str = await self._get_daily_context(deps)
+        logger.info(
+            "[AGENT] daily_context pour %s : %s",
+            deps.context.cabinet_id,
+            deps.context.daily_context_str[:200] if deps.context.daily_context_str else "(vide)",
+        )
 
         # Streaming PydanticAI
         session_id = deps.context.session_id
@@ -323,12 +331,24 @@ class AgentOrchestrator:
 
         full_response = ""
         try:
+            start_llm = time.monotonic()
+            first_token = True
             async with self._agent.run_stream(
                 content,
                 deps=deps,
                 message_history=model_history,
             ) as result:
                 async for chunk in result.stream_text(delta=True):
+                    # Mesure TTFT (premier token LLM)
+                    if first_token:
+                        ttft_ms = (time.monotonic() - start_llm) * 1000
+                        try:
+                            r = await get_redis()
+                            await record_latency(r, "ttft_ms", ttft_ms)
+                            await record_action(r)
+                        except Exception:
+                            pass
+                        first_token = False
                     full_response += chunk
                     yield json.dumps({"type": "token", "content": chunk}, ensure_ascii=False)
 
@@ -349,6 +369,17 @@ class AgentOrchestrator:
             detail = str(exc) if str(exc) else type(exc).__name__
             yield json.dumps({"type": "error", "message": f"Erreur agent : {detail}"})
             return
+
+        # Commit les SAVEPOINTs d'audit accumulés pendant l'exécution des outils,
+        # puis re-set RLS pour le prochain message WS.
+        try:
+            await deps.db.commit()
+            await deps.db.execute(
+                text("SELECT set_config('app.current_cabinet_id', :cid, true)"),
+                {"cid": str(deps.context.cabinet_id)},
+            )
+        except Exception:
+            logger.warning("Commit post-stream échoué", exc_info=True)
 
         # Sauvegarder dans Redis
         await agent_memory.save_message(session_id, "user", content)
@@ -439,7 +470,18 @@ class AgentOrchestrator:
         """
         today = datetime.date.today()
         today_iso = today.isoformat()
-        cache_key = f"agent:daily:{deps.context.cabinet_id}:{today_iso}"
+        cache_key = f"agent:daily:{deps.context.cabinet_id}:{deps.context.user_id}:{today_iso}"
+
+        # Re-set RLS AVANT le cache check — indispensable car log_tool_call
+        # d'un message précédent a pu terminer la transaction (et perdre set_config).
+        # Sans ça, les outils PydanticAI appelés après run_stream échoueraient.
+        try:
+            await deps.db.execute(
+                text("SELECT set_config('app.current_cabinet_id', :cid, true)"),
+                {"cid": str(deps.context.cabinet_id)},
+            )
+        except Exception:
+            logger.warning("_get_daily_context: impossible de re-set RLS", exc_info=True)
 
         try:
             r = await get_redis()
@@ -451,19 +493,20 @@ class AgentOrchestrator:
 
         sections: list[str] = []
 
-        # SAVEPOINT 1 : liste complète des RDV du jour (ancrage factuel anti-hallucination)
+        # SAVEPOINT 1 : RDV du jour de l'IDEL connectée (pas tout le cabinet)
         try:
             async with deps.db.begin_nested():
                 appointments, total_rdv = await deps.appointment_repo.list_by_date(
                     cabinet_id=deps.context.cabinet_id,
+                    idel_id=deps.context.user_id,
                     date=today,
                     skip=0,
                     limit=50,
                 )
             if total_rdv == 0:
-                sections.append(f"RDV du {today_iso} : Aucun rendez-vous planifié.")
+                sections.append(f"Tes RDV du {today_iso} : Aucun rendez-vous planifié.")
             else:
-                rdv_lines = [f"RDV du {today_iso} ({total_rdv} au total) :"]
+                rdv_lines = [f"Tes RDV du {today_iso} ({total_rdv} au total) :"]
                 for a in appointments:
                     heure = a.scheduled_at.strftime("%H:%M") if a.scheduled_at else "?h"
                     soins = ", ".join(a.care_labels) if a.care_labels else (a.care_type or "soin")
@@ -472,9 +515,13 @@ class AgentOrchestrator:
                         f"  {heure} — {soins}" + (f" ({dur})" if dur else "") + f" [{a.status}]"
                     )
                 sections.append("\n".join(rdv_lines))
+            logger.info("_get_daily_context: %d RDV chargés pour %s", total_rdv, today_iso)
         except Exception:
-            logger.debug("_get_daily_context: impossible de charger les RDV", exc_info=True)
-            sections.append(f"RDV du {today_iso} : données non disponibles.")
+            logger.warning("_get_daily_context: impossible de charger les RDV", exc_info=True)
+            sections.append(
+                f"RDV du {today_iso} : données non pré-chargées — "
+                f"UTILISE l'outil get_appointments_today pour récupérer les RDV."
+            )
 
         # SAVEPOINT 2 : factures en attente (count)
         try:
@@ -486,9 +533,13 @@ class AgentOrchestrator:
                 )
             sections.append(f"Factures en attente de paiement : {total_unpaid}")
         except Exception:
-            logger.debug("_get_daily_context: impossible de charger les factures", exc_info=True)
+            logger.warning("_get_daily_context: impossible de charger les factures", exc_info=True)
 
-        result = "\n\n".join(sections) if sections else "Données non disponibles."
+        result = (
+            "\n\n".join(sections)
+            if sections
+            else "Données non pré-chargées — UTILISE les outils pour récupérer les informations."
+        )
 
         try:
             r = await get_redis()

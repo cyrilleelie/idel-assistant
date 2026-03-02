@@ -23,33 +23,34 @@ async def log_tool_call(
 ) -> None:
     """Insère une entrée d'audit pour un appel d'outil.
 
-    Ne lève pas d'exception sur erreur Redis mais laisse remonter les erreurs BDD
-    (l'audit est obligatoire pour la conformité HDS).
+    Utilise un SAVEPOINT (begin_nested) pour ne PAS commiter la transaction
+    principale — un commit perdrait le set_config RLS et casserait les outils
+    appelés ensuite dans la même requête ou les messages WebSocket suivants.
     """
-    await db.execute(
-        text(
-            """
-            INSERT INTO agent_audit_log
-                (id, cabinet_id, user_id, session_id, tool_name,
-                 tool_input, tool_output, llm_model, duration_ms, created_at)
-            VALUES
-                (:id, :cabinet_id, :user_id, :session_id, :tool_name,
-                 :tool_input::jsonb, :tool_output::jsonb, :llm_model, :duration_ms, NOW())
-            """
-        ),
-        {
-            "id": str(uuid.uuid4()),
-            "cabinet_id": str(context.cabinet_id),
-            "user_id": str(context.user_id),
-            "session_id": context.session_id,
-            "tool_name": tool_name,
-            "tool_input": _serialize_json(tool_input),
-            "tool_output": _serialize_json(tool_output),
-            "llm_model": llm_model,
-            "duration_ms": duration_ms,
-        },
-    )
-    await db.commit()
+    async with db.begin_nested():
+        await db.execute(
+            text(
+                """
+                INSERT INTO agent_audit_log
+                    (id, cabinet_id, user_id, session_id, tool_name,
+                     tool_input, tool_output, llm_model, duration_ms, created_at)
+                VALUES
+                    (:id, :cabinet_id, :user_id, :session_id, :tool_name,
+                     :tool_input::jsonb, :tool_output::jsonb, :llm_model, :duration_ms, NOW())
+                """
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "cabinet_id": str(context.cabinet_id),
+                "user_id": str(context.user_id),
+                "session_id": context.session_id,
+                "tool_name": tool_name,
+                "tool_input": _serialize_json(tool_input),
+                "tool_output": _serialize_json(tool_output),
+                "llm_model": llm_model,
+                "duration_ms": duration_ms,
+            },
+        )
 
 
 def _serialize_json(data: dict) -> str:

@@ -81,6 +81,8 @@ interface TourneeActions {
     serverId: string,
     database: Database,
   ) => Promise<void>;
+  /** Bump refreshKey to trigger a re-fetch */
+  bumpRefreshKey: () => void;
   /** Clear the last error */
   clearError: () => void;
   /** Reset store to initial state */
@@ -235,6 +237,10 @@ export const useTourneeStore = create<TourneeState & TourneeActions>()((set, get
         // Non-critical
       }
     })();
+  },
+
+  bumpRefreshKey: (): void => {
+    set((s) => ({ refreshKey: s.refreshKey + 1 }));
   },
 
   clearError: (): void => {

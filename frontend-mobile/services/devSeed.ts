@@ -320,7 +320,7 @@ async function _runDevSeedImpl(database: Database, userId?: string): Promise<voi
       sortOrder: 8,
       notes: 'Annulé par le patient.',
     },
-    // --- TOMORROW: 4 scheduled ---
+    // --- TOMORROW: 5 scheduled ---
     {
       serverId: 'seed-appt-tomorrow-1',
       patientIndex: 1,
@@ -371,6 +371,19 @@ async function _runDevSeedImpl(database: Database, userId?: string): Promise<voi
       locationType: 'home',
       status: 'scheduled',
       sortOrder: 4,
+      notes: null,
+    },
+    {
+      serverId: 'seed-appt-tomorrow-5',
+      patientIndex: 3,
+      date: tomorrow,
+      startTime: '14:00',
+      endTime: '14:30',
+      careTypeCode: 'AMI 1.5',
+      careTypeLabel: 'AMI 1.5',
+      locationType: 'home',
+      status: 'scheduled',
+      sortOrder: 5,
       notes: null,
     },
     // --- YESTERDAY: 2 completed, 1 canceled ---
@@ -584,6 +597,88 @@ async function _runDevSeedImpl(database: Database, userId?: string): Promise<voi
       audioUploaded: false,
       dayOffset: 0,
       hourOffset: 11,
+    },
+    // --- M5 seeds: colleague transmissions for preparation screen ---
+    // 6. Colleague transmission for patient 0 (Marguerite Bertrand) — yesterday
+    //    with alert about peri-lesional redness
+    {
+      serverId: 'seed-tx-6',
+      patientIndex: 0,
+      appointmentIndex: null,
+      authorName: 'Marie Collegue',
+      isCurrentUser: false,
+      contentText: 'Passage du soir chez Mme Bertrand. Pansement refait. Legere rougeur peri-lesionnelle autour de l\'escarre sacrum, a surveiller. Bourgeonnement toujours actif. Patiente en bon etat general.',
+      contentStructured: JSON.stringify({
+        synthese: 'Evolution favorable de l\'escarre sacrum, bourgeonnement confirme. Legere rougeur peri-lesionnelle a surveiller.',
+        soins: 'Refection pansement escarre sacrum : nettoyage serum physiologique, Aquacel Ag+ 10x10.',
+        constantes: 'TA : 12/8. Temperature : 36.8°C. Pouls : 68 bpm.',
+        observations: 'Bourgeonnement actif, bon tissu de granulation. Legere rougeur peri-lesionnelle signale — pas de signe infectieux franc.',
+        actions: 'Surveiller rougeur peri-lesionnelle. Signaler au Dr Martin si extension. Prochain pansement demain.',
+      }),
+      audioFilePath: null,
+      status: 'validated',
+      audioUploaded: false,
+      dayOffset: -1,
+      hourOffset: 18,
+    },
+    // 7. Colleague transmission for patient 0 (Marguerite Bertrand) — day before yesterday
+    {
+      serverId: 'seed-tx-7',
+      patientIndex: 0,
+      appointmentIndex: null,
+      authorName: 'Marie Collegue',
+      isCurrentUser: false,
+      contentText: 'Soins du soir. Glycemie post-prandiale 1.45 g/L, legerement elevee. Injection Lantus 20UI realisee. Patiente signale fatigue inhabituelle.',
+      contentStructured: JSON.stringify({
+        synthese: 'Glycemie post-prandiale legerement elevee. Patiente fatiguee.',
+        soins: 'Injection Lantus 20UI. Controle glycemique.',
+        constantes: 'Glycemie post-prandiale : 1.45 g/L. TA : 13/8.',
+        observations: 'Fatigue inhabituelle signalee par la patiente. Appetit conserve.',
+        actions: 'Surveiller glycemie. Signaler fatigue au medecin si persistante.',
+      }),
+      audioFilePath: null,
+      status: 'validated',
+      audioUploaded: false,
+      dayOffset: -2,
+      hourOffset: 19,
+    },
+    // 8. Current user transmission for patient 2 (Simone Lefebvre) — yesterday
+    //    with structured content — preparation should show this
+    {
+      serverId: 'seed-tx-8',
+      patientIndex: 2,
+      appointmentIndex: null,
+      authorName: 'Marie Dupont',
+      isCurrentUser: true,
+      contentText: 'Pansement ulcere veineux refait. Bonne evolution, pas de signe infectieux. Compression remise en place.',
+      contentStructured: JSON.stringify({
+        synthese: 'Ulcere veineux en bonne evolution. Pansement et compression refaits.',
+        soins: 'Refection pansement ulcere veineux jambe gauche : nettoyage, Urgotul, bande de compression.',
+        constantes: 'TA : 14/9. Pouls : 76 bpm.',
+        observations: 'Bords de plaie bien delimites, pas d\'odeur, pas de signe infectieux.',
+        actions: 'Continuer pansements quotidiens. Prochain controle medical dans 1 semaine.',
+      }),
+      audioFilePath: null,
+      status: 'validated',
+      audioUploaded: false,
+      dayOffset: -1,
+      hourOffset: 10,
+    },
+    // 9. Colleague transmission for patient 3 (Henri Durand) — today, no structured content yet
+    //    This patient had no recent transmissions from the current user's perspective
+    {
+      serverId: 'seed-tx-9',
+      patientIndex: 3,
+      appointmentIndex: null,
+      authorName: 'Marie Collegue',
+      isCurrentUser: false,
+      contentText: 'Passage chez M. Durand. Pansement propre, pas de probleme signale. Patient en forme.',
+      contentStructured: null,
+      audioFilePath: null,
+      status: 'transcribed',
+      audioUploaded: false,
+      dayOffset: 0,
+      hourOffset: 15,
     },
   ];
 

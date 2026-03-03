@@ -67,14 +67,20 @@ export default function TourneeScreen() {
 
   // ── Dev seed (only in __DEV__, needs userId) ────────────────────────────
 
+  const bumpRefreshKey = useTourneeStore((s) => s.bumpRefreshKey);
+
   useEffect(() => {
     if (!__DEV__ || !userId) return;
     import('@/services/devSeed')
       .then(({ runDevSeed }) => runDevSeed(database, userId))
+      .then(() => {
+        // Bump refreshKey so the fetch useEffect re-runs with seeded data
+        bumpRefreshKey();
+      })
       .catch(() => {
         // Dev seed failure is non-critical
       });
-  }, [database, userId]);
+  }, [database, userId, bumpRefreshKey]);
 
   // ── View state ────────────────────────────────────────────────────────────
 

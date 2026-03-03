@@ -1,11 +1,8 @@
 import { useEffect, useRef } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { useSyncStore } from '@/stores/syncStore';
-import { OfflineQueue } from '@/services/offlineQueue';
+import { globalQueue } from '@/services/globalQueue';
 import { api } from '@/services/api';
-
-// Singleton queue instance shared across the app
-const offlineQueue = new OfflineQueue();
 
 /**
  * Monitors network connectivity via NetInfo.
@@ -29,7 +26,7 @@ export function useOnlineStatus(): { isOnline: boolean } {
 
       // Transition from offline to online: process pending queue
       if (!previouslyOnline && connected) {
-        offlineQueue.processQueue(api).catch(() => {
+        globalQueue.processQueue(api).catch(() => {
           // Queue processing errors are handled internally
         });
       }

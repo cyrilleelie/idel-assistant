@@ -1,5 +1,6 @@
-import { TouchableOpacity, StyleSheet } from 'react-native';
+import { TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/colors';
 
@@ -9,13 +10,21 @@ import { Colors } from '@/constants/colors';
  */
 export default function TabLayout() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  // Account for the Android system navigation bar / gesture area
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 8 : 0);
 
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textSecondary,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: {
+          ...styles.tabBar,
+          paddingBottom: bottomPadding,
+          height: 56 + bottomPadding,
+        },
         tabBarLabelStyle: styles.tabBarLabel,
         headerStyle: styles.header,
         headerTitleStyle: styles.headerTitle,
@@ -71,8 +80,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopColor: Colors.border,
     borderTopWidth: 1,
-    paddingBottom: 4,
-    height: 56,
   },
   tabBarLabel: {
     fontSize: 11,

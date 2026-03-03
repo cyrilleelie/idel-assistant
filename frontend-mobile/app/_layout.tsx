@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SecurityGate } from '@/security/securityGate';
+import { DatabaseProvider } from '@/contexts/DatabaseContext';
 import { useAuthStore } from '@/stores/authStore';
 import { useSecurityStore } from '@/stores/securityStore';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -95,6 +96,34 @@ function RootNavigator() {
             presentation: 'card',
           }}
         />
+        <Stack.Screen
+          name="appointment/[id]"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="patient/[id]"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="transmission/new"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="transmission/[id]"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
         <Stack.Screen name="+not-found" />
       </Stack>
     </>
@@ -108,8 +137,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <SecurityGate>
-        <StatusBar style="dark" />
-        <RootNavigator />
+        <DatabaseProvider>
+          <StatusBar style="dark" />
+          <RootNavigator />
+        </DatabaseProvider>
       </SecurityGate>
     </SafeAreaProvider>
   );

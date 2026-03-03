@@ -8,12 +8,15 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/authStore';
 import { useSecurityStore } from '@/stores/securityStore';
 import { useSyncStore } from '@/stores/syncStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+import type { GpsApp } from '@/stores/settingsStore';
 import {
   checkBiometricAvailability,
   setBiometricEnabled as persistBiometricEnabled,
@@ -38,6 +41,8 @@ export default function SettingsScreen() {
   const setLockTimeout = useSecurityStore((s) => s.setLockTimeout);
   const lastSyncAt = useSyncStore((s) => s.lastSyncAt);
   const pendingCount = useSyncStore((s) => s.pendingOperationsCount);
+  const gpsAppPreference = useSettingsStore((s) => s.gpsAppPreference);
+  const setGpsAppPreference = useSettingsStore((s) => s.setGpsAppPreference);
 
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -231,6 +236,46 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* NAVIGATION */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>NAVIGATION</Text>
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Application GPS</Text>
+            </View>
+            <View style={styles.gpsPickerContainer}>
+              {(
+                [
+                  { value: 'system' as GpsApp, label: 'Systeme' },
+                  { value: 'google_maps' as GpsApp, label: 'Google Maps' },
+                  { value: 'waze' as GpsApp, label: 'Waze' },
+                  ...(Platform.OS === 'ios'
+                    ? [{ value: 'apple_maps' as GpsApp, label: 'Apple Plans' }]
+                    : []),
+                ] satisfies Array<{ value: GpsApp; label: string }>
+              ).map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.pickerOption,
+                    gpsAppPreference === option.value && styles.pickerOptionActive,
+                  ]}
+                  onPress={() => setGpsAppPreference(option.value)}
+                >
+                  <Text
+                    style={[
+                      styles.pickerOptionText,
+                      gpsAppPreference === option.value && styles.pickerOptionTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
         {/* DONNEES */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>DONNÉES</Text>
@@ -367,6 +412,13 @@ const styles = StyleSheet.create({
   pickerRow: {
     flexDirection: 'row',
     gap: 8,
+  },
+  gpsPickerContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
   },
   pickerOption: {
     paddingVertical: 6,

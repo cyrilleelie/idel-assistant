@@ -7,8 +7,10 @@ from app.infrastructure.logging.log_handler import install_log_handler
 
 install_log_handler()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
@@ -129,6 +131,12 @@ app.include_router(rpps_doctor_routes.router, prefix="/api/v1")
 app.include_router(admin_routes.router, prefix="/api/v1")
 app.include_router(fse_routes.router, prefix="/api/v1")
 app.include_router(agent_routes.router, prefix="/api/v1")
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    print(f">>> VALIDATION ERROR on {request.method} {request.url.path}: {exc.errors()}", flush=True)
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
 @app.get("/health")

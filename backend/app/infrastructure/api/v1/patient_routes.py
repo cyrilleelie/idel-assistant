@@ -44,6 +44,13 @@ def _entity_to_response(patient: Patient) -> PatientResponse:
         doctor_name=patient.doctor_name,
         doctor_rpps=patient.doctor_rpps,
         doctor_contact=patient.doctor_contact,
+        amo_code=patient.amo_code,
+        amo_center=patient.amo_center,
+        amc_code=patient.amc_code,
+        amc_name=patient.amc_name,
+        amc_contract=patient.amc_contract,
+        exoneration_type=patient.exoneration_type,
+        birth_rank=patient.birth_rank,
         status=patient.status,
         created_at=patient.created_at,
         updated_at=patient.updated_at,
@@ -146,6 +153,8 @@ PATIENT_UPDATABLE_FIELDS = frozenset({
     "email", "pathologies", "preferred_time_slot", "care_duration_default", "notes",
     "ssn", "doctor_name", "doctor_rpps", "doctor_contact",
     "sector_id", "postal_code", "city", "status",
+    "amo_code", "amo_center", "amc_code", "amc_name", "amc_contract",
+    "exoneration_type", "birth_rank",
 })
 
 

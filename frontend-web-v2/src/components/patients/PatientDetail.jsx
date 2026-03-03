@@ -5,6 +5,7 @@ import {
 import PrescriptionsTab from './PrescriptionsTab';
 import PrescriptionList from '../prescriptions/PrescriptionList';
 import DoctorAutocomplete from '../common/DoctorAutocomplete';
+import AddressAutocomplete from '../common/AddressAutocomplete';
 
 export default function PatientDetail({
   selectedPatientId, patientForm, setPatientForm,
@@ -36,7 +37,7 @@ export default function PatientDetail({
               <h2 className="text-2xl font-bold text-slate-800 uppercase">
                 {patientForm.lastName || 'Nouveau'} <span className="capitalize font-medium">{patientForm.firstName || 'Patient'}</span>
               </h2>
-              {!isEditingPatient && <span className="text-sm text-slate-500">Dossier N° {selectedPatientId === 'new' ? '---' : selectedPatientId.replace('p_', '')}</span>}
+              {!isEditingPatient && selectedPatientId !== 'new' && <span className="text-sm text-slate-500">Dossier patient</span>}
             </div>
           </div>
         </div>
@@ -107,7 +108,7 @@ export default function PatientDetail({
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Adresse complète</label>
-                {isEditingPatient ? <input type="text" value={patientForm.address} onChange={e => setPatientForm({...patientForm, address: e.target.value})} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="12 rue de la Paix, 75000 Paris" /> : <div className="text-sm text-slate-700 flex items-start gap-2"><MapPin size={16} className="text-slate-400 shrink-0"/> {patientForm.address || '-'}</div>}
+                {isEditingPatient ? <AddressAutocomplete value={patientForm.address} onChange={address => setPatientForm({...patientForm, address})} placeholder="12 rue de la Paix, 75000 Paris" /> : <div className="text-sm text-slate-700 flex items-start gap-2"><MapPin size={16} className="text-slate-400 shrink-0"/> {patientForm.address || '-'}</div>}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

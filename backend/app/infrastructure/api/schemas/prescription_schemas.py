@@ -29,6 +29,7 @@ class PrescriptionCreate(BaseModel):
         pattern=r"^(morning|afternoon|evening|)?$",
     )
     recurrence_rule: str = Field(default="", max_length=500)
+    care_location: str = Field(default="domicile", pattern=r"^(domicile|cabinet)$")
 
     # Prescripteur (optionnel)
     prescriber_name: str | None = Field(default=None, min_length=2, max_length=255)
@@ -68,6 +69,7 @@ class PrescriptionUpdate(BaseModel):
     preferred_time: datetime.time | None = None
     preferred_slot: str | None = None
     recurrence_rule: str | None = None
+    care_location: str | None = Field(default=None, pattern=r"^(domicile|cabinet)?$")
     prescriber_name: str | None = Field(default=None, min_length=2, max_length=255)
     prescriber_rpps: str | None = Field(default=None, pattern=r"^\d{11}$")
     prescription_date: datetime.date | None = None
@@ -113,6 +115,7 @@ class PrescriptionResponse(BaseModel):
     preferred_time: str | None = None  # "HH:MM" string pour JSON
     preferred_slot: str = ""
     recurrence_rule: str = ""
+    care_location: str = "domicile"
 
     prescriber_name: str | None = None
     prescriber_rpps: str | None = None

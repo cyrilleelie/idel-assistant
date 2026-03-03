@@ -36,7 +36,7 @@ def compute_prescription_status(
     """
     today = reference_date or datetime.date.today()
 
-    if prescription.status in ("canceled", "completed"):
+    if prescription.status in ("canceled", "completed", "expired"):
         return prescription.status
 
     if prescription.end_date is None:

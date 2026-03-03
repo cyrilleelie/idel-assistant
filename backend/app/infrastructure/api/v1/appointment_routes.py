@@ -10,15 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.use_cases.billing.create_invoice_from_appointment import (
     CreateInvoiceFromAppointmentUseCase,
 )
+from app.application.use_cases.care_protocol.complete_care_protocol import (
+    CompleteCareProtocolUseCase,
+)
 from app.domain.entities.appointment import Appointment
 from app.infrastructure.api.dependencies import (
     AuthContext,
     get_appointment_repository,
     get_care_catalog_repository,
+    get_care_protocol_repository,
     get_current_user,
     get_invoice_line_repository,
     get_invoice_repository,
     get_patient_repository,
+    get_prescription_repository,
 )
 from app.infrastructure.api.schemas.appointment_schemas import (
     AppointmentCreate,
@@ -33,9 +38,11 @@ from app.infrastructure.persistence.database import get_db
 from app.infrastructure.persistence.repositories import (
     SQLAlchemyAppointmentRepo,
     SQLAlchemyCareCatalogRepo,
+    SQLAlchemyCareProtocolRepo,
     SQLAlchemyInvoiceLineRepo,
     SQLAlchemyInvoiceRepo,
     SQLAlchemyPatientRepo,
+    SQLAlchemyPrescriptionRepo,
 )
 
 logger = logging.getLogger(__name__)
@@ -200,6 +207,8 @@ async def update_appointment(
     request: Request,
     auth: AuthContext = Depends(get_current_user),
     repo: SQLAlchemyAppointmentRepo = Depends(get_appointment_repository),
+    protocol_repo: SQLAlchemyCareProtocolRepo = Depends(get_care_protocol_repository),
+    prescription_repo: SQLAlchemyPrescriptionRepo = Depends(get_prescription_repository),
 ):
     """Met à jour un rendez-vous."""
     request.state.user_id = auth.user_id
@@ -218,6 +227,7 @@ async def update_appointment(
             detail="Seuls les rendez-vous planifiés ou réalisés peuvent être modifiés",
         )
 
+    old_status = appt.status
     update_data = body.model_dump(exclude_unset=True)
 
     # Si l'horaire ou la durée change, vérifie les conflits
@@ -241,6 +251,29 @@ async def update_appointment(
             setattr(appt, field_name, value)
 
     appt = await repo.update(appt)
+
+    # Si le statut passe à "completed", vérifier la complétion du plan de soins
+    if (
+        old_status == "scheduled"
+        and appt.status == "completed"
+        and appt.care_protocol_id
+    ):
+        try:
+            complete_protocol_uc = CompleteCareProtocolUseCase(
+                appointment_repo=repo,
+                care_protocol_repo=protocol_repo,
+                prescription_repo=prescription_repo,
+            )
+            await complete_protocol_uc.execute(
+                care_protocol_id=appt.care_protocol_id,
+                cabinet_id=auth.cabinet_id,
+            )
+        except Exception as exc:
+            logger.error(
+                "Erreur complétion plan de soins %s : %s",
+                appt.care_protocol_id, exc, exc_info=True,
+            )
+
     return _entity_to_response(appt)
 
 
@@ -286,6 +319,8 @@ async def complete_appointment(
     line_repo: SQLAlchemyInvoiceLineRepo = Depends(get_invoice_line_repository),
     patient_repo: SQLAlchemyPatientRepo = Depends(get_patient_repository),
     catalog_repo: SQLAlchemyCareCatalogRepo = Depends(get_care_catalog_repository),
+    protocol_repo: SQLAlchemyCareProtocolRepo = Depends(get_care_protocol_repository),
+    prescription_repo: SQLAlchemyPrescriptionRepo = Depends(get_prescription_repository),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -348,5 +383,23 @@ async def complete_appointment(
         # Erreur inattendue : ne pas bloquer la complétion du RDV
         auto_billing = AutoBillingInfo(status="error", skip_reason=str(exc))
         logger.error("Erreur facturation auto pour RDV %s : %s", appointment_id, exc, exc_info=True)
+
+    # 3. Vérifier si le plan de soins est terminé (non-bloquant)
+    if appt.care_protocol_id:
+        try:
+            complete_protocol_uc = CompleteCareProtocolUseCase(
+                appointment_repo=repo,
+                care_protocol_repo=protocol_repo,
+                prescription_repo=prescription_repo,
+            )
+            await complete_protocol_uc.execute(
+                care_protocol_id=appt.care_protocol_id,
+                cabinet_id=auth.cabinet_id,
+            )
+        except Exception as exc:
+            logger.error(
+                "Erreur complétion plan de soins %s : %s",
+                appt.care_protocol_id, exc, exc_info=True,
+            )
 
     return AppointmentCompleteResponse(**_appt_base_fields(appt), auto_billing=auto_billing)

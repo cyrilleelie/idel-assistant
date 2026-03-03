@@ -56,6 +56,7 @@ export default function PrescriptionForm({
     care_description: prescription?.care_description ?? '',
     notes: prescription?.notes ?? '',
     max_renewals: prescription?.max_renewals ?? 0,
+    care_location: prescription?.care_location ?? 'domicile',
     document_filename: prescription?.document_filename ?? null,
     document_url: prescription?.document_url ?? null,
     document_type: prescription?.document_type ?? null,
@@ -154,6 +155,7 @@ export default function PrescriptionForm({
         care_description: form.care_description || null,
         notes: form.notes || null,
         max_renewals: Number(form.max_renewals) || 0,
+        care_location: form.care_location || 'domicile',
       };
 
       let result;
@@ -275,8 +277,8 @@ export default function PrescriptionForm({
           </div>
         </div>
 
-        {/* Durée + Fréquence */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Durée + Fréquence + Lieu du soin */}
+        <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Durée du soin (minutes)</label>
             <input
@@ -299,6 +301,17 @@ export default function PrescriptionForm({
               {FREQUENCY_OPTIONS.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Lieu du soin</label>
+            <select
+              value={form.care_location || 'domicile'}
+              onChange={e => update('care_location', e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+            >
+              <option value="domicile">Domicile</option>
+              <option value="cabinet">Cabinet</option>
             </select>
           </div>
         </div>

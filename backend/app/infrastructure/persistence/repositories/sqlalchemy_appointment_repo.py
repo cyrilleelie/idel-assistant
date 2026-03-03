@@ -93,6 +93,19 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
         result = await self._session.execute(query)
         return [self._model_to_entity(m) for m in result.scalars().all()], total
 
+    async def list_by_care_protocol(
+        self, care_protocol_id: UUID, cabinet_id: UUID
+    ) -> list[Appointment]:
+        result = await self._session.execute(
+            select(AppointmentModel)
+            .where(
+                AppointmentModel.care_protocol_id == care_protocol_id,
+                AppointmentModel.cabinet_id == cabinet_id,
+            )
+            .order_by(AppointmentModel.scheduled_at)
+        )
+        return [self._model_to_entity(m) for m in result.scalars().all()]
+
     async def check_time_conflict(
         self,
         idel_id: UUID,

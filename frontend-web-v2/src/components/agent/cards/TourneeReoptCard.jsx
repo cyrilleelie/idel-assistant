@@ -47,13 +47,16 @@ export default function TourneeReoptCard({ data, pending, onConfirm, onCancel })
       {nouveau_ordre.length > 0 && (
         <div className="mb-3 space-y-0.5">
           <div className="text-xs text-gray-400 mb-1">Nouvel ordre de passages</div>
-          {nouveau_ordre.map((s, i) => (
-            <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${s.changed ? 'text-amber-700' : 'text-gray-600'}`}>
-              <span className="w-5 text-right font-mono text-gray-400">{s.order}.</span>
-              {s.changed && <span className="text-amber-400">✦</span>}
-              <span className="font-mono text-gray-400 text-xs">{s.appointment_id.slice(0, 8)}…</span>
-            </div>
-          ))}
+          {nouveau_ordre.map((s, i) => {
+            const arrival = s.estimated_arrival ? new Date(s.estimated_arrival).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : null;
+            return (
+              <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${s.changed ? 'text-amber-700' : 'text-gray-600'}`}>
+                <span className="w-5 text-right font-mono text-gray-400">{s.order}.</span>
+                {s.changed && <span className="text-amber-400">✦</span>}
+                {arrival && <span className="text-gray-500">{arrival}</span>}
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -21,6 +21,7 @@ import { listCareLabels } from './api/care-labels';
 import { listCareActCodes } from './api/cotation';
 import ChatPanel from './components/agent/ChatPanel';
 import AgentMonitorWidget from './components/agent/AgentMonitorWidget';
+import { useNavigationHistory } from './hooks/useNavigationHistory';
 import Header from './components/Header';
 import InfoBanner from './components/InfoBanner';
 import LoginPage from './components/LoginPage';
@@ -270,6 +271,77 @@ export default function App() {
       setPrescriptionsLoading(false);
     }
   }, []);
+
+  // --- NAVIGATION HISTORY (back/forward du navigateur) ---
+
+  // Refs pour savoir quel écran / patient sont actifs (pour restoreNavigation)
+  const activeScreenRef = useRef(activeScreen);
+  activeScreenRef.current = activeScreen;
+  const selectedPatientIdRef = useRef(selectedPatientId);
+  selectedPatientIdRef.current = selectedPatientId;
+
+  const restoreNavigation = useCallback((state) => {
+    const { activeScreen: screen, activeTab: tab, selectedPatientId: patId, patientSubTab: subTab } = state;
+    const screenChanges = activeScreenRef.current !== screen;
+
+    if (screen === 'patients' && patId) {
+      pendingPatientNavRef.current = {
+        patientId: patId,
+        subTab: subTab || 'info',
+        protocolId: null,
+      };
+    }
+
+    if (screenChanges) {
+      // Changement d'écran → le useEffect([activeScreen]) gère la restauration patient
+      setActiveScreen(screen);
+      setActiveTab(tab || defaultTabForScreen[screen]);
+      if (screen === 'facturation') {
+        setPendingFacturationCount(0);
+      }
+      if (screen !== 'patients') {
+        setSelectedPatientId(null);
+        setPatientSubTab('info');
+      }
+    } else {
+      // Même écran → gérer manuellement
+      setActiveTab(tab || defaultTabForScreen[screen]);
+
+      if (screen === 'patients') {
+        const pending = pendingPatientNavRef.current;
+        pendingPatientNavRef.current = null;
+
+        if (pending) {
+          const samePatient = selectedPatientIdRef.current === pending.patientId;
+          setSelectedPatientId(pending.patientId);
+          setPatientSubTab(pending.subTab || 'info');
+          setInitialEditProtocolId(pending.protocolId || null);
+          // Ne recharger les données que si le patient change
+          if (!samePatient) {
+            const patient = patientsRef.current.find(p => p.id === pending.patientId);
+            if (patient) {
+              setPatientForm({ ...patient });
+              loadPrescriptionsForPatient(pending.patientId);
+            }
+          }
+        } else {
+          // Retour à la liste patients
+          setSelectedPatientId(null);
+          setPatientSubTab('info');
+          setInitialEditProtocolId(null);
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useNavigationHistory({
+    activeScreen,
+    activeTab,
+    selectedPatientId,
+    patientSubTab,
+    restoreNavigation,
+  });
 
   // --- SORT NURSES BY ROLE: Titulaire → Collaborateur → Remplaçant(e) ---
   const roleOrder = { 'Titulaire': 0, 'Collaborateur': 1, 'Remplaçant(e)': 2 };
@@ -908,6 +980,13 @@ export default function App() {
       const mappedAppt = apptApiToFrontend(updated, pMap);
       assignSlotIds([mappedAppt], getActiveConfigForDate);
       setAppointments(prev => prev.map(a => a.id === editAppt.id ? mappedAppt : a));
+
+      // Si le statut passe à "completed" via le modal, recharger les prescriptions
+      // (le backend a pu compléter le plan de soins et expirer des ordonnances)
+      if (rdvForm.status === 'completed' && editAppt.status !== 'completed' && updated.care_protocol_id && updated.patient_id) {
+        loadPrescriptionsForPatient(updated.patient_id).catch(() => {});
+      }
+
       setRdvModalParams(null);
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -1000,8 +1079,8 @@ export default function App() {
   };
 
   // Generic appointment creation callable from PrescriptionsTab
-  const createAppointmentForPrescription = useCallback(async ({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId, actCodes, careLabels }) => {
-    const apptPayload = apptFrontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId, actCodes, careLabels });
+  const createAppointmentForPrescription = useCallback(async ({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId, actCodes, careLabels, locationType }) => {
+    const apptPayload = apptFrontendToApiCreate({ dateStr, startTime, endTime, nurseId, patientId, careProtocolId, actCodes, careLabels, locationType });
     const createdAppt = await apiCreateAppointment(apptPayload);
     const pMap = new Map(patientsRef.current.map(p => [p.id, p]));
     const mappedAppt = apptApiToFrontend(createdAppt, pMap);
@@ -1045,6 +1124,12 @@ export default function App() {
       }
       setCompletionToast(toastMsg);
       setTimeout(() => setCompletionToast(null), 4500);
+
+      // Si le RDV est lié à un plan de soins, recharger les prescriptions
+      // (le backend peut avoir complété le plan et expiré des ordonnances)
+      if (updated.care_protocol_id && updated.patient_id) {
+        loadPrescriptionsForPatient(updated.patient_id).catch(() => {});
+      }
     } catch (err) {
       alert(err.response?.data?.detail || 'Erreur lors de la complétion du RDV.');
     }

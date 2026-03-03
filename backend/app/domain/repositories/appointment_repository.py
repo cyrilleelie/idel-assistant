@@ -41,4 +41,9 @@ class AppointmentRepository(ABC):
     async def create_many(self, appointments: list[Appointment]) -> list[Appointment]: ...
 
     @abstractmethod
+    async def list_by_care_protocol(
+        self, care_protocol_id: UUID, cabinet_id: UUID
+    ) -> list[Appointment]: ...
+
+    @abstractmethod
     async def update(self, appointment: Appointment) -> Appointment: ...

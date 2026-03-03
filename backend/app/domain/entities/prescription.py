@@ -22,6 +22,7 @@ class Prescription:
     preferred_time: datetime.time | None = None
     preferred_slot: str = ""          # morning | afternoon | evening
     recurrence_rule: str = ""         # RRULE format RFC 5545
+    care_location: str = "domicile"   # domicile | cabinet
 
     # Prescripteur (optionnel — une ordonnance issue d'un plan de soins peut ne pas avoir de prescripteur)
     prescriber_name: str | None = None

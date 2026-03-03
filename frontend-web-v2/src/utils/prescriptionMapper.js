@@ -98,6 +98,12 @@ export function prescriptionApiToSoin(p) {
     document_filename: p.document_filename || null,
     document_url: p.document_url || null,
     document_type: p.document_type || null,
+    care_location: p.care_location || 'domicile',
+    max_renewals: p.max_renewals ?? 0,
+    current_renewal: p.current_renewal ?? 0,
+    status: p.status || null,
+    days_remaining: p.days_remaining ?? null,
+    invoices_count: p.invoices_count ?? 0,
     _pendingFile: null,
   };
 }
@@ -124,6 +130,8 @@ export function soinToApiCreate(soin, careProtocolId, patientId) {
     end_date: soin.endDate || null,
     care_description: soin.care_description || null,
     act_codes: soin.actCodes || [],
+    care_location: soin.care_location || 'domicile',
+    max_renewals: Number(soin.max_renewals) || 0,
     notes: soin.notes || null,
   };
 }
@@ -145,6 +153,8 @@ export function soinToApiUpdate(soin) {
     end_date: soin.endDate || null,
     care_description: soin.care_description || null,
     act_codes: soin.actCodes || [],
+    care_location: soin.care_location || 'domicile',
+    max_renewals: Number(soin.max_renewals) || 0,
     notes: soin.notes || null,
   };
 }

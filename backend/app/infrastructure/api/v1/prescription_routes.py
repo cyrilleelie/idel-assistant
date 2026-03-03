@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import Response
 
 from app.application.dtos.prescription_dto import (
     CreatePrescriptionDTO,
@@ -83,6 +84,7 @@ def _dto_to_response(dto: PrescriptionDTO) -> PrescriptionResponse:
         preferred_time=preferred_time_str,
         preferred_slot=dto.preferred_slot or "",
         recurrence_rule=dto.recurrence_rule or "",
+        care_location=dto.care_location or "domicile",
         prescriber_name=dto.prescriber_name,
         prescriber_rpps=dto.prescriber_rpps,
         prescription_date=dto.prescription_date,
@@ -133,6 +135,7 @@ async def create_prescription(
         preferred_time=body.preferred_time,
         preferred_slot=body.preferred_slot,
         recurrence_rule=body.recurrence_rule,
+        care_location=body.care_location,
         prescriber_name=body.prescriber_name,
         prescriber_rpps=body.prescriber_rpps,
         prescription_date=body.prescription_date,
@@ -334,12 +337,52 @@ async def upload_prescription_document(
     with open(dest, "wb") as f:
         f.write(content)
 
-    prescription.document_filename = filename
+    prescription.document_filename = file.filename or f"document{ext}"
+    prescription.document_url = f"/api/v1/prescriptions/{prescription_id}/document"
     prescription.document_type = doc_type
 
     updated = await repo.update(prescription)
     dto = _entity_to_dto(updated)
     return _dto_to_response(dto)
+
+
+@router.get("/{prescription_id}/document")
+async def download_prescription_document(
+    prescription_id: UUID,
+    request: Request,
+    auth: AuthContext = Depends(get_current_user),
+    repo: SQLAlchemyPrescriptionRepo = Depends(get_prescription_repository),
+):
+    """Télécharge le document (scan/photo) d'une ordonnance."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    prescription = await repo.get_by_id(prescription_id, auth.cabinet_id)
+    if prescription is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ordonnance introuvable")
+
+    if not prescription.document_url:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucun document associé")
+
+    # Le fichier est stocké sous uploads/prescriptions/{cabinet_id}/{prescription_id}_{hash}.{ext}
+    # On cherche le fichier correspondant à cette prescription
+    cabinet_dir = UPLOAD_DIR / str(auth.cabinet_id)
+    matching = list(cabinet_dir.glob(f"{prescription_id}_*")) if cabinet_dir.exists() else []
+    if not matching:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fichier introuvable sur le stockage")
+
+    file_path = matching[0]
+    content = file_path.read_bytes()
+
+    # Détermine le content-type à partir de l'extension
+    ext_to_mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".pdf": "application/pdf"}
+    mime = ext_to_mime.get(file_path.suffix.lower(), "application/octet-stream")
+
+    return Response(
+        content=content,
+        media_type=mime,
+        headers={"Content-Disposition": f'inline; filename="{prescription.document_filename}"'},
+    )
 
 
 @router.get("/{prescription_id}/invoices", response_model=list[PrescriptionInvoiceItem])

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { FileText, RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle, Pencil } from 'lucide-react';
-import { listPrescriptions, renewPrescription } from '../../api/prescriptions';
-import PrescriptionDetail from './PrescriptionDetail';
+import { FileText, RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle, Pencil, ExternalLink, FileWarning } from 'lucide-react';
+import { listPrescriptions, createPrescription } from '../../api/prescriptions';
+import client from '../../api/client';
 import PrescriptionForm from './PrescriptionForm';
 
 function formatDateFr(dateStr) {
@@ -62,7 +62,6 @@ export default function PrescriptionList({ patientId, patientDoctor = null }) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
   const [editingPrescription, setEditingPrescription] = useState(null);
   const [renewingId, setRenewingId] = useState(null);
 
@@ -83,16 +82,50 @@ export default function PrescriptionList({ patientId, patientDoctor = null }) {
 
   useEffect(() => { load(); }, [patientId]);
 
+  const handleOpenDocument = async (prescription) => {
+    try {
+      const response = await client.get(`/prescriptions/${prescription.id}/document`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch {
+      alert('Impossible d\'ouvrir le document.');
+    }
+  };
+
   const handleRenew = async (prescription) => {
     if (renewingId) return;
     const ok = window.confirm(
-      `Renouveler l'ordonnance "${prescription.care_description}" ?\n\n` +
-      `La nouvelle ordonnance commencera le lendemain de la fin de l'actuelle.`
+      `Renouveler l'ordonnance "${prescription.label || prescription.care_description || 'Ordonnance'}" ?\n\n` +
+      `Une nouvelle ordonnance sera créée avec les mêmes paramètres (sans les dates ni le document).`
     );
     if (!ok) return;
     setRenewingId(prescription.id);
     try {
-      await renewPrescription(prescription.id, {});
+      const today = new Date().toISOString().split('T')[0];
+      await createPrescription({
+        patient_id: prescription.patient_id,
+        label: prescription.label || '',
+        care_label_code: prescription.care_label_code || null,
+        duration_minutes: prescription.duration_minutes || 30,
+        frequency_display: prescription.frequency_display || 'daily',
+        custom_frequency: prescription.custom_frequency || '',
+        preferred_slot: prescription.preferred_slot || '',
+        recurrence_rule: prescription.recurrence_rule || '',
+        care_location: prescription.care_location || 'domicile',
+        prescriber_name: prescription.prescriber_name || null,
+        prescriber_rpps: prescription.prescriber_rpps || null,
+        prescription_date: today,
+        start_date: today,
+        duration_days: prescription.duration_days || null,
+        care_description: prescription.care_description || null,
+        act_codes: prescription.act_codes || [],
+        frequency: prescription.frequency || null,
+        max_renewals: prescription.max_renewals || 0,
+        notes: prescription.notes || null,
+      });
       load();
     } catch (err) {
       alert(err.response?.data?.detail || 'Erreur lors du renouvellement');
@@ -108,15 +141,6 @@ export default function PrescriptionList({ patientId, patientDoctor = null }) {
         prescription={editingPrescription}
         onSave={() => { setEditingPrescription(null); load(); }}
         onCancel={() => setEditingPrescription(null)}
-      />
-    );
-  }
-
-  if (selectedId) {
-    return (
-      <PrescriptionDetail
-        prescriptionId={selectedId}
-        onBack={() => { setSelectedId(null); load(); }}
       />
     );
   }
@@ -181,12 +205,17 @@ export default function PrescriptionList({ patientId, patientDoctor = null }) {
                     )}
                   </div>
                   <p className="text-sm font-medium text-slate-800 mt-1.5 leading-snug">
-                    {p.care_description}
+                    {p.label || 'Ordonnance'}
                   </p>
+                  {(p.care_description || p.notes) && (
+                    <p className="text-xs text-slate-600 mt-0.5 leading-snug">
+                      {p.care_description || p.notes}
+                    </p>
+                  )}
                   <p className="text-xs text-slate-500 mt-1">
                     Dr. {p.prescriber_name}
                     {p.prescriber_rpps && ` · RPPS ${p.prescriber_rpps}`}
-                    {' · '}{formatDateFr(p.prescription_date)}
+                    {' · Prescrit le '}{formatDateFr(p.prescription_date)}
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
                     Du {formatDateFr(p.start_date)}
@@ -194,14 +223,20 @@ export default function PrescriptionList({ patientId, patientDoctor = null }) {
                     {p.duration_days ? ` · ${p.duration_days} jours` : ''}
                     {p.frequency ? ` · ${p.frequency}` : ''}
                   </p>
-                  {p.act_codes?.length > 0 && (
-                    <div className="flex gap-1 flex-wrap mt-1.5">
-                      {p.act_codes.map(c => (
-                        <span key={c} className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                          {c}
-                        </span>
-                      ))}
-                    </div>
+                  {p.document_url ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDocument(p)}
+                      className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 mt-1.5 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      {p.document_filename || 'Voir le document'}
+                    </button>
+                  ) : (
+                    <p className="inline-flex items-center gap-1 text-xs text-amber-600 mt-1.5">
+                      <FileWarning className="w-3 h-3" />
+                      Document manquant
+                    </p>
                   )}
                   {p.invoices_count > 0 && (
                     <p className="text-xs text-slate-400 mt-1">
@@ -210,13 +245,7 @@ export default function PrescriptionList({ patientId, patientDoctor = null }) {
                   )}
                 </div>
                 <div className="flex flex-col gap-2 shrink-0 items-end">
-                  <button
-                    onClick={() => setSelectedId(p.id)}
-                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                  >
-                    Voir
-                  </button>
-                  {p.status !== 'canceled' && (
+                  {p.status !== 'canceled' && p.status !== 'expired' && (
                     <button
                       onClick={() => setEditingPrescription(p)}
                       className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 font-medium"
@@ -224,12 +253,13 @@ export default function PrescriptionList({ patientId, patientDoctor = null }) {
                       <Pencil className="w-3 h-3" /> Modifier
                     </button>
                   )}
-                  {(p.status === 'expiring' || p.status === 'expired') && p.max_renewals > 0 && (
+                  {p.status === 'expired' && (
                     <button
                       onClick={() => handleRenew(p)}
                       disabled={renewingId === p.id}
-                      className="text-xs text-amber-600 hover:text-amber-800 font-medium disabled:opacity-50"
+                      className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
                     >
+                      <RefreshCw className="w-3 h-3" />
                       {renewingId === p.id ? '...' : 'Renouveler'}
                     </button>
                   )}

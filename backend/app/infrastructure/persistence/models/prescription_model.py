@@ -43,6 +43,7 @@ class PrescriptionModel(Base):
     preferred_time = mapped_column(Time, nullable=True)
     preferred_slot: Mapped[str | None] = mapped_column(String(20), nullable=True)
     recurrence_rule: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    care_location: Mapped[str | None] = mapped_column(String(20), nullable=True, server_default="domicile")
 
     # Prescripteur (optionnel)
     prescriber_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

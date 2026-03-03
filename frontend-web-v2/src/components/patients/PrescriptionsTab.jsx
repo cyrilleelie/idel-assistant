@@ -2,10 +2,12 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Trash2, ChevronDown, ChevronUp, FileUp, X, File,
   Calendar, Clock, RefreshCw, MessageSquare, Pencil,
-  ClipboardList, CalendarDays, Check, CheckCheck, Loader2, Lightbulb, MapPin
+  ClipboardList, CalendarDays, Check, CheckCheck, Loader2, Lightbulb, MapPin, Home, Building2,
+  AlertTriangle, CheckCircle, XCircle, ExternalLink, FileWarning
 } from 'lucide-react';
 import { getDistanceMatrix } from '../../utils/geocode';
 import { listCareActCodes } from '../../api/cotation';
+import client from '../../api/client';
 import DoctorAutocomplete from '../common/DoctorAutocomplete';
 
 const isActiveAppt = (a) => a.status === 'scheduled' || a.status === 'completed';
@@ -59,6 +61,7 @@ function emptySoin() {
     document_type: null,
     _pendingFile: null,        // File JS en attente d'upload
     max_renewals: 0,           // renouvellements autorisés
+    care_location: 'domicile', // domicile | cabinet
   };
 }
 
@@ -203,14 +206,18 @@ function totalDocuments(soins) {
 
 // --- PlanningSection component ---
 
-function PlanningSection({ plan, patientId, nurses, appointments, schedule, configs, getActiveConfigForDate, onCreateAppointment, onEnsureSaved }) {
+function PlanningSection({ plan, patientId, nurses, appointments, schedule, configs, getActiveConfigForDate, onCreateAppointment, onEnsureSaved, careLocation: defaultCareLocation }) {
   const { soins, careSchedule } = plan;
   const { startTime, endTime } = careSchedule;
 
   const [selectedNurseByDate, setSelectedNurseByDate] = useState({});
+  const [locationByDate, setLocationByDate] = useState({}); // override par date
   const [bookingInProgress, setBookingInProgress] = useState(null); // dateStr | 'bulk'
   const [bookingError, setBookingError] = useState(null);
   const [bulkProgress, setBulkProgress] = useState(null); // { done, total, errors } | null
+
+  const getLocationForDate = (dateStr) => locationByDate[dateStr] || defaultCareLocation || 'domicile';
+  const careLocationToLocationType = (cl) => cl === 'cabinet' ? 'office' : 'home';
 
   const selectNurse = (dateStr, userId) => {
     setSelectedNurseByDate(prev => ({
@@ -333,6 +340,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
 
     const dateEnd = endTimeByDate[dateStr] || endTime;
     const { labels: careLabels, codes: actCodes } = getActiveSoinsForDate(soins, dateStr);
+    const locationType = careLocationToLocationType(getLocationForDate(dateStr));
     setBookingInProgress(dateStr);
     setBookingError(null);
     try {
@@ -340,7 +348,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
       if (!protocolId && onEnsureSaved) {
         protocolId = await onEnsureSaved();
       }
-      await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId, actCodes, careLabels });
+      await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId, actCodes, careLabels, locationType });
       setSelectedNurseByDate(prev => { const next = { ...prev }; delete next[dateStr]; return next; });
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -381,8 +389,9 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
     for (const { dateStr, dateEnd } of bookable) {
       const nurseId = selectedNurseByDate[dateStr];
       const { labels: careLabels, codes: actCodes } = getActiveSoinsForDate(soins, dateStr);
+      const locationType = careLocationToLocationType(getLocationForDate(dateStr));
       try {
-        await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId, actCodes, careLabels });
+        await onCreateAppointment({ dateStr, startTime, endTime: dateEnd, nurseId, patientId, careProtocolId: protocolId, actCodes, careLabels, locationType });
         setSelectedNurseByDate(prev => { const next = { ...prev }; delete next[dateStr]; return next; });
       } catch (err) {
         const detail = err.response?.data?.detail;
@@ -502,6 +511,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
               const isBooking = bookingInProgress === dateStr || isBulkBooking;
               const error = bookingError?.dateStr === dateStr ? bookingError.message : null;
               const selectedNurse = selectedNurseByDate[dateStr] || '';
+              const dateCareLocation = getLocationForDate(dateStr);
 
               return (
                 <div key={dateStr} className="bg-white rounded-lg px-3 py-2 border border-slate-200 text-sm space-y-1">
@@ -516,6 +526,17 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
                     ) : (
                       <span className="text-xs text-slate-400 italic">Horaire à définir</span>
                     )}
+
+                    {/* Lieu du soin */}
+                    <select
+                      value={dateCareLocation}
+                      onChange={e => setLocationByDate(prev => ({ ...prev, [dateStr]: e.target.value }))}
+                      disabled={isBooking}
+                      className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white text-slate-600 shrink-0"
+                    >
+                      <option value="domicile">Domicile</option>
+                      <option value="cabinet">Cabinet</option>
+                    </select>
 
                     {availableNurses.length > 0 ? (
                       <>
@@ -738,8 +759,8 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
         </div>
       </div>
 
-      {/* Durée + Fréquence */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Durée + Fréquence + Lieu du soin */}
+      <div className="grid grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Durée du soin (minutes)</label>
           <input
@@ -762,6 +783,17 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
             {FREQUENCY_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Lieu du soin</label>
+          <select
+            value={soin.care_location || 'domicile'}
+            onChange={e => update('care_location', e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+          >
+            <option value="domicile">Domicile</option>
+            <option value="cabinet">Cabinet</option>
           </select>
         </div>
       </div>
@@ -879,7 +911,7 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
 
 // --- SlotSuggestions component ---
 
-function SlotSuggestions({ patient, plan, cabinetData, patients, appointments, nurses, schedule, configs, getActiveConfigForDate, onSelect, refreshKey }) {
+function SlotSuggestions({ patient, plan, cabinetData, patients, appointments, nurses, schedule, configs, getActiveConfigForDate, onSelect, refreshKey, careLocation }) {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -1231,6 +1263,12 @@ function SlotSuggestions({ patient, plan, cabinetData, patients, appointments, n
                 {s.startTime}–{s.endTime}
               </div>
               <div className="text-xs text-slate-500 mt-0.5">{s.slotName}</div>
+              {careLocation && (
+                <div className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
+                  {careLocation === 'cabinet' ? <Building2 size={10} /> : <Home size={10} />}
+                  {careLocation === 'cabinet' ? 'Cabinet' : 'Domicile'}
+                </div>
+              )}
               {s.nurse && (
                 <div className="text-xs text-slate-500 mt-0.5">
                   {s.nurse.firstName} {s.nurse.lastName?.charAt(0)}.
@@ -1345,11 +1383,16 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
   }, [hasValidSoin, patientId, plan.soins, plan._apiId, plan.careSchedule.startTime, appointments]);
 
   // Show slot suggestions when at least one soin has dates + duration + frequency filled
+  // and not all occurrences are already booked
   const showSuggestions = plan.soins.some(s =>
     s.startDate && s.endDate && s.durationMinutes && s.frequency && s.frequency !== 'custom'
   )
     && !plan.careSchedule.startTime
-    && !plan.careSchedule.endTime;
+    && !plan.careSchedule.endTime
+    && !allBooked;
+
+  // Lieu du soin par défaut = celui de la première ordonnance
+  const careLocation = plan.soins[0]?.care_location || 'domicile';
 
   const handleSuggestionSelect = useCallback((startTime, endTime) => {
     onChange({
@@ -1414,6 +1457,7 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
             getActiveConfigForDate={getActiveConfigForDate}
             onSelect={handleSuggestionSelect}
             refreshKey={suggestionsRefreshKey}
+            careLocation={careLocation}
           />
         )}
 
@@ -1461,6 +1505,7 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
             getActiveConfigForDate={getActiveConfigForDate}
             onCreateAppointment={onCreateAppointment}
             onEnsureSaved={onEnsureSaved}
+            careLocation={careLocation}
           />
         ) : (
           <p className="text-xs text-slate-400 italic">
@@ -1492,9 +1537,65 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
   );
 }
 
+// --- Soin status badge (same as PrescriptionList) ---
+
+function SoinStatusBadge({ status, daysRemaining }) {
+  if (status === 'active') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+        <CheckCircle className="w-3 h-3" /> Active
+      </span>
+    );
+  }
+  if (status === 'expiring') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+        <Clock className="w-3 h-3" />
+        Expire dans {daysRemaining ?? '?'} jour{daysRemaining > 1 ? 's' : ''}
+      </span>
+    );
+  }
+  if (status === 'expired') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+        <AlertTriangle className="w-3 h-3" /> Expirée
+      </span>
+    );
+  }
+  if (status === 'completed') {
+    return (
+      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
+        Terminée
+      </span>
+    );
+  }
+  if (status === 'canceled') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
+        <XCircle className="w-3 h-3" /> Annulée
+      </span>
+    );
+  }
+  return null;
+}
+
+async function openSoinDocument(soin) {
+  try {
+    const response = await client.get(`/prescriptions/${soin._prescriptionId}/document`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response.data], { type: response.headers['content-type'] });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  } catch {
+    alert("Impossible d'ouvrir le document.");
+  }
+}
+
 // --- CarePlanCard component ---
 
 function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, appointments, nurses, patientId }) {
+  const [rdvExpanded, setRdvExpanded] = useState(false);
   const { soins, careSchedule } = plan;
   const { startTime, endTime } = careSchedule;
   const { startDate, endDate } = getPlanDates(soins);
@@ -1504,24 +1605,29 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
 
   // Compute associated appointments and remaining count
   const { matchingAppts, totalOccurrences, plannedCount, completedCount, remainingCount } = useMemo(() => {
-    if (!patientId || !startDate || !endDate || !startTime || !endTime) {
-      return { matchingAppts: [], totalOccurrences: 0, plannedCount: 0, completedCount: 0, remainingCount: 0 };
-    }
+    const empty = { matchingAppts: [], totalOccurrences: 0, plannedCount: 0, completedCount: 0, remainingCount: 0 };
+    if (!patientId) return empty;
 
     const patientAppts = (appointments || []).filter(a => a.patientId === patientId && isActiveAppt(a));
-    const matching = patientAppts.filter(a => {
-      if (a.careProtocolId && plan._apiId) {
-        return a.careProtocolId === plan._apiId;
-      }
-      return a.startTime === startTime && a.endTime === endTime
-        && a.dateStr >= startDate && a.dateStr <= endDate;
-    });
+
+    // Match by careProtocolId first, fallback to time-based matching
+    let matching;
+    if (plan._apiId) {
+      matching = patientAppts.filter(a => a.careProtocolId === plan._apiId);
+    } else if (startDate && endDate && startTime && endTime) {
+      matching = patientAppts.filter(a =>
+        a.startTime === startTime && a.endTime === endTime
+        && a.dateStr >= startDate && a.dateStr <= endDate
+      );
+    } else {
+      return empty;
+    }
 
     const completed = matching.filter(a => a.status === 'completed').length;
 
     // Check if all soins are custom
     const allCustom = soins.every(s => s.frequency === 'custom' || !s.frequency || !s.startDate || !s.endDate);
-    if (allCustom) {
+    if (allCustom || !startDate || !endDate) {
       return { matchingAppts: [...matching].sort((a, b) => a.dateStr.localeCompare(b.dateStr)), totalOccurrences: 0, plannedCount: matching.length, completedCount: completed, remainingCount: 0 };
     }
 
@@ -1543,7 +1649,7 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
   const allCompleted = totalOccurrences > 0
     && matchingAppts.length >= totalOccurrences
     && matchingAppts.every(a => a.status === 'completed');
-  const isTerminee = allCompleted;
+  const isTerminee = allCompleted || plan.status === 'completed';
 
   return (
     <div className={`border rounded-lg transition-shadow ${isTerminee ? 'border-slate-200 bg-slate-50/50' : 'border-slate-200 bg-white'}`}>
@@ -1606,55 +1712,63 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
       {expanded && (
         <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-3">
 
-          {/* Détails par soin */}
+          {/* Détails par soin — identique à PrescriptionList */}
           {soins.map((soin, idx) => (
-            <div key={soin.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-400 uppercase">Ordonnance {idx + 1}</span>
-                <span className="font-medium text-sm text-slate-800">{soin.label || 'Sans titre'}</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                <div className="flex items-center gap-2 text-slate-600">
-                  <Calendar size={14} className="text-blue-500" />
-                  <span>{formatDateFr(soin.startDate)} — {formatDateFr(soin.endDate)}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-600">
-                  <RefreshCw size={14} className="text-blue-500" />
-                  <span>
+            <div key={soin.id} className="bg-white border border-slate-200 rounded-xl p-4 hover:border-indigo-200 hover:shadow-sm transition-all">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-slate-400 uppercase">Ordonnance {idx + 1}</span>
+                    {soin.status && <SoinStatusBadge status={soin.status} daysRemaining={soin.days_remaining} />}
+                    {soin.current_renewal > 0 && (
+                      <span className="text-xs text-slate-400">
+                        Renouvellement {soin.current_renewal}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm font-medium text-slate-800 mt-1.5 leading-snug">
+                    {soin.label || 'Ordonnance'}
+                  </p>
+                  {(soin.care_description || soin.notes) && (
+                    <p className="text-xs text-slate-600 mt-0.5 leading-snug">
+                      {soin.care_description || soin.notes}
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-500 mt-1">
+                    {soin.prescriber_name ? `Dr. ${soin.prescriber_name}` : ''}
+                    {soin.prescriber_rpps ? ` · RPPS ${soin.prescriber_rpps}` : ''}
+                    {soin.prescription_date ? `${soin.prescriber_name ? ' · ' : ''}Prescrit le ${formatDateFr(soin.prescription_date)}` : ''}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Du {formatDateFr(soin.startDate)}
+                    {soin.endDate ? ` au ${formatDateFr(soin.endDate)}` : ' (durée indéterminée)'}
+                    {' · '}
                     {soin.frequency === 'custom'
                       ? (soin.customFrequency || 'Personnalisé')
                       : frequencyLabel(soin.frequency)}
-                  </span>
+                  </p>
+                  {soin.document_url ? (
+                    <button
+                      type="button"
+                      onClick={() => openSoinDocument(soin)}
+                      className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 mt-1.5 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      {soin.document_filename || 'Voir le document'}
+                    </button>
+                  ) : (
+                    <p className="inline-flex items-center gap-1 text-xs text-amber-600 mt-1.5">
+                      <FileWarning className="w-3 h-3" />
+                      Document manquant
+                    </p>
+                  )}
+                  {soin.invoices_count > 0 && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      {soin.invoices_count} facture{soin.invoices_count > 1 ? 's' : ''} générée{soin.invoices_count > 1 ? 's' : ''}
+                    </p>
+                  )}
                 </div>
               </div>
-              {soin.notes && (
-                <div className="text-sm text-slate-600">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 mb-0.5">
-                    <MessageSquare size={12} /> Notes
-                  </div>
-                  <p className="whitespace-pre-wrap">{soin.notes}</p>
-                </div>
-              )}
-              {(soin.documents || []).length > 0 && (
-                <div>
-                  <div className="text-xs font-medium text-slate-500 mb-1">Documents</div>
-                  <div className="space-y-1">
-                    {soin.documents.map(doc => (
-                      <a
-                        key={doc.id}
-                        href={doc.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50 transition-colors"
-                      >
-                        <File size={14} className="text-slate-400" />
-                        <span className="truncate">{doc.name}</span>
-                        <span className="text-slate-400 text-xs shrink-0">({(doc.size / 1024).toFixed(0)} Ko)</span>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           ))}
 
@@ -1666,46 +1780,65 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
             </div>
           )}
 
-          {/* RDV associés */}
+          {/* RDV associés (dépliable) */}
           {(matchingAppts.length > 0 || (hasStats && remainingCount > 0)) && (
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <button
+                type="button"
+                onClick={() => setRdvExpanded(prev => !prev)}
+                className="w-full flex items-center justify-between py-2 text-left hover:bg-slate-50 rounded-lg px-1 transition-colors"
+              >
                 <div className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-                  <CalendarDays size={12} /> Rendez-vous
+                  <CalendarDays size={12} /> Rendez-vous ({matchingAppts.length})
                 </div>
-                {hasStats && (
-                  <span className={`text-xs font-medium ${allPlanned ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {plannedCount} programmé{plannedCount > 1 ? 's' : ''} / {totalOccurrences}
-                    {remainingCount > 0 && ` — ${remainingCount} restant${remainingCount > 1 ? 's' : ''}`}
-                  </span>
-                )}
-              </div>
-              {matchingAppts.length > 0 ? (
-                <div className="space-y-1 max-h-48 overflow-y-auto">
-                  {matchingAppts.map(appt => {
-                    const nurse = (nurses || []).find(n => n.userId === appt.nurseId);
-                    return (
-                      <div key={appt.id} className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-1.5 text-sm">
-                        <span className="text-slate-500 font-mono text-xs w-20 shrink-0">{formatDateFr(appt.dateStr)}</span>
-                        <span className="text-blue-600 font-medium text-xs w-24 shrink-0">{appt.startTime}–{appt.endTime}</span>
-                        {nurse && (
-                          <span className="text-slate-600 text-xs truncate">{nurse.firstName} {nurse.lastName}</span>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="flex items-center gap-2">
+                  {hasStats && (
+                    <span className={`text-xs font-medium ${allPlanned ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {plannedCount} programmé{plannedCount > 1 ? 's' : ''} / {totalOccurrences}
+                      {remainingCount > 0 && ` — ${remainingCount} restant${remainingCount > 1 ? 's' : ''}`}
+                    </span>
+                  )}
+                  {rdvExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                 </div>
-              ) : (
-                <p className="text-sm text-slate-400 italic">Aucun RDV programmé</p>
+              </button>
+              {rdvExpanded && (
+                matchingAppts.length > 0 ? (
+                  <div className="space-y-1 mt-1">
+                    {matchingAppts.map(appt => {
+                      const nurse = (nurses || []).find(n => n.userId === appt.nurseId);
+                      const statusConfig = appt.status === 'completed'
+                        ? { label: 'Réalisé', cls: 'bg-indigo-100 text-indigo-700' }
+                        : appt.status === 'canceled'
+                          ? { label: 'Annulé', cls: 'bg-red-100 text-red-600' }
+                          : { label: 'Planifié', cls: 'bg-emerald-100 text-emerald-700' };
+                      return (
+                        <div key={appt.id} className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-1.5 text-sm">
+                          <span className="text-slate-500 font-mono text-xs w-20 shrink-0">{formatDateFr(appt.dateStr)}</span>
+                          <span className="text-blue-600 font-medium text-xs w-24 shrink-0">{appt.startTime}–{appt.endTime}</span>
+                          {nurse && (
+                            <span className="text-slate-600 text-xs truncate">{nurse.firstName} {nurse.lastName}</span>
+                          )}
+                          <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded shrink-0 ml-auto ${statusConfig.cls}`}>
+                            {statusConfig.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 italic mt-1">Aucun RDV programmé</p>
+                )
               )}
             </div>
           )}
 
           {/* Actions édition */}
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-            <button onClick={onEdit} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5">
-              <Pencil size={14} /> Modifier
-            </button>
+            {!isTerminee && (
+              <button onClick={onEdit} className="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5">
+                <Pencil size={14} /> Modifier
+              </button>
+            )}
             <button onClick={onDelete} className="text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5">
               <Trash2 size={14} /> Supprimer
             </button>

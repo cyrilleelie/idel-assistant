@@ -17,7 +17,7 @@ class PatientCreate(BaseModel):
     preferred_time_slot: str = Field(default="", pattern=r"^(morning|afternoon|evening|)$")
     care_duration_default: int = Field(default=30, ge=5, le=240)
     notes: str = Field(default="", max_length=5000)
-    ssn: str = Field(default="", max_length=15)
+    ssn: str = Field(default="", max_length=25)
     doctor_name: str = Field(default="", max_length=200)
     doctor_rpps: str = Field(default="", max_length=11)
     doctor_contact: str = Field(default="", max_length=200)
@@ -37,7 +37,7 @@ class PatientUpdate(BaseModel):
     preferred_time_slot: str | None = Field(default=None, pattern=r"^(morning|afternoon|evening|)$")
     care_duration_default: int | None = Field(default=None, ge=5, le=240)
     notes: str | None = Field(default=None, max_length=5000)
-    ssn: str | None = Field(default=None, max_length=15)
+    ssn: str | None = Field(default=None, max_length=25)
     doctor_name: str | None = Field(default=None, max_length=200)
     doctor_rpps: str | None = Field(default=None, max_length=11)
     doctor_contact: str | None = Field(default=None, max_length=200)
@@ -45,6 +45,14 @@ class PatientUpdate(BaseModel):
     postal_code: str | None = Field(default=None, max_length=10)
     city: str | None = Field(default=None, max_length=100)
     status: str | None = Field(default=None, pattern=r"^(active|archived)$")
+    # SESAM-Vitale / assurance
+    amo_code: str | None = Field(default=None, max_length=9)
+    amo_center: str | None = Field(default=None, max_length=100)
+    amc_code: str | None = Field(default=None, max_length=10)
+    amc_name: str | None = Field(default=None, max_length=200)
+    amc_contract: str | None = Field(default=None, max_length=100)
+    exoneration_type: str | None = Field(default=None, pattern=r"^(ALD|MAT|AT|100|)$")
+    birth_rank: int | None = Field(default=None, ge=1, le=9)
 
 
 class PatientResponse(BaseModel):
@@ -68,6 +76,14 @@ class PatientResponse(BaseModel):
     doctor_name: str = ""
     doctor_rpps: str = ""
     doctor_contact: str = ""
+    # SESAM-Vitale / assurance
+    amo_code: str = ""
+    amo_center: str = ""
+    amc_code: str = ""
+    amc_name: str = ""
+    amc_contract: str = ""
+    exoneration_type: str = ""
+    birth_rank: int | None = None
     status: str = "active"
     created_at: datetime.datetime
     updated_at: datetime.datetime

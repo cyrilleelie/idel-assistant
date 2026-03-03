@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Building2, MapPin, CreditCard, Pencil, Save, X } from 'lucide-react';
+import AddressAutocomplete from '../common/AddressAutocomplete';
 
 const planLabels = {
   solo: 'Solo',
@@ -99,12 +100,10 @@ export default function CabinetTab({ cabinet, onUpdate, readOnly }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Adresse</label>
-              <input
-                type="text"
+              <AddressAutocomplete
                 value={form.address}
-                onChange={(e) => setForm(prev => ({ ...prev, address: e.target.value }))}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                maxLength={500}
+                onChange={address => setForm(prev => ({ ...prev, address }))}
+                placeholder="Adresse du cabinet..."
               />
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}

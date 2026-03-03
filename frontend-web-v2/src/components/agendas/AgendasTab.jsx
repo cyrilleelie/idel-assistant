@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Plus, X, Check, Locate, Users, User, Pencil, CheckCircle2, XCircle, CircleDot } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Clock, Plus, X, Check, Locate, Users, User, Pencil, CheckCircle2, XCircle, CircleDot } from 'lucide-react';
 import { formatDate, getWeekDays, getWeekNumber } from '../../utils/dateTime';
 
 const STATUS_FILTERS = [
@@ -217,15 +217,58 @@ export default function AgendasTab({
 /* ---- Agenda d'un infirmier (vue semaine uniquement) ---- */
 function NurseAgenda({ nurse, displayDays, schedule, appointments, getActiveConfigForDate, openRdvModal, deleteRdv, editRdv, completeRdv }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [collapsedSlots, setCollapsedSlots] = useState(new Set());
+
+  const toggleSlot = (slotKey) => {
+    setCollapsedSlots(prev => {
+      const next = new Set(prev);
+      if (next.has(slotKey)) next.delete(slotKey);
+      else next.add(slotKey);
+      return next;
+    });
+  };
+
+  // Collect all slot keys for toggle all
+  const allSlotKeys = useMemo(() => {
+    const keys = [];
+    displayDays.forEach(date => {
+      const dateStr = formatDate(date);
+      const activeConfig = getActiveConfigForDate(date);
+      const workingSlots = activeConfig.slots.filter(slot => schedule[dateStr]?.[slot.id]?.includes(nurse.userId));
+      workingSlots.forEach(slot => keys.push(`${dateStr}_${slot.id}`));
+    });
+    return keys;
+  }, [displayDays, schedule, nurse.userId, getActiveConfigForDate]);
+
+  const allCollapsed = allSlotKeys.length > 0 && allSlotKeys.every(k => collapsedSlots.has(k));
+
+  const toggleAll = () => {
+    if (allCollapsed) {
+      setCollapsedSlots(new Set());
+    } else {
+      setCollapsedSlots(new Set(allSlotKeys));
+    }
+  };
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col">
       {/* En-tête */}
-      <div className="p-4 border-b border-slate-200 bg-slate-50 rounded-t-xl shrink-0">
+      <div className="p-4 border-b border-slate-200 bg-slate-50 rounded-t-xl shrink-0 flex items-center justify-between">
         <h3 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
           <div className={`w-4 h-4 rounded-full ${nurse.color.split(' ')[0]}`}></div>
           {nurse.firstName} {nurse.lastName}
         </h3>
+        {allSlotKeys.length > 0 && (
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            title={allCollapsed ? 'Tout déplier' : 'Tout replier'}
+          >
+            {allCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            {allCollapsed ? 'Tout déplier' : 'Tout replier'}
+          </button>
+        )}
       </div>
 
       {/* Semaine */}
@@ -256,70 +299,92 @@ function NurseAgenda({ nurse, displayDays, schedule, appointments, getActiveConf
                 {worksToday ? (
                   workingSlots.map(slot => {
                     const slotAppts = appointments.filter(a => a.dateStr === dateStr && a.slotId === slot.id && a.nurseId === nurse.userId);
+                    const slotKey = `${dateStr}_${slot.id}`;
+                    const isCollapsed = collapsedSlots.has(slotKey);
 
                     return (
-                      <div key={slot.id} className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex flex-col gap-2 shadow-sm min-h-[140px]">
-                        <div className="text-xs font-semibold text-blue-800 flex items-center gap-1">
-                          <Clock size={12} /> {slot.name} ({slot.startTime}-{slot.endTime})
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto flex flex-col gap-1 min-h-[60px]">
-                          {slotAppts.length > 0 ? (
-                            slotAppts.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(rdv => {
-                              const sc = STATUS_CONFIG[rdv.status] || STATUS_CONFIG.scheduled;
-                              const isScheduled = rdv.status === 'scheduled';
-                              const isCanceled = rdv.status === 'canceled';
-                              return (
-                                <div key={rdv.id} className={`rounded border p-2 text-xs shadow-sm group relative ${sc.card}`}>
-                                  {confirmDeleteId === rdv.id ? (
-                                    <div className="flex flex-col gap-1.5">
-                                      <p className="text-slate-600 font-medium">Annuler ce RDV ?</p>
-                                      <p className="text-slate-400">{rdv.startTime}-{rdv.endTime} — {rdv.patient}</p>
-                                      <div className="flex gap-1.5">
-                                        <button onClick={() => { deleteRdv(rdv.id); setConfirmDeleteId(null); }} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded py-1 font-medium transition-colors">Confirmer</button>
-                                        <button onClick={() => setConfirmDeleteId(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded py-1 font-medium transition-colors">Retour</button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <div className={`font-semibold flex flex-col gap-0.5 ${isCanceled ? 'text-slate-400' : 'text-slate-700'}`}>
-                                        <div className="flex items-center gap-1.5">
-                                          <span className={`shrink-0 font-bold text-base ${isCanceled ? 'text-slate-400 line-through' : 'text-blue-600'}`}>{rdv.startTime} - {rdv.endTime}</span>
-                                          <span className={`text-[11px] font-semibold uppercase px-1 py-0.5 rounded ${sc.badge}`}>{sc.label}</span>
-                                        </div>
-                                        <span className={`text-base truncate ${isCanceled ? 'line-through' : ''}`}>{rdv.patient}</span>
-                                        {rdv.careLabels?.length > 0 && (
-                                          <span className={`text-xs truncate ${isCanceled ? 'text-slate-300' : 'text-slate-400'}`}>{rdv.careLabels.join(', ')}</span>
-                                        )}
-                                        {rdv.actCodes?.length > 0 && (
-                                          <div className="flex flex-wrap gap-0.5 mt-0.5">
-                                            {rdv.actCodes.map(code => (
-                                              <span key={code} className="text-[11px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium">{code}</span>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                      {!isCanceled && (
-                                        <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">
-                                          <button onClick={() => editRdv(rdv)} title="Modifier" className="text-slate-300 hover:text-blue-500 transition-colors"><Pencil size={14}/></button>
-                                          {isScheduled && <button onClick={() => setConfirmDeleteId(rdv.id)} title="Annuler" className="text-slate-300 hover:text-red-500 transition-colors"><X size={14}/></button>}
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <div className="h-full flex flex-col justify-center items-center border border-dashed border-blue-200 rounded bg-white/50">
-                              <span className="text-[10px] text-blue-400/80 uppercase font-medium tracking-wider">Créneau libre</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <button onClick={() => openRdvModal(dateStr, slot.id, nurse.userId)} className="w-full bg-white hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded text-xs py-1.5 font-medium transition-colors flex items-center justify-center gap-1">
-                          <Plus size={14} /> Ajouter RDV
+                      <div key={slot.id} className="bg-blue-50 border border-blue-200 rounded-lg shadow-sm flex flex-col">
+                        {/* Header cliquable */}
+                        <button
+                          type="button"
+                          onClick={() => toggleSlot(slotKey)}
+                          className="flex items-center justify-between w-full px-2 py-1.5 text-left hover:bg-blue-100/50 rounded-t-lg transition-colors"
+                        >
+                          <div className="text-xs font-semibold text-blue-800 flex items-center gap-1">
+                            <Clock size={12} /> {slot.name} ({slot.startTime}-{slot.endTime})
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {slotAppts.length > 0 && (
+                              <span className="text-[10px] font-medium bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full">
+                                {slotAppts.length}
+                              </span>
+                            )}
+                            {isCollapsed ? <ChevronDown size={14} className="text-blue-500" /> : <ChevronUp size={14} className="text-blue-500" />}
+                          </div>
                         </button>
+
+                        {/* Contenu (masqué si replié) */}
+                        {!isCollapsed && (
+                          <div className="p-2 pt-0 flex flex-col gap-2">
+                            <div className="flex-1 overflow-y-auto flex flex-col gap-1 min-h-[60px]">
+                              {slotAppts.length > 0 ? (
+                                slotAppts.sort((a, b) => a.startTime.localeCompare(b.startTime)).map(rdv => {
+                                  const sc = STATUS_CONFIG[rdv.status] || STATUS_CONFIG.scheduled;
+                                  const isScheduled = rdv.status === 'scheduled';
+                                  const isCanceled = rdv.status === 'canceled';
+                                  return (
+                                    <div key={rdv.id} className={`rounded border p-2 text-xs shadow-sm group relative ${sc.card}`}>
+                                      {confirmDeleteId === rdv.id ? (
+                                        <div className="flex flex-col gap-1.5">
+                                          <p className="text-slate-600 font-medium">Annuler ce RDV ?</p>
+                                          <p className="text-slate-400">{rdv.startTime}-{rdv.endTime} — {rdv.patient}</p>
+                                          <div className="flex gap-1.5">
+                                            <button onClick={() => { deleteRdv(rdv.id); setConfirmDeleteId(null); }} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded py-1 font-medium transition-colors">Confirmer</button>
+                                            <button onClick={() => setConfirmDeleteId(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded py-1 font-medium transition-colors">Retour</button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <div className={`font-semibold flex flex-col gap-0.5 ${isCanceled ? 'text-slate-400' : 'text-slate-700'}`}>
+                                            <div className="flex items-center gap-1.5">
+                                              <span className={`shrink-0 font-bold text-base ${isCanceled ? 'text-slate-400 line-through' : 'text-blue-600'}`}>{rdv.startTime} - {rdv.endTime}</span>
+                                              <span className={`text-[11px] font-semibold uppercase px-1 py-0.5 rounded ${sc.badge}`}>{sc.label}</span>
+                                            </div>
+                                            <span className={`text-base truncate ${isCanceled ? 'line-through' : ''}`}>{rdv.patient}</span>
+                                            {rdv.careLabels?.length > 0 && (
+                                              <span className={`text-xs truncate ${isCanceled ? 'text-slate-300' : 'text-slate-400'}`}>{rdv.careLabels.join(', ')}</span>
+                                            )}
+                                            {rdv.actCodes?.length > 0 && (
+                                              <div className="flex flex-wrap gap-0.5 mt-0.5">
+                                                {rdv.actCodes.map(code => (
+                                                  <span key={code} className="text-[11px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium">{code}</span>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                          {!isCanceled && (
+                                            <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">
+                                              <button onClick={() => editRdv(rdv)} title="Modifier" className="text-slate-300 hover:text-blue-500 transition-colors"><Pencil size={14}/></button>
+                                              {isScheduled && <button onClick={() => setConfirmDeleteId(rdv.id)} title="Annuler" className="text-slate-300 hover:text-red-500 transition-colors"><X size={14}/></button>}
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <div className="h-full flex flex-col justify-center items-center border border-dashed border-blue-200 rounded bg-white/50">
+                                  <span className="text-[10px] text-blue-400/80 uppercase font-medium tracking-wider">Créneau libre</span>
+                                </div>
+                              )}
+                            </div>
+
+                            <button onClick={() => openRdvModal(dateStr, slot.id, nurse.userId)} className="w-full bg-white hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded text-xs py-1.5 font-medium transition-colors flex items-center justify-center gap-1">
+                              <Plus size={14} /> Ajouter RDV
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })

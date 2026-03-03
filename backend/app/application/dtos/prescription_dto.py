@@ -24,6 +24,7 @@ class CreatePrescriptionDTO:
     preferred_time: datetime.time | None = None
     preferred_slot: str = ""
     recurrence_rule: str = ""
+    care_location: str = "domicile"
 
     # Prescripteur (optionnel)
     prescriber_name: str | None = None
@@ -58,6 +59,7 @@ class UpdatePrescriptionDTO:
     preferred_time: datetime.time | None = None
     preferred_slot: str | None = None
     recurrence_rule: str | None = None
+    care_location: str | None = None
     prescriber_name: str | None = None
     prescriber_rpps: str | None = None
     prescription_date: datetime.date | None = None
@@ -99,6 +101,7 @@ class PrescriptionDTO:
     preferred_time: datetime.time | None = None
     preferred_slot: str = ""
     recurrence_rule: str = ""
+    care_location: str = "domicile"
 
     prescriber_name: str | None = None
     prescriber_rpps: str | None = None

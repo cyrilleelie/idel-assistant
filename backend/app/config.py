@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     whisper_local_url: str = ""                   # Dérivé de gpu_base_url si non spécifié
     kokoro_local_url: str = ""                    # Dérivé de gpu_base_url si non spécifié
 
+    # Agent IA / Fine-tuning — itération E
+    lora_model_name: str = ""                     # Ex: "idel-v1" — vide = pas de LoRA
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

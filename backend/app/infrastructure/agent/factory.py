@@ -30,13 +30,15 @@ def create_llm_provider(s: Settings) -> LLMProvider:
 
     if s.llm_provider == "vllm_local":
         vllm_url = s.vllm_base_url or f"{s.gpu_base_url}/v1"
+        # Si un adaptateur LoRA est configuré, l'utiliser comme nom de modèle
+        model_name = s.lora_model_name if s.lora_model_name else s.llm_model_name
         config = LLMConfig(
-            model_name=s.llm_model_name,
+            model_name=model_name,
             base_url=vllm_url,
             temperature=s.llm_temperature,
             max_tokens=s.llm_max_tokens,
         )
-        logger.info("LLM provider: vLLM local (%s @ %s)", s.llm_model_name, vllm_url)
+        logger.info("LLM provider: vLLM local (%s @ %s)", model_name, vllm_url)
         return VLLMLocalProvider(config=config)
 
     if s.llm_provider == "mistral_cloud":

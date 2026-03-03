@@ -1,18 +1,24 @@
-"""Routes FastAPI pour l'agent IA : WebSocket streaming, voix et health check.
+"""Routes FastAPI pour l'agent IA : WebSocket streaming, voix, health check et feedback.
 
-Itération D — providers cloud et self-hosted GPU via factory.
-  POST /agent/transcribe  — STT (audio → texte), pipeline REST push-to-talk
-  WS   /agent/voice       — pipeline voix complet (audio ↔ agent ↔ audio)
-  GET  /agent/health       — statut complet des providers + métriques
+Itération E — ajout feedback terrain (👍👎✏️) et export pour fine-tuning.
+  POST /agent/transcribe         — STT (audio → texte), pipeline REST push-to-talk
+  WS   /agent/voice              — pipeline voix complet (audio ↔ agent ↔ audio)
+  GET  /agent/health             — statut complet des providers + métriques
+  POST /agent/feedback           — enregistre un feedback sur une réponse
+  GET  /agent/feedback/stats     — statistiques de satisfaction (30 jours)
+  GET  /agent/feedback/export    — export corrections pour fine-tuning (admin)
 """
 
 import asyncio
+import datetime
 import json
 import logging
+from typing import Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
-from sqlalchemy import select, text
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -27,6 +33,7 @@ from app.infrastructure.agent.voice.tts_elevenlabs import split_into_sentences
 from app.infrastructure.agent.voice.vad import trim_silence
 from app.infrastructure.api.dependencies import AuthContext, get_current_user
 from app.infrastructure.persistence.database import get_db
+from app.infrastructure.persistence.models.agent_feedback_model import AgentFeedbackModel
 from app.infrastructure.persistence.models.user_model import CabinetMemberModel
 from app.infrastructure.persistence.repositories import (
     SQLAlchemyAppointmentRepo,
@@ -151,6 +158,7 @@ async def agent_health(current_user: AuthContext = Depends(get_current_user)):
         "metrics": latency_stats,
         "redis_ok": redis_ok,
         "hds_compliant": llm_is_local and stt_is_local,
+        "model_version": settings.lora_model_name or settings.llm_model_name,
     }
 
 
@@ -727,3 +735,145 @@ async def _stream_tts(
     except Exception as exc:
         logger.error("[TTS] Synthèse échouée pour '%s...' : %s", text[:30], exc, exc_info=True)
         # Ne pas propager — le texte a déjà été envoyé, l'audio est optionnel
+
+
+# ── Feedback terrain (itération E) ────────────────────────────────────────────
+
+
+class FeedbackRequest(BaseModel):
+    session_id: str = Field(max_length=36)
+    user_message: str = Field(max_length=5000)
+    agent_response: str = Field(max_length=10000)
+    tool_called: str | None = Field(default=None, max_length=100)
+    tool_result: dict | None = None
+    rating: Literal["positive", "negative"]
+    correction: str | None = Field(default=None, max_length=10000)
+    category: str | None = Field(default=None, max_length=50)
+
+
+@router.post("/feedback", status_code=201)
+async def submit_feedback(
+    body: FeedbackRequest,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Enregistre un feedback sur une réponse de l'agent.
+
+    Les corrections (👎 + texte) sont exploitables directement
+    comme exemples d'entraînement pour le prochain cycle de fine-tuning.
+    """
+    if body.rating == "negative" and not body.correction:
+        raise HTTPException(
+            status_code=422,
+            detail="Une correction est requise pour un feedback négatif",
+        )
+
+    # Version du modèle actif
+    model_version = settings.lora_model_name or settings.llm_model_name
+
+    feedback = AgentFeedbackModel(
+        id=uuid4(),
+        session_id=body.session_id,
+        cabinet_id=auth.cabinet_id,
+        user_id=auth.user_id,
+        user_message=body.user_message,
+        agent_response=body.agent_response,
+        tool_called=body.tool_called,
+        tool_result=body.tool_result,
+        rating=body.rating,
+        correction=body.correction,
+        model_version=model_version,
+        category=body.category,
+    )
+
+    db.add(feedback)
+    await db.commit()
+
+    return {"id": str(feedback.id), "recorded": True}
+
+
+@router.get("/feedback/stats")
+async def get_feedback_stats(
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Statistiques de feedback pour le widget admin (30 derniers jours)."""
+    thirty_days_ago = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=30)
+
+    result = await db.execute(
+        select(
+            AgentFeedbackModel.rating,
+            func.count(AgentFeedbackModel.id).label("count"),
+        )
+        .where(
+            AgentFeedbackModel.cabinet_id == auth.cabinet_id,
+            AgentFeedbackModel.created_at >= thirty_days_ago,
+        )
+        .group_by(AgentFeedbackModel.rating)
+    )
+    counts = {row.rating: row.count for row in result}
+
+    positive = counts.get("positive", 0)
+    negative = counts.get("negative", 0)
+    total = positive + negative
+
+    return {
+        "period_days": 30,
+        "total": total,
+        "positive": positive,
+        "negative": negative,
+        "satisfaction_rate": positive / total if total > 0 else None,
+        "corrections_available": negative,
+    }
+
+
+@router.get("/feedback/export")
+async def export_training_data(
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Exporte les corrections terrain au format ChatML pour le prochain fine-tuning.
+
+    Accessible aux membres du cabinet — ne contient pas de données patient
+    identifiables (les messages sont déjà pseudonymisés côté agent).
+    """
+    # Vérifie que l'utilisateur est admin du cabinet
+    member = await db.execute(
+        select(CabinetMemberModel)
+        .where(
+            CabinetMemberModel.user_id == auth.user_id,
+            CabinetMemberModel.cabinet_id == auth.cabinet_id,
+        )
+    )
+    member_row = member.scalar_one_or_none()
+    if not member_row or member_row.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+
+    corrections = await db.execute(
+        select(AgentFeedbackModel)
+        .where(
+            AgentFeedbackModel.cabinet_id == auth.cabinet_id,
+            AgentFeedbackModel.rating == "negative",
+            AgentFeedbackModel.correction.isnot(None),
+        )
+        .order_by(AgentFeedbackModel.created_at.desc())
+        .limit(1000)
+    )
+
+    training_examples = []
+    for feedback in corrections.scalars():
+        example = {
+            "messages": [
+                {"role": "user", "content": feedback.user_message},
+                {"role": "assistant", "content": feedback.correction},
+            ],
+            "source": "terrain_correction",
+            "model_version": feedback.model_version,
+            "category": feedback.category,
+        }
+        training_examples.append(example)
+
+    return {
+        "count": len(training_examples),
+        "examples": training_examples,
+    }

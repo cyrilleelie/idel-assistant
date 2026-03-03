@@ -330,12 +330,18 @@ export default function ChatPanel({ isOpen, onClose }) {
             </div>
           )}
 
-          {messages.map((msg) => (
+          {messages.map((msg, idx) => (
             <ChatMessage
               key={msg.id}
               message={msg}
               onConfirm={confirmAction}
               onCancel={cancelAction}
+              sessionId={sessionId}
+              userMessage={
+                msg.role === 'assistant'
+                  ? messages.slice(0, idx).reverse().find((m) => m.role === 'user')?.content || ''
+                  : undefined
+              }
             />
           ))}
 

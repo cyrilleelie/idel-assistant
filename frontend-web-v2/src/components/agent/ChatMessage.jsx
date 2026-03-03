@@ -2,8 +2,10 @@
  * Bulle de message dans le chat agent IA.
  * Supporte un rendu Markdown minimal : **gras** et listes à puces.
  * Iter B : affiche les ToolResultCards quand un outil a retourné un résultat.
+ * Iter E : affiche les boutons de feedback au survol des réponses agent.
  */
 import { ToolResultCard } from './ToolResultCard';
+import MessageFeedback from './MessageFeedback';
 
 /**
  * Convertit du Markdown minimal en éléments React.
@@ -72,17 +74,17 @@ function renderInline(text) {
  *   onCancel: (actionId: string) => void,
  * }} props
  */
-export default function ChatMessage({ message, onConfirm, onCancel }) {
+export default function ChatMessage({ message, onConfirm, onCancel, sessionId, userMessage }) {
   const isUser = message.role === 'user';
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
-      <div className={`max-w-[85%] ${isUser ? 'order-2' : 'order-1'}`}>
+      <div className={`max-w-[85%] ${isUser ? 'order-2' : 'order-1'} group/msg`}>
         {/* Auteur */}
         <div
           className={`text-xs text-gray-400 mb-1 ${isUser ? 'text-right' : 'text-left'}`}
         >
-          {isUser ? 'Vous' : '🤖 Assistant'}
+          {isUser ? 'Vous' : 'Assistant'}
         </div>
 
         {/* Bulle texte */}
@@ -111,6 +113,15 @@ export default function ChatMessage({ message, onConfirm, onCancel }) {
             pendingConfirmation={message.pendingConfirmation}
             onConfirm={onConfirm}
             onCancel={onCancel}
+          />
+        )}
+
+        {/* Feedback (Iter E) — apparaît au survol, uniquement sur les messages agent terminés */}
+        {!isUser && !message.isStreaming && message.content && (
+          <MessageFeedback
+            message={message}
+            sessionId={sessionId}
+            userMessage={userMessage}
           />
         )}
 

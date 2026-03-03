@@ -6,7 +6,7 @@
  * Itération D — Migration GPU.
  */
 import { useEffect, useState } from 'react';
-import { getAgentHealth } from '../../api/agentService';
+import { getAgentHealth, getFeedbackStats } from '../../api/agentService';
 
 /**
  * Ligne de statut d'un provider (LLM/STT/TTS).
@@ -61,22 +61,29 @@ function MetricRow({ label, value, p95, goodThreshold, unit, highlight = false }
 
 export default function AgentMonitorWidget() {
   const [health, setHealth] = useState(null);
+  const [feedbackStats, setFeedbackStats] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     let active = true;
 
-    const fetchHealth = async () => {
+    const fetchData = async () => {
       try {
-        const data = await getAgentHealth();
-        if (active) setHealth(data);
+        const [healthData, fbData] = await Promise.all([
+          getAgentHealth(),
+          getFeedbackStats().catch(() => null),
+        ]);
+        if (active) {
+          setHealth(healthData);
+          if (fbData) setFeedbackStats(fbData);
+        }
       } catch {
         // Silencieux — le widget est informatif
       }
     };
 
-    fetchHealth();
-    const interval = setInterval(fetchHealth, 30_000);
+    fetchData();
+    const interval = setInterval(fetchData, 30_000);
 
     return () => {
       active = false;
@@ -198,13 +205,53 @@ export default function AgentMonitorWidget() {
             <span>Actions : {metrics.actions_today ?? 0}</span>
           </div>
 
+          {/* Qualité / Feedback (Iter E) */}
+          {feedbackStats && feedbackStats.total > 0 && (
+            <div className="border-t pt-3 mt-3">
+              <div className="text-xs font-medium text-gray-600 mb-1.5">
+                Qualité (30j)
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                  <div
+                    className="bg-green-400 h-1.5 rounded-full transition-all"
+                    style={{
+                      width: `${(feedbackStats.satisfaction_rate || 0) * 100}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-xs text-gray-600">
+                  {feedbackStats.satisfaction_rate !== null
+                    ? `${Math.round(feedbackStats.satisfaction_rate * 100)}%`
+                    : '\u2014'}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-400 mt-1">
+                <span>{feedbackStats.positive} positifs</span>
+                <span>{feedbackStats.negative} négatifs</span>
+              </div>
+              {feedbackStats.corrections_available > 0 && (
+                <div className="text-xs text-blue-500 mt-1">
+                  {feedbackStats.corrections_available} corrections pour fine-tuning
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Version modèle */}
+          {health.model_version && (
+            <div className="border-t pt-2 mt-3 text-xs text-gray-400 text-center">
+              Modèle : {health.model_version}
+            </div>
+          )}
+
           {/* Badge HDS */}
           {health.hds_compliant ? (
-            <div className="mt-3 text-xs text-center text-blue-600 font-medium bg-blue-50 rounded-lg py-1.5">
+            <div className="mt-2 text-xs text-center text-blue-600 font-medium bg-blue-50 rounded-lg py-1.5">
               Traitement 100% local &middot; Conforme HDS
             </div>
           ) : (
-            <div className="mt-3 text-xs text-center text-amber-600 bg-amber-50 rounded-lg py-1.5">
+            <div className="mt-2 text-xs text-center text-amber-600 bg-amber-50 rounded-lg py-1.5">
               Services cloud actifs &middot; Migration GPU en cours
             </div>
           )}

@@ -98,3 +98,31 @@ export async function clearAgentSession(sessionId) {
     // L'endpoint peut ne pas exister — non bloquant
   }
 }
+
+/**
+ * Enregistre un feedback sur une réponse de l'agent.
+ * @param {{
+ *   session_id: string,
+ *   user_message: string,
+ *   agent_response: string,
+ *   tool_called?: string|null,
+ *   tool_result?: object|null,
+ *   rating: 'positive'|'negative',
+ *   correction?: string|null,
+ *   category?: string|null,
+ * }} payload
+ * @returns {Promise<{id: string, recorded: boolean}>}
+ */
+export async function submitFeedback(payload) {
+  const { data } = await apiClient.post('/agent/feedback', payload);
+  return data;
+}
+
+/**
+ * Récupère les stats de feedback (30 derniers jours).
+ * @returns {Promise<{period_days: number, total: number, positive: number, negative: number, satisfaction_rate: number|null, corrections_available: number}>}
+ */
+export async function getFeedbackStats() {
+  const { data } = await apiClient.get('/agent/feedback/stats');
+  return data;
+}

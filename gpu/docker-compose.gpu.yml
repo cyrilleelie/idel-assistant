@@ -11,6 +11,7 @@ services:
       - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
     volumes:
       - /data/models:/models:ro
+      - /data/models/lora:/lora:ro
       - /data/vllm-logs:/logs
     ports:
       - "127.0.0.1:8000:8000"
@@ -25,6 +26,7 @@ services:
       --max-model-len 8192
       --max-num-seqs 16
       --enable-lora
+      --lora-modules idel-v1=/lora/idel-lora-v1
       --max-lora-rank 16
       --swap-space 4
     deploy:

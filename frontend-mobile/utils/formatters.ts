@@ -103,3 +103,31 @@ export function estimateDuration(startTime: string, endTime: string | null): str
   if (minutes === 0) return `${hours}h`;
   return `${hours}h${String(minutes).padStart(2, '0')}`;
 }
+
+/**
+ * Formats a monetary amount in French convention.
+ *
+ * @example formatAmount(25.75) → '25,75 €'
+ * @example formatAmount(0)     → '0,00 €'
+ */
+export function formatAmount(amount: number): string {
+  return `${amount.toFixed(2).replace('.', ',')} \u20AC`;
+}
+
+/**
+ * Formats a monetary amount compactly (no space before €).
+ *
+ * @example formatAmountShort(25.75) → '25,75€'
+ */
+export function formatAmountShort(amount: number): string {
+  return `${amount.toFixed(2).replace('.', ',')}\u20AC`;
+}
+
+/**
+ * Formats an invoice number with prefix.
+ *
+ * @example formatInvoiceNumber('2026-03-0042') → 'N° 2026-03-0042'
+ */
+export function formatInvoiceNumber(invoiceNumber: string): string {
+  return `N\u00B0 ${invoiceNumber}`;
+}

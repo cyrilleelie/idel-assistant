@@ -23,12 +23,17 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Q } from '@nozbe/watermelondb';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useTourneeStore } from '@/stores/tourneeStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAudit } from '@/hooks/useAudit';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { openNavigation } from '@/services/navigationService';
+import { getInvoiceForAppointment } from '@/services/invoiceService';
+import type { InvoiceDetail } from '@/services/invoiceService';
+import { api } from '@/services/api';
 import LoadingScreen from '@/components/ui/LoadingScreen';
 import Badge from '@/components/ui/Badge';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
@@ -39,8 +44,10 @@ import {
   formatLocationType,
   formatAppointmentStatus,
 } from '@/utils/dateUtils';
+import { formatAmountShort } from '@/utils/formatters';
 import type Appointment from '@/db/models/Appointment';
 import type Patient from '@/db/models/Patient';
+import type Invoice from '@/db/models/Invoice';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,12 +165,18 @@ export default function AppointmentDetailScreen() {
   const undoCompletion = useTourneeStore((s) => s.undoCompletion);
   const userId = useAuthStore((s) => s.user?.id ?? '');
   const { logAccess } = useAudit();
+  const { isOnline } = useOnlineStatus();
 
   // ── Local state ────────────────────────────────────────────────────────────
 
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [invoiceSummary, setInvoiceSummary] = useState<{
+    id: string;
+    number: string;
+    total: number;
+  } | null>(null);
 
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showUndoModal, setShowUndoModal] = useState(false);
@@ -184,6 +197,27 @@ export default function AppointmentDetailScreen() {
           setPatient(pat);
           // Audit log for HDS/RGPD compliance
           logAccess('view_appointment', 'appointment', appt.serverId || appt.id);
+
+          // Look up associated invoice if appointment is completed
+          if (appt.status === 'completed') {
+            try {
+              const inv = await database
+                .get<Invoice>('invoices')
+                .query(Q.where('appointment_id', appt.id))
+                .fetch();
+              if (inv.length > 0) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const raw = (inv[0] as any)._raw;
+                setInvoiceSummary({
+                  id: inv[0].id,
+                  number: raw.invoice_number,
+                  total: raw.total_amount,
+                });
+              }
+            } catch {
+              // Invoice lookup is non-critical
+            }
+          }
         }
       } catch {
         // Record not found — show not-found state
@@ -223,6 +257,26 @@ export default function AppointmentDetailScreen() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     router.push(`/transmission/new?patientId=${appointment.patientId}&appointmentId=${appointment.id}` as any);
   }, [appointment, router]);
+
+  const handleViewInvoice = useCallback(async () => {
+    if (!appointment) return;
+
+    if (invoiceSummary) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      router.push(`/invoice/${invoiceSummary.id}` as any);
+      return;
+    }
+
+    // Try to fetch from server
+    const apiClient = isOnline ? api : null;
+    const inv = await getInvoiceForAppointment(database, apiClient, appointment.id);
+    if (inv) {
+      setInvoiceSummary({ id: inv.id, number: inv.invoiceNumber, total: inv.totalAmount });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      router.push(`/invoice/${inv.id}` as any);
+    }
+    // If not found, the button already shows "en cours de generation"
+  }, [appointment, invoiceSummary, database, isOnline, router]);
 
   const handleConfirmComplete = useCallback(async () => {
     if (!appointment) return;
@@ -379,6 +433,19 @@ export default function AppointmentDetailScreen() {
             onPress={handleAddTransmission}
             variant="default"
           />
+
+          {isCompleted && (
+            <ActionButton
+              icon="receipt-outline"
+              label={
+                invoiceSummary
+                  ? `Facture ${invoiceSummary.number} — ${formatAmountShort(invoiceSummary.total)}`
+                  : 'Facture en cours de generation...'
+              }
+              onPress={handleViewInvoice}
+              variant={invoiceSummary ? 'primary' : 'default'}
+            />
+          )}
 
           {isScheduled && (
             <ActionButton

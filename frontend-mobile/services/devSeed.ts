@@ -789,5 +789,79 @@ async function _runDevSeedImpl(database: Database, userId?: string): Promise<voi
         record._raw.last_synced_at = now;
       });
     }
+
+    // Create invoices for completed appointments
+    const invoiceSeeds: {
+      serverId: string;
+      appointmentIndex: number;
+      patientIndex: number;
+      invoiceNumber: string;
+      totalAmount: number;
+      amountAmo: number;
+      amountAmc: number;
+      amountPatient: number;
+      status: string;
+      vitaleStatus: string;
+    }[] = [
+      {
+        serverId: 'seed-invoice-1',
+        appointmentIndex: 0, // seed-appt-today-1 — BSI completed, Mme Bertrand (ALD)
+        patientIndex: 0,
+        invoiceNumber: '2026-03-0042',
+        totalAmount: 25.75,
+        amountAmo: 25.75,
+        amountAmc: 0,
+        amountPatient: 0,
+        status: 'validated',
+        vitaleStatus: 'not_read',
+      },
+      {
+        serverId: 'seed-invoice-2',
+        appointmentIndex: 1, // seed-appt-today-2 — AMI 1 completed, M. Moreau
+        patientIndex: 1,
+        invoiceNumber: '2026-03-0041',
+        totalAmount: 7.95,
+        amountAmo: 5.57,
+        amountAmc: 1.79,
+        amountPatient: 0.59,
+        status: 'validated',
+        vitaleStatus: 'not_read',
+      },
+      {
+        serverId: 'seed-invoice-3',
+        appointmentIndex: 2, // seed-appt-today-3 — Pansement completed, Mme Lefebvre
+        patientIndex: 2,
+        invoiceNumber: '2026-03-0040',
+        totalAmount: 35.50,
+        amountAmo: 24.85,
+        amountAmc: 7.10,
+        amountPatient: 3.55,
+        status: 'draft',
+        vitaleStatus: 'not_read',
+      },
+    ];
+
+    for (const seed of invoiceSeeds) {
+      const patientLocalId = patientLocalIds[seed.patientIndex];
+      const appointmentLocalId = appointmentLocalIds[seed.appointmentIndex];
+      if (!patientLocalId || !appointmentLocalId) continue;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await database.get('invoices').create((record: any) => {
+        record._raw.server_id = seed.serverId;
+        record._raw.appointment_id = appointmentLocalId;
+        record._raw.patient_id = patientLocalId;
+        record._raw.invoice_number = seed.invoiceNumber;
+        record._raw.total_amount = seed.totalAmount;
+        record._raw.amount_amo = seed.amountAmo;
+        record._raw.amount_amc = seed.amountAmc;
+        record._raw.amount_patient = seed.amountPatient;
+        record._raw.status = seed.status;
+        record._raw.pdf_local_path = null;
+        record._raw.vitale_status = seed.vitaleStatus;
+        record._raw.created_at = now;
+        record._raw.last_synced_at = now;
+      });
+    }
   });
 }

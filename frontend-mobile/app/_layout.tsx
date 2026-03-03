@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useSecurityStore } from '@/stores/securityStore';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useAppState } from '@/hooks/useAppState';
+import Toast from '@/components/ui/Toast';
 import { Colors } from '@/constants/colors';
 
 export { ErrorBoundary } from 'expo-router';
@@ -124,6 +125,13 @@ function RootNavigator() {
             presentation: 'card',
           }}
         />
+        <Stack.Screen
+          name="invoice/[id]"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
         <Stack.Screen name="+not-found" />
       </Stack>
     </>
@@ -140,6 +148,7 @@ export default function RootLayout() {
         <DatabaseProvider>
           <StatusBar style="dark" />
           <RootNavigator />
+          <Toast />
         </DatabaseProvider>
       </SecurityGate>
     </SafeAreaProvider>

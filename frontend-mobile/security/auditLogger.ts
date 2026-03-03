@@ -9,6 +9,7 @@ export type AuditAction =
   | 'view_transmission'
   | 'play_audio'
   | 'view_invoice'
+  | 'send_invoice'
   | 'create_transmission'
   | 'scan_document'
   | 'mark_completed'

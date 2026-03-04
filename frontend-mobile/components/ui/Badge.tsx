@@ -38,7 +38,10 @@ export default function Badge({ label, variant }: BadgeProps) {
   const style = variantStyles[variant];
 
   return (
-    <View style={[styles.badge, style.container]}>
+    <View
+      style={[styles.badge, style.container]}
+      accessibilityLabel={`Statut : ${label}`}
+    >
       <Text style={[styles.label, style.text]}>{label}</Text>
     </View>
   );

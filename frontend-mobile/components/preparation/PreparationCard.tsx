@@ -55,7 +55,7 @@ export default React.memo(function PreparationCard({
       ? Colors.primary
       : 'transparent';
 
-  const careDisplay = careTypes.join(' + ');
+  const careDisplay = careTypeLabels.length > 0 ? careTypeLabels.join(', ') : careTypes.join(' + ');
   const locationLabel = formatLocation(locationType);
   const lastVisitLabel = formatLastVisit(lastVisitByCurrentUser);
   const txCount = transmissionsSinceLastVisit.length;
@@ -76,9 +76,6 @@ export default React.memo(function PreparationCard({
       {/* Care types + location */}
       <Text style={styles.careRow}>
         {careDisplay}
-        {careTypeLabels.length > 0 && careTypeLabels[0] !== careTypes[0] && (
-          <Text style={styles.careLabel}> ({careTypeLabels[0]})</Text>
-        )}
         {' \u00B7 '}
         {locationLabel}
       </Text>
@@ -137,6 +134,8 @@ export default React.memo(function PreparationCard({
           onPress={onToggleExpand}
           style={({ pressed }) => [styles.expandBtn, pressed && styles.expandBtnPressed]}
           hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel={isExpanded ? 'Masquer les transmissions' : `Voir les ${txCount} transmissions`}
         >
           <Ionicons
             name={isExpanded ? 'chevron-up' : 'chevron-down'}

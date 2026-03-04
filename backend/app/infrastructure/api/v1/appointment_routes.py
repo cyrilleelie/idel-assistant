@@ -403,3 +403,44 @@ async def complete_appointment(
             )
 
     return AppointmentCompleteResponse(**_appt_base_fields(appt), auto_billing=auto_billing)
+
+
+@router.get("/{appointment_id}/invoice")
+async def get_appointment_invoice(
+    appointment_id: UUID,
+    request: Request,
+    auth: AuthContext = Depends(get_current_user),
+    appt_repo=Depends(get_appointment_repository),
+    invoice_repo=Depends(get_invoice_repository),
+):
+    """Retourne la facture associée à un rendez-vous, si elle existe."""
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    appt = await appt_repo.get_by_id(appointment_id)
+    if not appt or appt.cabinet_id != auth.cabinet_id:
+        raise HTTPException(status_code=404, detail="Rendez-vous introuvable")
+
+    invoice = await invoice_repo.get_by_appointment_id(appointment_id, auth.cabinet_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Aucune facture pour ce rendez-vous")
+
+    return {
+        "id": str(invoice.id),
+        "invoice_number": invoice.invoice_number,
+        "care_date": invoice.care_date.isoformat(),
+        "total_amount": float(invoice.total_amount),
+        "total_amo": float(invoice.total_amo),
+        "total_amc": float(invoice.total_amc),
+        "total_patient": float(invoice.total_patient),
+        "status": invoice.status,
+        "lines": [
+            {
+                "act_code": line.act_code,
+                "act_label": line.act_label,
+                "quantity": float(line.quantity),
+                "line_total": float(line.line_total),
+            }
+            for line in invoice.lines
+        ],
+    }

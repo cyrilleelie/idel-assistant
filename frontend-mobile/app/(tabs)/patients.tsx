@@ -34,6 +34,7 @@ import { buildPatientViews } from '@/types/patient';
 import type { PatientView } from '@/types/patient';
 import PatientCard from '@/components/patient/PatientCard';
 import EmptyState from '@/components/ui/EmptyState';
+import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { Colors } from '@/constants/colors';
 import type Patient from '@/db/models/Patient';
 
@@ -108,10 +109,15 @@ export default function PatientsScreen() {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    // TODO (M4): wire up performSync(database, apiClient) when sync engine is available
-    await new Promise<void>((resolve) => setTimeout(resolve, 600));
+    try {
+      const { performSync } = await import('@/db/sync');
+      const { api } = await import('@/services/api');
+      await performSync(database, api);
+    } catch {
+      // Sync failure is non-blocking
+    }
     setIsRefreshing(false);
-  }, []);
+  }, [database]);
 
   // ── Render helpers ──────────────────────────────────────────────────────
 
@@ -149,7 +155,9 @@ export default function PatientsScreen() {
   );
 
   const ListEmptyComponent = useMemo(() => {
-    if (isLoading) return null;
+    if (isLoading) {
+      return <SkeletonLoader type="patient-card" count={5} />;
+    }
     if (searchQuery.trim().length > 0) {
       return (
         <EmptyState
@@ -162,7 +170,7 @@ export default function PatientsScreen() {
     return (
       <EmptyState
         icon="people-outline"
-        title="Aucun patient"
+        title="Aucun patient synchronise"
         message="Les patients apparaitront ici apres la synchronisation."
       />
     );

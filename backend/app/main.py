@@ -36,6 +36,9 @@ from app.infrastructure.api.v1 import (
     sector_routes,
     slot_routes,
     tournee_routes,
+    transmission_routes,
+    sync_routes,
+    preparation_routes,
 )
 from app.infrastructure.persistence.database import async_session_factory, engine
 from app.infrastructure.persistence.seeds.seed_ngap_catalog import seed_ngap_catalog
@@ -130,6 +133,9 @@ app.include_router(prescription_routes.router, prefix="/api/v1")
 app.include_router(rpps_doctor_routes.router, prefix="/api/v1")
 app.include_router(admin_routes.router, prefix="/api/v1")
 app.include_router(fse_routes.router, prefix="/api/v1")
+app.include_router(transmission_routes.router, prefix="/api/v1")
+app.include_router(sync_routes.router, prefix="/api/v1")
+app.include_router(preparation_routes.router, prefix="/api/v1")
 app.include_router(agent_routes.router, prefix="/api/v1")
 
 

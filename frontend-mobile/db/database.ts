@@ -6,6 +6,7 @@ import { Database } from '@nozbe/watermelondb';
 import { NativeModules } from 'react-native';
 
 import { schema } from '@/db/schema';
+import { migrations } from '@/db/migrations';
 import Patient from '@/db/models/Patient';
 import Appointment from '@/db/models/Appointment';
 import Transmission from '@/db/models/Transmission';
@@ -46,6 +47,7 @@ export function initDatabase(_encryptionKey?: string): Database {
     const SQLiteAdapter = require('@nozbe/watermelondb/adapters/sqlite').default;
     const adapter = new SQLiteAdapter({
       schema,
+      migrations,
       dbName: 'idel',
       jsi: false,
     });

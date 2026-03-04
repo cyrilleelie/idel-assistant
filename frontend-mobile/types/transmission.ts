@@ -18,7 +18,10 @@ import { getTodayString, addDays, getRelativeDayLabel, formatDateFrench } from '
 export type TransmissionStatus =
   | 'draft'
   | 'pending_transcription'
+  | 'pending_synthesis'
   | 'transcribed'
+  | 'completed'
+  | 'error'
   | 'validated';
 
 export interface StructuredContent {
@@ -48,6 +51,18 @@ export interface TransmissionView {
 // Builders
 // ---------------------------------------------------------------------------
 
+/** Coerce LLM output (string, array, or object) to a flat string. */
+function coerceToString(value: unknown): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => (typeof v === 'string' ? v : JSON.stringify(v)))
+      .join(', ');
+  }
+  return JSON.stringify(value);
+}
+
 /**
  * Build a TransmissionView from a WatermelonDB Transmission record.
  * Uses _raw to avoid decorator getter issues.
@@ -60,7 +75,15 @@ export function buildTransmissionView(tx: Transmission): TransmissionView {
   const structuredJson = raw.content_structured;
   if (structuredJson) {
     try {
-      contentStructured = JSON.parse(structuredJson) as StructuredContent;
+      const parsed = JSON.parse(structuredJson);
+      // LLM may return arrays/objects instead of strings — coerce to strings
+      contentStructured = {
+        synthese: coerceToString(parsed.synthese),
+        soins: coerceToString(parsed.soins),
+        constantes: coerceToString(parsed.constantes),
+        observations: coerceToString(parsed.observations),
+        actions: coerceToString(parsed.actions),
+      };
     } catch {
       contentStructured = null;
     }
@@ -171,8 +194,14 @@ export function formatTransmissionStatus(status: TransmissionStatus): string {
       return 'Brouillon';
     case 'pending_transcription':
       return 'En attente';
+    case 'pending_synthesis':
+      return 'Synthese...';
     case 'transcribed':
       return 'Transcrit';
+    case 'completed':
+      return 'Termine';
+    case 'error':
+      return 'Erreur';
     case 'validated':
       return 'Valide';
     default:

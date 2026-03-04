@@ -43,7 +43,7 @@ export default function InvoiceActsTable({
         ))
       ) : (
         <Text style={styles.noActs}>
-          Detail des actes non disponible hors connexion
+          Detail des actes en cours de chargement...
         </Text>
       )}
 

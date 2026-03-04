@@ -3,8 +3,18 @@
 import datetime
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+PARIS_TZ = ZoneInfo("Europe/Paris")
+
+
+def _ensure_tz_aware(dt: datetime.datetime) -> datetime.datetime:
+    """Treat naive datetimes as Europe/Paris (the web frontend sends naive ISO strings)."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=PARIS_TZ)
+    return dt
 
 
 class AppointmentCreate(BaseModel):
@@ -21,9 +31,19 @@ class AppointmentCreate(BaseModel):
     distance_km: Decimal | None = None
     idel_id: UUID | None = None
 
+    @field_validator("scheduled_at", mode="after")
+    @classmethod
+    def _tz_aware(cls, v: datetime.datetime) -> datetime.datetime:
+        return _ensure_tz_aware(v)
+
 
 class AppointmentUpdate(BaseModel):
     scheduled_at: datetime.datetime | None = None
+
+    @field_validator("scheduled_at", mode="after")
+    @classmethod
+    def _tz_aware(cls, v: datetime.datetime | None) -> datetime.datetime | None:
+        return _ensure_tz_aware(v) if v else v
     duration_minutes: int | None = Field(default=None, ge=5, le=240)
     care_type: str | None = Field(default=None, min_length=1, max_length=50)
     care_protocol_id: UUID | None = None

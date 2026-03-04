@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import {
   requestMicrophonePermission,
   startRecording,
@@ -124,6 +125,7 @@ export default function VoiceRecorder({
     }
 
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const recording = await startRecording((db: number) => {
         // Normalize metering: db is typically -160 to 0
         const normalized = Math.max(0, Math.min(1, (db + 60) / 60));
@@ -198,6 +200,7 @@ export default function VoiceRecorder({
 
   const handleValidate = useCallback(() => {
     if (!encryptedPath) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onRecordingComplete({
       encryptedPath,
       durationMs,

@@ -68,7 +68,7 @@ export default function TransmissionEditScreen() {
 
         // Enqueue sync
         globalQueue
-          .enqueue('PATCH', `/api/v1/transmissions/${transmission.serverId}`, {
+          .enqueue('PATCH', `/transmissions/${transmission.serverId}`, {
             contentText: text,
           })
           .catch(() => {});
@@ -91,7 +91,7 @@ export default function TransmissionEditScreen() {
     try {
       await globalQueue.enqueue(
         'POST',
-        `/api/v1/transmissions/${transmission.serverId}/regenerate`,
+        `/transmissions/${transmission.serverId}/regenerate`,
         { regenerate_synthesis: true },
       );
       Alert.alert(

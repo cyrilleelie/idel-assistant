@@ -8,19 +8,21 @@
  * Flow:
  * 1. Resolves patient (+ optional appointment) from WatermelonDB
  * 2. Toggle between vocal (default) and text mode
- * 3. Vocal: VoiceRecorder → encrypt → save DB → enqueue upload → back
- * 4. Text: TextComposer → save DB → enqueue sync → back
+ * 3. Vocal: VoiceRecorder → upload to backend → sync → back
+ * 4. Text: TextComposer → create on backend → sync → back
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { uploadAsync, FileSystemUploadType } from 'expo-file-system/legacy';
 import { useDatabase } from '@/contexts/DatabaseContext';
-import { useAuthStore } from '@/stores/authStore';
 import { useAudit } from '@/hooks/useAudit';
 import { useScreenProtection } from '@/security/screenProtection';
-import { globalQueue } from '@/services/globalQueue';
+import { api } from '@/services/api';
+import * as keyManager from '@/security/keyManager';
+import { API_BASE_URL } from '@/constants/config';
 import { buildPatientView } from '@/types/patient';
 import type { PatientView } from '@/types/patient';
 import VoiceRecorder from '@/components/transmission/VoiceRecorder';
@@ -38,7 +40,6 @@ export default function NewTransmissionScreen() {
   }>();
   const router = useRouter();
   const database = useDatabase();
-  const user = useAuthStore((s) => s.user);
   const { logAccess } = useAudit();
 
   useScreenProtection();
@@ -66,7 +67,7 @@ export default function NewTransmissionScreen() {
     };
   }, [patientId, database]);
 
-  // ── Vocal complete → save ───────────────────────────────────────────
+  // ── Vocal complete → upload to backend → sync ──────────────────────
 
   const handleVocalComplete = useCallback(
     async (result: VoiceRecordingResult) => {
@@ -74,53 +75,67 @@ export default function NewTransmissionScreen() {
       setIsSaving(true);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await database.write(async () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await database.get('transmissions').create((record: any) => {
-            record._raw.server_id = '';
-            record._raw.patient_id = patientId;
-            record._raw.appointment_id = appointmentId || null;
-            record._raw.author_user_id = user?.id ?? 'unknown';
-            record._raw.author_name = user
-              ? `${user.firstName} ${user.lastName}`
-              : 'Utilisateur';
-            record._raw.content_text = null;
-            record._raw.content_structured = null;
-            record._raw.audio_file_path = result.encryptedPath;
-            record._raw.status = 'pending_transcription';
-            record._raw.audio_uploaded = 0;
-            record._raw.created_at = Date.now();
-            record._raw.last_synced_at = 0;
-          });
+        // Ensure URI has file:// scheme for native upload
+        let fileUri = result.encryptedPath;
+        if (!fileUri.startsWith('file://')) {
+          fileUri = `file://${fileUri}`;
+        }
+
+        // Get auth token for the upload request
+        const token = await keyManager.getToken('access');
+
+        const uploadUrl = `${API_BASE_URL}/transmissions/upload-audio`;
+        const params: Record<string, string> = {
+          patient_id: patientId,
+          duration_ms: String(result.durationMs),
+        };
+        if (appointmentId) {
+          params.appointment_id = appointmentId;
+        }
+
+        console.log('[Transmission] Uploading audio:', { fileUri, uploadUrl, params });
+
+        // Step 1: Upload audio using native uploadAsync from expo-file-system
+        // This handles multipart encoding natively, avoiding React Native FormData issues
+        const uploadResp = await uploadAsync(uploadUrl, fileUri, {
+          httpMethod: 'POST',
+          uploadType: FileSystemUploadType.MULTIPART,
+          fieldName: 'file',
+          mimeType: 'audio/mp4',
+          parameters: params,
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
         });
 
-        // Enqueue audio upload (fire-and-forget)
-        globalQueue
-          .enqueue('POST', '/api/v1/transmissions/upload-audio', {
-            patientId,
-            appointmentId: appointmentId || null,
-            audioPath: result.encryptedPath,
-            durationMs: result.durationMs,
-          })
-          .catch(() => {});
+        console.log('[Transmission] Upload response:', uploadResp.status, uploadResp.body);
+
+        if (uploadResp.status < 200 || uploadResp.status >= 300) {
+          throw new Error(`Upload failed (${uploadResp.status}): ${uploadResp.body}`);
+        }
+
+        // Step 2: Sync to pull the server-created record into WatermelonDB
+        const { triggerSync } = await import('@/services/syncService');
+        await triggerSync(database).catch(() => {});
 
         // Audit log
         logAccess('create_transmission', 'transmission', patientId);
 
-        Alert.alert('Enregistre', 'Votre transmission vocale a ete sauvegardee.', [
+        Alert.alert('Enregistre', 'Votre transmission vocale a ete envoyee. La transcription sera disponible dans quelques instants.', [
           { text: 'OK', onPress: () => router.back() },
         ]);
-      } catch {
-        Alert.alert('Erreur', 'Impossible de sauvegarder la transmission.');
+      } catch (err) {
+        console.error('[Transmission] Upload error:', err);
+        const detail = (err as Error).message || 'Erreur inconnue';
+        Alert.alert('Erreur', `Impossible d'envoyer la transmission vocale.\n\n${detail}`);
       } finally {
         setIsSaving(false);
       }
     },
-    [patientId, appointmentId, database, user, logAccess, router, isSaving],
+    [patientId, appointmentId, database, logAccess, router, isSaving],
   );
 
-  // ── Text submit → save ──────────────────────────────────────────────
+  // ── Text submit → create on backend → sync ─────────────────────────
 
   const handleTextSubmit = useCallback(
     async (text: string) => {
@@ -128,35 +143,17 @@ export default function NewTransmissionScreen() {
       setIsSaving(true);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await database.write(async () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await database.get('transmissions').create((record: any) => {
-            record._raw.server_id = '';
-            record._raw.patient_id = patientId;
-            record._raw.appointment_id = appointmentId || null;
-            record._raw.author_user_id = user?.id ?? 'unknown';
-            record._raw.author_name = user
-              ? `${user.firstName} ${user.lastName}`
-              : 'Utilisateur';
-            record._raw.content_text = text;
-            record._raw.content_structured = null;
-            record._raw.audio_file_path = null;
-            record._raw.status = 'draft';
-            record._raw.audio_uploaded = 0;
-            record._raw.created_at = Date.now();
-            record._raw.last_synced_at = 0;
-          });
+        // Step 1: Create on server
+        await api.post('/transmissions', {
+          patient_id: patientId,
+          appointment_id: appointmentId || null,
+          type: 'written',
+          transcription: text,
         });
 
-        // Enqueue sync (fire-and-forget)
-        globalQueue
-          .enqueue('POST', '/api/v1/transmissions', {
-            patientId,
-            appointmentId: appointmentId || null,
-            contentText: text,
-          })
-          .catch(() => {});
+        // Step 2: Sync to pull the server-created record into WatermelonDB
+        const { triggerSync } = await import('@/services/syncService');
+        await triggerSync(database).catch(() => {});
 
         // Audit log
         logAccess('create_transmission', 'transmission', patientId);
@@ -170,7 +167,7 @@ export default function NewTransmissionScreen() {
         setIsSaving(false);
       }
     },
-    [patientId, appointmentId, database, user, logAccess, router, isSaving],
+    [patientId, appointmentId, database, logAccess, router, isSaving],
   );
 
   // ── Cancel → go back ───────────────────────────────────────────────

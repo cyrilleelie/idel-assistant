@@ -27,6 +27,7 @@ import {
   Pressable,
   FlatList,
   RefreshControl,
+  LayoutAnimation,
   StyleSheet,
   type ListRenderItemInfo,
 } from 'react-native';
@@ -36,6 +37,7 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 import { useTourneeStore } from '@/stores/tourneeStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useAuthStore } from '@/stores/authStore';
+import { getTodayString, addDays } from '@/utils/dateHelpers';
 import { buildAppointmentViews, computeTourneeStats } from '@/types/appointment';
 import type { AppointmentView } from '@/types/appointment';
 import { openNavigation } from '@/services/navigationService';
@@ -44,6 +46,8 @@ import DateSelector from '@/components/tournee/DateSelector';
 import TourneeProgress from '@/components/tournee/TourneeProgress';
 import ConfirmationModal from '@/components/ui/ConfirmationModal';
 import EmptyState from '@/components/ui/EmptyState';
+import SkeletonLoader from '@/components/ui/SkeletonLoader';
+import SwipeDateContainer from '@/components/ui/SwipeDateContainer';
 import { Colors } from '@/constants/colors';
 import type Appointment from '@/db/models/Appointment';
 
@@ -70,15 +74,16 @@ export default function TourneeScreen() {
   const bumpRefreshKey = useTourneeStore((s) => s.bumpRefreshKey);
 
   useEffect(() => {
-    if (!__DEV__ || !userId) return;
-    import('@/services/devSeed')
-      .then(({ runDevSeed }) => runDevSeed(database, userId))
+    if (!userId) return;
+
+    // Try sync first; if backend is unreachable, fall back to dev seed
+    import('@/services/syncService')
+      .then(({ trySyncOrSeed }) => trySyncOrSeed(database, userId))
       .then(() => {
-        // Bump refreshKey so the fetch useEffect re-runs with seeded data
         bumpRefreshKey();
       })
       .catch(() => {
-        // Dev seed failure is non-critical
+        // Non-critical
       });
   }, [database, userId, bumpRefreshKey]);
 
@@ -106,7 +111,11 @@ export default function TourneeScreen() {
 
     database
       .get<Appointment>('appointments')
-      .query(Q.and(Q.where('date', selectedDate), Q.where('user_id', userId)))
+      .query(Q.and(
+        Q.where('date', selectedDate),
+        Q.where('user_id', userId),
+        Q.where('status', Q.notEq('canceled')),
+      ))
       .fetch()
       .then((raw) => {
         if (cancelled) return;
@@ -134,6 +143,20 @@ export default function TourneeScreen() {
   // ── Stats ─────────────────────────────────────────────────────────────────
 
   const stats = useMemo(() => computeTourneeStats(appointmentViews), [appointmentViews]);
+
+  // ── Swipe boundaries (Hier / Auj. / Demain) ─────────────────────────────
+
+  const today = useMemo(() => getTodayString(), []);
+  const minDate = useMemo(() => addDays(today, -1), [today]);
+  const maxDate = useMemo(() => addDays(today, 1), [today]);
+
+  const handleSwipeLeft = useCallback(() => {
+    if (selectedDate < maxDate) setSelectedDate(addDays(selectedDate, 1));
+  }, [selectedDate, maxDate, setSelectedDate]);
+
+  const handleSwipeRight = useCallback(() => {
+    if (selectedDate > minDate) setSelectedDate(addDays(selectedDate, -1));
+  }, [selectedDate, minDate, setSelectedDate]);
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
 
@@ -172,6 +195,8 @@ export default function TourneeScreen() {
   const handleConfirmComplete = useCallback(async () => {
     if (!pendingAppointment) return;
     setShowConfirmModal(false);
+    // Animate the list transition when a card changes to completed state
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     await markAsCompleted(
       pendingAppointment.id,
       pendingAppointment.serverId,
@@ -188,10 +213,16 @@ export default function TourneeScreen() {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    // TODO (M3): wire up performSync(database, apiClient) when sync engine is available
-    await new Promise<void>((resolve) => setTimeout(resolve, 600));
+    try {
+      const { performSync } = await import('@/db/sync');
+      const { api } = await import('@/services/api');
+      await performSync(database, api);
+      bumpRefreshKey();
+    } catch {
+      // Sync failure is non-blocking — the local data is still displayed
+    }
     setIsRefreshing(false);
-  }, []);
+  }, [database, bumpRefreshKey]);
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
@@ -221,12 +252,14 @@ export default function TourneeScreen() {
   );
 
   const ListEmptyComponent = useMemo(() => {
-    if (isLoading) return null;
+    if (isLoading) {
+      return <SkeletonLoader type="appointment-card" count={5} />;
+    }
     return (
       <EmptyState
         icon="calendar-outline"
-        title="Aucun rendez-vous"
-        message="Aucun rendez-vous n'est planifie pour ce jour."
+        title="Pas de RDV ce jour"
+        message="Swipez pour changer de jour"
       />
     );
   }, [isLoading]);
@@ -234,47 +267,49 @@ export default function TourneeScreen() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <View style={styles.container}>
-      {/* Error banner — shown when a write operation fails */}
-      {tourneeError != null && (
-        <Pressable onPress={clearError} style={styles.errorBanner}>
-          <Text style={styles.errorBannerText}>{tourneeError}</Text>
-          <Text style={styles.errorDismiss}>Fermer</Text>
-        </Pressable>
-      )}
+    <SwipeDateContainer onSwipeLeft={handleSwipeLeft} onSwipeRight={handleSwipeRight}>
+      <View style={styles.container}>
+        {/* Error banner — shown when a write operation fails */}
+        {tourneeError != null && (
+          <Pressable onPress={clearError} style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>{tourneeError}</Text>
+            <Text style={styles.errorDismiss}>Fermer</Text>
+          </Pressable>
+        )}
 
-      <FlatList
-        data={appointmentViews}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        windowSize={5}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={Colors.primary}
-            colors={[Colors.primary]}
-          />
-        }
-      />
+        <FlatList
+          data={appointmentViews}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          windowSize={5}
+          ListHeaderComponent={ListHeaderComponent}
+          ListEmptyComponent={ListEmptyComponent}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={Colors.primary}
+              colors={[Colors.primary]}
+            />
+          }
+        />
 
-      <ConfirmationModal
-        visible={showConfirmModal}
-        title="Marquer comme realise"
-        message={
-          pendingAppointment != null
-            ? `Confirmer la realisation du rendez-vous avec ${pendingAppointment.patient.displayName} ?`
-            : 'Confirmer la realisation de ce rendez-vous ?'
-        }
-        confirmLabel="Marquer realise"
-        cancelLabel="Annuler"
-        onConfirm={handleConfirmComplete}
-        onCancel={handleCancelConfirm}
-      />
-    </View>
+        <ConfirmationModal
+          visible={showConfirmModal}
+          title="Marquer comme realise"
+          message={
+            pendingAppointment != null
+              ? `Confirmer la realisation du rendez-vous avec ${pendingAppointment.patient.displayName} ?`
+              : 'Confirmer la realisation de ce rendez-vous ?'
+          }
+          confirmLabel="Marquer realise"
+          cancelLabel="Annuler"
+          onConfirm={handleConfirmComplete}
+          onCancel={handleCancelConfirm}
+        />
+      </View>
+    </SwipeDateContainer>
   );
 }
 

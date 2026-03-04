@@ -9,21 +9,23 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { FlatList, View, Text, Pressable, StyleSheet } from 'react-native';
+import { FlatList, View, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuthStore } from '@/stores/authStore';
 import { usePreparationStore } from '@/stores/preparationStore';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useScreenProtection } from '@/security/screenProtection';
-import { getTodayString, addDays, getRelativeDayLabel } from '@/utils/dateHelpers';
+import { getTodayString, addDays } from '@/utils/dateHelpers';
 import type { PatientPreparation } from '@/services/preparationService';
 import PreparationHeader from '@/components/preparation/PreparationHeader';
 import PreparationCard from '@/components/preparation/PreparationCard';
 import DailySynthesis from '@/components/preparation/DailySynthesis';
+import DateSelector from '@/components/tournee/DateSelector';
+import type { DaySelectorItem } from '@/components/tournee/DateSelector';
 import EmptyState from '@/components/ui/EmptyState';
-import LoadingScreen from '@/components/ui/LoadingScreen';
+import SkeletonLoader from '@/components/ui/SkeletonLoader';
+import SwipeDateContainer from '@/components/ui/SwipeDateContainer';
 import { Colors } from '@/constants/colors';
 
 export default function PreparationScreen() {
@@ -61,16 +63,19 @@ export default function PreparationScreen() {
   const tomorrow = useMemo(() => addDays(today, 1), [today]);
   const dayAfterTomorrow = useMemo(() => addDays(today, 2), [today]);
 
-  const isToday = preparationDate === today;
-  const isTomorrow = preparationDate === tomorrow;
+  const handleSwipeLeft = useCallback(() => {
+    if (preparationDate < dayAfterTomorrow) setPreparationDate(addDays(preparationDate, 1));
+  }, [preparationDate, dayAfterTomorrow, setPreparationDate]);
 
-  const handleDateToggle = useCallback(() => {
-    if (isTomorrow) {
-      setPreparationDate(today);
-    } else {
-      setPreparationDate(tomorrow);
-    }
-  }, [isTomorrow, today, tomorrow, setPreparationDate]);
+  const handleSwipeRight = useCallback(() => {
+    if (preparationDate > today) setPreparationDate(addDays(preparationDate, -1));
+  }, [preparationDate, today, setPreparationDate]);
+
+  const preparationDays: DaySelectorItem[] = useMemo(() => [
+    { date: today, label: "Auj." },
+    { date: tomorrow, label: 'Demain' },
+    { date: dayAfterTomorrow, label: 'J+2' },
+  ], [today, tomorrow, dayAfterTomorrow]);
 
   // Pull-to-refresh
   const handleRefresh = useCallback(() => {
@@ -125,100 +130,65 @@ export default function PreparationScreen() {
 
   // Loading state
   if (isLoading && !data) {
-    return <LoadingScreen message="Preparation de votre journee..." />;
+    return (
+      <SwipeDateContainer onSwipeLeft={handleSwipeLeft} onSwipeRight={handleSwipeRight}>
+        <View style={styles.container}>
+          <DateSelector selectedDate={preparationDate} onDateChange={setPreparationDate} days={preparationDays} />
+          <SkeletonLoader type="preparation-card" count={4} />
+        </View>
+      </SwipeDateContainer>
+    );
   }
 
   // Empty state
   if (data && data.totalPatients === 0) {
-    const relativeLabel = getRelativeDayLabel(preparationDate);
     return (
-      <View style={styles.emptyContainer}>
-        <EmptyState
-          icon="moon-outline"
-          title={`Pas de RDV ${relativeLabel?.toLowerCase() ?? 'ce jour'}`}
-          message="Profitez de votre soiree"
-          actionLabel={isToday ? 'Voir demain' : 'Voir aujourd\'hui'}
-          onAction={handleDateToggle}
-        />
-      </View>
+      <SwipeDateContainer onSwipeLeft={handleSwipeLeft} onSwipeRight={handleSwipeRight}>
+        <View style={styles.container}>
+          <DateSelector selectedDate={preparationDate} onDateChange={setPreparationDate} days={preparationDays} />
+          <View style={styles.emptyContainer}>
+            <EmptyState
+              icon="moon-outline"
+              title="Pas de RDV ce jour"
+              message="Swipez pour changer de jour"
+            />
+          </View>
+        </View>
+      </SwipeDateContainer>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Date toggle pills */}
-      <View style={styles.dateToggle}>
-        <DatePill
-          label="Aujourd'hui"
-          isActive={isToday}
-          onPress={() => setPreparationDate(today)}
-        />
-        <DatePill
-          label="Demain"
-          isActive={isTomorrow}
-          onPress={() => setPreparationDate(tomorrow)}
-        />
-        <DatePill
-          label="J+2"
-          isActive={preparationDate === dayAfterTomorrow}
-          onPress={() => setPreparationDate(dayAfterTomorrow)}
+    <SwipeDateContainer onSwipeLeft={handleSwipeLeft} onSwipeRight={handleSwipeRight}>
+      <View style={styles.container}>
+        <DateSelector selectedDate={preparationDate} onDateChange={setPreparationDate} days={preparationDays} />
+
+        <FlatList
+          data={data?.patients ?? []}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          ListHeaderComponent={
+            data ? (
+              <>
+                <PreparationHeader
+                  date={data.date}
+                  totalPatients={data.totalPatients}
+                  patientsWithNewInfo={data.patientsWithNewInfo}
+                  source={source}
+                />
+                {data.totalPatients > 0 && (
+                  <DailySynthesis data={data} />
+                )}
+              </>
+            ) : null
+          }
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
         />
       </View>
-
-      <FlatList
-        data={data?.patients ?? []}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        ListHeaderComponent={
-          data ? (
-            <>
-              <PreparationHeader
-                date={data.date}
-                totalPatients={data.totalPatients}
-                patientsWithNewInfo={data.patientsWithNewInfo}
-                source={source}
-              />
-              {data.totalPatients > 0 && (
-                <DailySynthesis data={data} />
-              )}
-            </>
-          ) : null
-        }
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshing={isRefreshing}
-        onRefresh={handleRefresh}
-      />
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Date pill sub-component
-// ---------------------------------------------------------------------------
-
-function DatePill({
-  label,
-  isActive,
-  onPress,
-}: {
-  label: string;
-  isActive: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.pill,
-        isActive && styles.pillActive,
-        pressed && styles.pillPressed,
-      ]}
-    >
-      <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
-        {label}
-      </Text>
-    </Pressable>
+    </SwipeDateContainer>
   );
 }
 
@@ -238,35 +208,5 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 32,
-  },
-  // Date toggle
-  dateToggle: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: Colors.borderLight,
-  },
-  pillActive: {
-    backgroundColor: Colors.primary,
-  },
-  pillPressed: {
-    opacity: 0.8,
-  },
-  pillText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  pillTextActive: {
-    color: Colors.white,
   },
 });

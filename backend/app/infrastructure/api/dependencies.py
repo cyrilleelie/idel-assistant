@@ -27,6 +27,7 @@ from app.infrastructure.persistence.repositories import (
     SQLAlchemyScheduleAssignmentRepo,
     SQLAlchemySectorRepo,
     SQLAlchemyTariffUpdateRepo,
+    SQLAlchemyTransmissionRepo,
     SQLAlchemyUserRepo,
 )
 from app.infrastructure.persistence.repositories.sqlalchemy_care_protocol_repo import (
@@ -251,6 +252,13 @@ def get_rpps_doctor_repo(
     db: AsyncSession = Depends(get_db),
 ) -> SQLAlchemyRppsDoctorRepo:
     return SQLAlchemyRppsDoctorRepo(db)
+
+
+def get_transmission_repository(
+    db: AsyncSession = Depends(get_db),
+    km: KeyManager = Depends(get_key_manager),
+) -> SQLAlchemyTransmissionRepo:
+    return SQLAlchemyTransmissionRepo(db, km)
 
 
 def get_routing_service() -> FakeRoutingService:

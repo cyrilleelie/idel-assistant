@@ -19,13 +19,12 @@ export const api = axios.create({
   },
 });
 
-/** Axios instance for file uploads with a longer timeout */
+/** Axios instance for file uploads with a longer timeout.
+ * Note: Do NOT set Content-Type manually — axios/RN sets the correct
+ * multipart boundary automatically when given FormData. */
 export const uploadApiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: API_UPLOAD_TIMEOUT_MS,
-  headers: {
-    'Content-Type': 'multipart/form-data',
-  },
 });
 
 // Extend InternalAxiosRequestConfig to include our retry flag

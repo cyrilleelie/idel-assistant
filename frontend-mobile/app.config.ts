@@ -17,11 +17,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.idelassistant.app',
+    buildNumber: '1',
     infoPlist: {
-      NSCameraUsageDescription: 'Scanner les ordonnances et documents médicaux',
+      NSCameraUsageDescription: 'Scanner les ordonnances et documents medicaux',
       NSMicrophoneUsageDescription: 'Enregistrer les transmissions vocales',
-      NSLocationWhenInUseUsageDescription: 'Afficher votre tournée sur la carte',
-      NSFaceIDUsageDescription: "Déverrouiller l'application de manière sécurisée",
+      NSLocationWhenInUseUsageDescription: 'Afficher votre tournee sur la carte',
+      NSFaceIDUsageDescription: "Deverrouiller l'application de maniere securisee",
     },
   },
   android: {
@@ -35,8 +36,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'ACCESS_FINE_LOCATION',
       'ACCESS_COARSE_LOCATION',
       'VIBRATE',
+      'RECEIVE_BOOT_COMPLETED',
+      'SCHEDULE_EXACT_ALARM',
     ],
     package: 'com.idelassistant.app',
+    versionCode: 1,
   },
   web: {
     bundler: 'metro',
@@ -47,7 +51,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-router',
     'expo-secure-store',
     ['expo-camera', { cameraPermission: 'Scanner les ordonnances' }],
-    ['expo-location', { locationWhenInUsePermission: 'Afficher votre tournée sur la carte' }],
+    ['expo-location', { locationWhenInUsePermission: 'Afficher votre tournee sur la carte' }],
+    [
+      'expo-notifications',
+      {
+        icon: './assets/images/notification-icon.png',
+        color: '#2563EB',
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

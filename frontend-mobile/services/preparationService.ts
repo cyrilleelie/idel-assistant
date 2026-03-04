@@ -206,10 +206,32 @@ export async function buildPreparationFromLocal(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return String((a as any)._raw.care_type_code ?? '');
     });
-    const careTypeLabels = appts.map((a) => {
+
+    // Build care type labels from care_details (prescription labels) when available,
+    // falling back to care_type_label
+    const careTypeLabels: string[] = [];
+    for (const a of appts) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return String((a as any)._raw.care_type_label ?? '');
-    });
+      const raw = (a as any)._raw;
+      const careDetailsStr = raw.care_details as string | null;
+      if (careDetailsStr) {
+        try {
+          const parsed = JSON.parse(careDetailsStr) as Array<{ label: string; description: string }>;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            for (const p of parsed) {
+              if (p.label) careTypeLabels.push(p.label);
+            }
+            continue;
+          }
+        } catch {
+          // Fall through to care_type_label
+        }
+      }
+      const label = String(raw.care_type_label ?? '');
+      if (label && label !== String(raw.care_type_code ?? '')) {
+        careTypeLabels.push(label);
+      }
+    }
 
     const transmissions = transmissionMap.get(pid) ?? [];
     const lastVisit = lastVisitMap.get(pid);
@@ -475,7 +497,8 @@ export function buildDailySynthesisSections(data: PreparationData): SynthesisSec
     const lines: string[] = [];
     const timeFormatted = p.appointmentTime.replace(':', ' heures ');
 
-    lines.push(`À ${timeFormatted}, ${p.patientName}. ${p.careTypes.join(' plus ')}.`);
+    const careLabel = p.careTypeLabels.length > 0 ? p.careTypeLabels.join(' plus ') : p.careTypes.join(' plus ');
+    lines.push(`À ${timeFormatted}, ${p.patientName}. ${careLabel}.`);
 
     if (p.hasNewInfo && p.transmissionsSinceLastVisit.length > 0) {
       const txCount = p.transmissionsSinceLastVisit.length;

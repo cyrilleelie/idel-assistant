@@ -168,6 +168,14 @@ export const useTourneeStore = create<TourneeState & TourneeActions>()((set, get
         if (isOnline && serverId) {
           try {
             await api.post(`/appointments/${serverId}/complete`);
+            // Sync pull to fetch the auto-generated invoice from the server
+            try {
+              const { performSync } = await import('@/db/sync');
+              await performSync(database, api);
+              set((s) => ({ refreshKey: s.refreshKey + 1 }));
+            } catch {
+              // Invoice will arrive on next manual sync — non-critical
+            }
           } catch {
             await globalQueue.enqueue('POST', `/appointments/${serverId}/complete`);
           }

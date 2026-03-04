@@ -56,7 +56,10 @@ export default function TourneeProgress({ stats }: TourneeProgressProps) {
   const fillPercent = Math.min(100, Math.max(0, progressPercent));
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      accessibilityLabel={`${totalLabel}, ${completedLabel}${canceledLabel}`}
+    >
       {/* Summary text row */}
       <View style={styles.summaryRow}>
         <Text style={styles.summaryText}>

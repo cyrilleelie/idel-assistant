@@ -75,7 +75,12 @@ export default function Toast() {
         { transform: [{ translateY }] },
       ]}
     >
-      <Pressable onPress={dismiss} style={styles.content}>
+      <Pressable
+        onPress={dismiss}
+        style={styles.content}
+        accessibilityRole="alert"
+        accessibilityLabel={message}
+      >
         <Ionicons name={ICON_MAP[type]} size={20} color={Colors.white} />
         <Text style={styles.message} numberOfLines={2}>
           {message}

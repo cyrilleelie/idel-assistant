@@ -13,6 +13,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAudit } from '@/hooks/useAudit';
 import {
@@ -90,6 +91,9 @@ export default function ScanScreen() {
 
       try {
         await saveDocument(database, patientId, imageUri, metadata);
+
+        // Haptic feedback on successful scan
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         // Audit log (fire-and-forget)
         logAccess('scan_document', 'document', patientId);

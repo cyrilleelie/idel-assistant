@@ -11,9 +11,12 @@ from app.domain.repositories.transmission_repository import TransmissionReposito
 class CreateTransmissionDTO:
     patient_id: UUID
     idel_id: UUID
-    transcription: str
-    structured_data: dict
+    type: str = "written"
+    status: str = "draft"
+    transcription: str = ""
+    structured_data: dict | None = None
     appointment_id: UUID | None = None
+    audio_file_path: str | None = None
     recording_duration_seconds: int = 0
     generation_time_ms: int = 0
 
@@ -27,9 +30,12 @@ class CreateTransmissionUseCase:
             cabinet_id=cabinet_id,
             idel_id=dto.idel_id,
             patient_id=dto.patient_id,
+            type=dto.type,
+            status=dto.status,
             appointment_id=dto.appointment_id,
             transcription=dto.transcription,
-            structured_data=dto.structured_data,
+            structured_data=dto.structured_data or {},
+            audio_file_path=dto.audio_file_path,
             recording_duration_seconds=dto.recording_duration_seconds,
             generation_time_ms=dto.generation_time_ms,
         )

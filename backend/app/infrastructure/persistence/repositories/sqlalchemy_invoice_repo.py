@@ -77,6 +77,18 @@ class SQLAlchemyInvoiceRepo(InvoiceRepository):
         model = result.scalar_one_or_none()
         return self._model_to_entity(model) if model else None
 
+    async def get_by_appointment_id(self, appointment_id: UUID, cabinet_id: UUID) -> Invoice | None:
+        result = await self._session.execute(
+            select(InvoiceModel)
+            .options(selectinload(InvoiceModel.lines))
+            .where(
+                InvoiceModel.appointment_id == appointment_id,
+                InvoiceModel.cabinet_id == cabinet_id,
+            )
+        )
+        model = result.scalar_one_or_none()
+        return self._model_to_entity(model) if model else None
+
     async def list_invoices(
         self,
         cabinet_id: UUID,

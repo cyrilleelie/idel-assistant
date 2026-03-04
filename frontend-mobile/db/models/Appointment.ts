@@ -19,6 +19,7 @@ export default class Appointment extends Model {
   @field('notes') notes!: string | null;
   @field('sort_order') sortOrder!: number;
   @field('completed_at') completedAt!: number | null;
+  @field('care_details') careDetails!: string | null;
   @field('last_synced_at') lastSyncedAt!: number;
 
   /** Whether this appointment has been completed */

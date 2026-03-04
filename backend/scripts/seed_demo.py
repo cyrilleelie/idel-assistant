@@ -223,27 +223,45 @@ async def main():
 
         await session.flush()
 
-        # --- Appointments (today, 10 RDV) ---
-        def make_dt(hour, minute):
-            return datetime.datetime(TODAY.year, TODAY.month, TODAY.day, hour, minute, tzinfo=datetime.UTC)
+        # --- Appointments (today + tomorrow) ---
+        TOMORROW = TODAY + datetime.timedelta(days=1)
+
+        def make_dt(day, hour, minute):
+            from zoneinfo import ZoneInfo
+            return datetime.datetime(day.year, day.month, day.day, hour, minute, tzinfo=ZoneInfo("Europe/Paris"))
 
         # Indices in patients_data:
         # 0=Lucienne(Damvix) 1=Marcel 2=Yvette 3=Henri 4=Paulette 5=Andre
         # 6=Jeannine(Maillé) 7=Raymond 8=Simone 9=Bernard 10=Odette
         # 11=Madeleine(St-Sigismond) 12=Rene 13=Colette 14=Jean-Claude
         # 15=Germaine(Mazeau) 16=Roger 17=Therese 18=Michel(archived) 19=Monique
-        appts = [
-            (patient_models[0],  make_dt(7, 30),  20, "injection_insuline"),
-            (patient_models[4],  make_dt(8, 0),   15, "prise_de_sang"),
-            (patient_models[1],  make_dt(8, 30),  30, "pansement"),
-            (patient_models[2],  make_dt(9, 15),  30, "soins_hygiene"),
-            (patient_models[6],  make_dt(10, 0),  20, "injection_insuline"),
-            (patient_models[8],  make_dt(10, 30), 45, "pansement"),
-            (patient_models[10], make_dt(11, 30), 15, "surveillance_tension"),
-            (patient_models[3],  make_dt(13, 30), 45, "perfusion"),
-            (patient_models[16], make_dt(14, 30), 30, "pansement"),
-            (patient_models[11], make_dt(15, 30), 30, "soins_hygiene"),
+
+        # Today: 10 RDV
+        appts_today = [
+            (patient_models[0],  make_dt(TODAY, 7, 30),  20, "injection_insuline"),
+            (patient_models[4],  make_dt(TODAY, 8, 0),   15, "prise_de_sang"),
+            (patient_models[1],  make_dt(TODAY, 8, 30),  30, "pansement"),
+            (patient_models[2],  make_dt(TODAY, 9, 15),  30, "soins_hygiene"),
+            (patient_models[6],  make_dt(TODAY, 10, 0),  20, "injection_insuline"),
+            (patient_models[8],  make_dt(TODAY, 10, 30), 45, "pansement"),
+            (patient_models[10], make_dt(TODAY, 11, 30), 15, "surveillance_tension"),
+            (patient_models[3],  make_dt(TODAY, 13, 30), 45, "perfusion"),
+            (patient_models[16], make_dt(TODAY, 14, 30), 30, "pansement"),
+            (patient_models[11], make_dt(TODAY, 15, 30), 30, "soins_hygiene"),
         ]
+
+        # Tomorrow: 7 RDV
+        appts_tomorrow = [
+            (patient_models[0],  make_dt(TOMORROW, 7, 30),  20, "injection_insuline"),
+            (patient_models[5],  make_dt(TOMORROW, 8, 15),  30, "pansement"),
+            (patient_models[7],  make_dt(TOMORROW, 9, 0),   20, "prise_de_sang"),
+            (patient_models[12], make_dt(TOMORROW, 10, 0),  30, "soins_hygiene"),
+            (patient_models[13], make_dt(TOMORROW, 11, 0),  15, "surveillance_tension"),
+            (patient_models[15], make_dt(TOMORROW, 14, 0),  45, "perfusion"),
+            (patient_models[17], make_dt(TOMORROW, 15, 30), 30, "pansement"),
+        ]
+
+        appts = appts_today + appts_tomorrow
 
         for (patient, scheduled, dur, care) in appts:
             a = AppointmentModel(
@@ -274,7 +292,8 @@ async def main():
         print(f"  Secteurs: 3 (Damvix, Nord/Maillé, Sud/Mazeau-Sigismond)")
         print(f"  Patients: {len(patient_models)} ({active_count} actifs, {archived_count} inactifs)")
         print(f"  Communes: Damvix (6), Maillé (5), Saint-Sigismond (4), Le Mazeau (5)")
-        print(f"  RDV aujourd'hui ({TODAY}): {len(appts)}")
+        print(f"  RDV aujourd'hui ({TODAY}): {len(appts_today)}")
+        print(f"  RDV demain ({TOMORROW}): {len(appts_tomorrow)}")
         print()
         print("  Connectez-vous avec ces identifiants dans l'app.")
         print("=" * 50)

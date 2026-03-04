@@ -45,9 +45,12 @@ class SQLAlchemyTransmissionRepo(TransmissionRepository):
             cabinet_id=cabinet_id,
             idel_id=model.idel_id,
             patient_id=model.patient_id,
+            type=model.type or "written",
+            status=model.status or "draft",
             appointment_id=model.appointment_id,
             transcription=transcription,
             structured_data=model.structured_data or {},
+            audio_file_path=model.audio_file_path,
             recording_duration_seconds=model.recording_duration_seconds or 0,
             generation_time_ms=model.generation_time_ms or 0,
             created_at=model.created_at or datetime.datetime.now(datetime.UTC),
@@ -91,6 +94,65 @@ class SQLAlchemyTransmissionRepo(TransmissionRepository):
         models = result.scalars().all()
         return [self._to_entity(m, cabinet_id) for m in models], total
 
+    async def list_by_cabinet(
+        self,
+        cabinet_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[Transmission], int]:
+        count_result = await self._db.execute(
+            select(func.count()).where(
+                TransmissionModel.cabinet_id == cabinet_id,
+            )
+        )
+        total = count_result.scalar_one()
+
+        result = await self._db.execute(
+            select(TransmissionModel)
+            .where(TransmissionModel.cabinet_id == cabinet_id)
+            .order_by(TransmissionModel.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        models = result.scalars().all()
+        return [self._to_entity(m, cabinet_id) for m in models], total
+
+    async def list_by_patient_since(
+        self,
+        patient_id: UUID,
+        cabinet_id: UUID,
+        since: datetime.datetime,
+    ) -> list[Transmission]:
+        """Returns transmissions for a patient created since a given datetime."""
+        result = await self._db.execute(
+            select(TransmissionModel)
+            .where(
+                TransmissionModel.patient_id == patient_id,
+                TransmissionModel.cabinet_id == cabinet_id,
+                TransmissionModel.created_at >= since,
+            )
+            .order_by(TransmissionModel.created_at.desc())
+        )
+        models = result.scalars().all()
+        return [self._to_entity(m, cabinet_id) for m in models]
+
+    async def list_updated_since(
+        self,
+        cabinet_id: UUID,
+        since: datetime.datetime,
+    ) -> list[Transmission]:
+        """Returns all transmissions updated since a given datetime (for sync)."""
+        result = await self._db.execute(
+            select(TransmissionModel)
+            .where(
+                TransmissionModel.cabinet_id == cabinet_id,
+                TransmissionModel.updated_at >= since,
+            )
+            .order_by(TransmissionModel.updated_at.asc())
+        )
+        models = result.scalars().all()
+        return [self._to_entity(m, cabinet_id) for m in models]
+
     async def create(
         self,
         transmission: Transmission,
@@ -110,8 +172,11 @@ class SQLAlchemyTransmissionRepo(TransmissionRepository):
             idel_id=transmission.idel_id,
             patient_id=transmission.patient_id,
             appointment_id=transmission.appointment_id,
+            type=transmission.type,
+            status=transmission.status,
             transcription_encrypted=encrypted_transcription,
             structured_data=transmission.structured_data,
+            audio_file_path=transmission.audio_file_path,
             recording_duration_seconds=transmission.recording_duration_seconds,
             generation_time_ms=transmission.generation_time_ms,
         )
@@ -128,6 +193,10 @@ class SQLAlchemyTransmissionRepo(TransmissionRepository):
         if model is None:
             raise ValueError(f"Transmission introuvable : {transmission.id}")
 
+        model.type = transmission.type
+        model.status = transmission.status
+        model.audio_file_path = transmission.audio_file_path
+
         if transmission.transcription:
             try:
                 key = self._cabinet_key(transmission.cabinet_id)
@@ -140,4 +209,5 @@ class SQLAlchemyTransmissionRepo(TransmissionRepository):
         model.generation_time_ms = transmission.generation_time_ms
 
         await self._db.flush()
+        await self._db.refresh(model)
         return self._to_entity(model, transmission.cabinet_id)

@@ -152,6 +152,53 @@ function ActionButton({ icon, label, onPress, variant = 'default' }: ActionButto
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+interface CareDetailItem {
+  label: string;
+  description: string;
+}
+
+/**
+ * Extracts care prescription details from an appointment.
+ *
+ * Priority:
+ * 1. `careDetails` JSON (includes label + description from prescriptions)
+ * 2. `careTypeLabel` (comma-separated labels, no descriptions)
+ * 3. `careTypeCode` as final fallback
+ */
+function parseCareDetails(appt: Appointment): CareDetailItem[] {
+  // 1. Try JSON care_details from sync (has descriptions)
+  if (appt.careDetails) {
+    try {
+      const parsed = JSON.parse(appt.careDetails) as Array<{
+        label?: string;
+        description?: string;
+      }>;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((p) => ({
+          label: p.label || '',
+          description: p.description || '',
+        }));
+      }
+    } catch {
+      // Malformed JSON — fall through
+    }
+  }
+
+  // 2. Fall back to careTypeLabel (comma-separated, no descriptions)
+  if (appt.careTypeLabel && appt.careTypeLabel !== appt.careTypeCode) {
+    return appt.careTypeLabel
+      .split(', ')
+      .map((l) => ({ label: l, description: '' }));
+  }
+
+  // 3. Final fallback: raw care_type code
+  return [{ label: appt.careTypeCode, description: '' }];
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -389,15 +436,31 @@ export default function AppointmentDetailScreen() {
           </InfoRow>
         </View>
 
-        {/* Care type section */}
+        {/* Care type section — show prescription labels + descriptions */}
         <Section title="SOINS PREVUS">
-          <View style={styles.careRow}>
-            <Text style={styles.careCode}>{appointment.careTypeCode}</Text>
-            <Text style={styles.careDash}> — </Text>
-            <Text style={styles.careLabel} numberOfLines={3}>
-              {appointment.careTypeLabel}
-            </Text>
-          </View>
+          {parseCareDetails(appointment).map((item, idx) => (
+            <View
+              key={idx}
+              style={[styles.careRow, idx > 0 && styles.careRowExtra]}
+            >
+              <Ionicons
+                name="medkit-outline"
+                size={16}
+                color={Colors.primary}
+                style={styles.careIcon}
+              />
+              <View style={styles.careTextCol}>
+                <Text style={styles.careLabel} numberOfLines={2}>
+                  {item.label}
+                </Text>
+                {item.description ? (
+                  <Text style={styles.careDescription} numberOfLines={3}>
+                    {item.description}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          ))}
         </Section>
 
         {/* Notes section — only if non-empty */}
@@ -596,22 +659,31 @@ const styles = StyleSheet.create({
   // ── Care type ─────────────────────────────────────────────────────────────
   careRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  careRowExtra: {
+    marginTop: 8,
+  },
+  careIcon: {
+    marginRight: 10,
   },
   careCode: {
     fontSize: 15,
     fontWeight: '700',
     color: Colors.primary,
   },
-  careDash: {
-    fontSize: 15,
-    color: Colors.textTertiary,
+  careTextCol: {
+    flex: 1,
   },
   careLabel: {
     fontSize: 15,
     color: Colors.text,
-    flex: 1,
+  },
+  careDescription: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 2,
+    lineHeight: 18,
   },
 
   // ── Notes ─────────────────────────────────────────────────────────────────

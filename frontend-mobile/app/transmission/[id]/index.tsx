@@ -9,7 +9,7 @@
  * - Actions: Corriger (if transcribed + current user), Valider
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -90,6 +90,57 @@ export default function TransmissionDetailScreen() {
     };
   }, [id, database, logAccess]);
 
+  // ── Auto-refresh while pending transcription ─────────────────────────
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    // Only poll when status indicates server-side processing in progress
+    const isPending =
+      transmission?.status === 'pending_transcription' ||
+      transmission?.status === 'pending_synthesis';
+
+    if (!id || !isPending) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+
+    pollRef.current = setInterval(async () => {
+      try {
+        // Trigger sync to pull latest from server
+        const { triggerSync } = await import('@/services/syncService');
+        await triggerSync(database).catch(() => {});
+
+        // Re-read from WatermelonDB
+        const tx = await database.get<Transmission>('transmissions').find(id);
+        const txView = buildTransmissionView(tx);
+        setTransmission(txView);
+
+        // Load patient if not yet loaded
+        if (txView.patientId && !patient) {
+          try {
+            const pat = await database.get<Patient>('patients').find(txView.patientId);
+            setPatient(buildPatientView(pat));
+          } catch {
+            // Patient not found locally
+          }
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    }, 5000);
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [id, transmission?.status, database, patient]);
+
   // ── Validate ──────────────────────────────────────────────────────────
 
   const handleValidate = useCallback(async () => {
@@ -107,7 +158,7 @@ export default function TransmissionDetailScreen() {
 
       // Enqueue sync
       globalQueue
-        .enqueue('PATCH', `/api/v1/transmissions/${transmission.serverId}`, {
+        .enqueue('PATCH', `/transmissions/${transmission.serverId}`, {
           status: 'validated',
         })
         .catch(() => {});
@@ -152,8 +203,8 @@ export default function TransmissionDetailScreen() {
   }
 
   const isCurrentUser = transmission.authorUserId === userId;
-  const canEdit = transmission.status === 'transcribed' && isCurrentUser;
-  const canValidate = transmission.status === 'transcribed' && isCurrentUser;
+  const canEdit = (transmission.status === 'transcribed' || transmission.status === 'completed') && isCurrentUser;
+  const canValidate = (transmission.status === 'transcribed' || transmission.status === 'completed') && isCurrentUser;
   const { contentStructured, contentText, audioFilePath } = transmission;
 
   // Format date
@@ -231,12 +282,15 @@ export default function TransmissionDetailScreen() {
       )}
 
       {/* Pending transcription message */}
-      {transmission.status === 'pending_transcription' && (
+      {(transmission.status === 'pending_transcription' || transmission.status === 'pending_synthesis') && (
         <View style={styles.section}>
           <View style={styles.pendingCard}>
             <Ionicons name="hourglass-outline" size={24} color={Colors.warning} />
             <Text style={styles.pendingText}>
-              Transcription en cours de traitement. Le contenu apparaitra ici une fois le traitement termine.
+              {transmission.status === 'pending_transcription'
+                ? 'Transcription en cours de traitement...'
+                : 'Synthese IA en cours de generation...'}
+              {'\n'}Le contenu apparaitra automatiquement.
             </Text>
           </View>
         </View>
@@ -306,11 +360,15 @@ function StructuredField({ label, value }: { label: string; value: string }) {
 function statusBadgeColor(status: string) {
   switch (status) {
     case 'validated':
+    case 'completed':
       return { backgroundColor: Colors.successLight };
     case 'transcribed':
       return { backgroundColor: Colors.primaryUltraLight };
     case 'pending_transcription':
+    case 'pending_synthesis':
       return { backgroundColor: Colors.warningLight };
+    case 'error':
+      return { backgroundColor: Colors.errorLight };
     case 'draft':
       return { backgroundColor: Colors.borderLight };
     default:

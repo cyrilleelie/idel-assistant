@@ -158,8 +158,10 @@ export async function buildAppointmentViews(
     patientById.set(patient.id, patient);
   }
 
-  // Sort appointments by sortOrder ascending
-  const sorted = [...appointments].sort((a, b) => a.sortOrder - b.sortOrder);
+  // Sort appointments chronologically (startTime 'HH:MM'), fallback to sortOrder
+  const sorted = [...appointments].sort(
+    (a, b) => a.startTime.localeCompare(b.startTime) || a.sortOrder - b.sortOrder,
+  );
 
   // Build views with isNext = false initially
   let nextAssigned = false;

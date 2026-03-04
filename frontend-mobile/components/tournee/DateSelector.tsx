@@ -27,9 +27,16 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
+export interface DaySelectorItem {
+  date: string;
+  label: string;
+}
+
 interface DateSelectorProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
+  /** Custom day pills. Defaults to [Hier, Auj., Demain] when omitted. */
+  days?: DaySelectorItem[];
 }
 
 interface DayPill {
@@ -43,10 +50,19 @@ interface DayPill {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) {
+export default function DateSelector({ selectedDate, onDateChange, days }: DateSelectorProps) {
   const today = getTodayString();
 
   const pills: DayPill[] = useMemo(() => {
+    if (days) {
+      return days.map((d) => ({
+        date: d.date,
+        label: d.label,
+        isActive: selectedDate === d.date,
+        isDisabled: false,
+      }));
+    }
+
     const yesterday = addDays(today, -1);
     const tomorrow = addDays(today, 1);
 
@@ -70,7 +86,7 @@ export default function DateSelector({ selectedDate, onDateChange }: DateSelecto
         isDisabled: !isWithinOfflineWindow(tomorrow),
       },
     ];
-  }, [today, selectedDate]);
+  }, [today, selectedDate, days]);
 
   const relativeDayLabel = getRelativeDayLabel(selectedDate);
   const fullDateLabel = formatDateFrench(selectedDate);
@@ -169,7 +185,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
-    minHeight: 36,
+    minHeight: 44,
   },
   pillActive: {
     backgroundColor: Colors.primary,

@@ -39,6 +39,7 @@ export default React.memo(function TransmissionCard({
       onPress={onViewFull}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       accessibilityRole="button"
+      accessibilityLabel={`Transmission de ${authorName}, ${time}${isVocal ? ', vocale' : ''}`}
     >
       {/* Header: icon + time + author */}
       <View style={styles.header}>
@@ -129,6 +130,7 @@ function ActionButton({
       style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
       hitSlop={4}
       accessibilityRole="button"
+      accessibilityLabel={label}
     >
       <Ionicons name={icon} size={14} color={Colors.primary} />
       <Text style={styles.actionBtnText}>{label}</Text>
@@ -236,6 +238,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
+    minHeight: 44,
+    minWidth: 44,
   },
   actionBtnPressed: {
     backgroundColor: Colors.primaryUltraLight,

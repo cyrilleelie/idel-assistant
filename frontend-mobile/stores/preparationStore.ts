@@ -39,6 +39,7 @@ interface PreparationActions {
   ) => Promise<void>;
 
   setPreparationDate: (date: string) => void;
+  reset: () => void;
 }
 
 const initialState: PreparationState = {
@@ -105,6 +106,10 @@ export const usePreparationStore = create<PreparationState & PreparationActions>
 
     setPreparationDate: (date) => {
       set({ preparationDate: date });
+    },
+
+    reset: () => {
+      set({ ...initialState, preparationDate: addDays(getTodayString(), 1) });
     },
   }),
 );

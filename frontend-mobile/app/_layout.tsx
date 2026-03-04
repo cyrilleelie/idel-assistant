@@ -1,15 +1,22 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { Stack, useSegments, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SecurityGate } from '@/security/securityGate';
 import { DatabaseProvider } from '@/contexts/DatabaseContext';
 import { useAuthStore } from '@/stores/authStore';
 import { useSecurityStore } from '@/stores/securityStore';
+import { useNotificationStore } from '@/stores/notificationStore';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useAppState } from '@/hooks/useAppState';
+import {
+  configureNotifications,
+  registerForPushNotifications,
+  setupNotificationListeners,
+} from '@/services/notificationService';
 import Toast from '@/components/ui/Toast';
 import { Colors } from '@/constants/colors';
 
@@ -34,7 +41,7 @@ function OfflineBanner() {
   }
 
   return (
-    <View style={styles.offlineBanner}>
+    <View style={styles.offlineBanner} accessibilityRole="alert">
       <Text style={styles.offlineBannerText}>Mode hors-ligne</Text>
     </View>
   );
@@ -51,9 +58,54 @@ function RootNavigator() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLocked = useSecurityStore((s) => s.isLocked);
+  const setRegistered = useNotificationStore((s) => s.setRegistered);
+  const loadPreferences = useNotificationStore((s) => s.loadPreferences);
 
   // Track app state transitions for auto-lock
   useAppState();
+
+  // Notification initialization — only when authenticated and unlocked
+  const notifInitializedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || isLocked || notifInitializedRef.current) return;
+    notifInitializedRef.current = true;
+
+    // Configure notifications (handler + Android channel)
+    configureNotifications().catch(() => {
+      // Non-critical — app continues without notifications
+    });
+
+    // Register for push notifications
+    registerForPushNotifications()
+      .then((token) => {
+        if (token) {
+          setRegistered(token);
+        }
+      })
+      .catch(() => {
+        // Non-critical
+      });
+
+    // Load notification preferences from backend/cache
+    loadPreferences().catch(() => {
+      // Non-critical — defaults are already set
+    });
+
+    // Set up notification listeners
+    const cleanup = setupNotificationListeners();
+
+    return () => {
+      cleanup();
+    };
+  }, [isAuthenticated, isLocked, setRegistered, loadPreferences]);
+
+  // Reset notification init flag on logout so it re-initializes on next login
+  useEffect(() => {
+    if (!isAuthenticated) {
+      notifInitializedRef.current = false;
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     // Determine which route group the user is currently in
@@ -87,51 +139,16 @@ function RootNavigator() {
     <>
       <OfflineBanner />
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(lock)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="settings"
-          options={{
-            headerShown: false,
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="appointment/[id]"
-          options={{
-            headerShown: false,
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="patient/[id]"
-          options={{
-            headerShown: false,
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="transmission/new"
-          options={{
-            headerShown: false,
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="transmission/[id]"
-          options={{
-            headerShown: false,
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
-          name="invoice/[id]"
-          options={{
-            headerShown: false,
-            presentation: 'card',
-          }}
-        />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(lock)" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="settings" options={{ presentation: 'card' }} />
+        <Stack.Screen name="settings/change-pin" options={{ presentation: 'card' }} />
+        <Stack.Screen name="appointment/[id]" options={{ presentation: 'card' }} />
+        <Stack.Screen name="patient/[id]" options={{ presentation: 'card' }} />
+        <Stack.Screen name="transmission/new" options={{ presentation: 'card' }} />
+        <Stack.Screen name="transmission/[id]" options={{ presentation: 'card' }} />
+        <Stack.Screen name="invoice/[id]" options={{ presentation: 'card' }} />
         <Stack.Screen name="+not-found" />
       </Stack>
     </>
@@ -143,15 +160,17 @@ function RootNavigator() {
  */
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <SecurityGate>
-        <DatabaseProvider>
-          <StatusBar style="dark" />
-          <RootNavigator />
-          <Toast />
-        </DatabaseProvider>
-      </SecurityGate>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <SecurityGate>
+          <DatabaseProvider>
+            <StatusBar style="dark" />
+            <RootNavigator />
+            <Toast />
+          </DatabaseProvider>
+        </SecurityGate>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

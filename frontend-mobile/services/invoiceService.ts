@@ -77,20 +77,24 @@ function buildInvoiceDetail(invoice: Invoice, patient: Patient): InvoiceDetail {
   };
 }
 
+function parseActsFromServer(data: Record<string, unknown>): InvoiceAct[] {
+  const lines = data.lines ?? data.items;
+  if (!Array.isArray(lines)) return [];
+  return (lines as Record<string, unknown>[]).map((item) => ({
+    code: String(item.act_code ?? ''),
+    label: String(item.act_label ?? item.label ?? item.description ?? ''),
+    amount: Number(item.line_total ?? item.amount ?? 0),
+    coefficient: item.coefficient != null ? Number(item.coefficient) : undefined,
+    quantity: item.quantity != null ? Number(item.quantity) : undefined,
+  }));
+}
+
 function parseServerInvoice(
   data: Record<string, unknown>,
   patient: Patient,
   localId: string,
 ): InvoiceDetail {
-  const acts: InvoiceAct[] = Array.isArray(data.items)
-    ? (data.items as Record<string, unknown>[]).map((item) => ({
-        code: String(item.act_code ?? ''),
-        label: String(item.label ?? item.description ?? ''),
-        amount: Number(item.amount ?? 0),
-        coefficient: item.coefficient != null ? Number(item.coefficient) : undefined,
-        quantity: item.quantity != null ? Number(item.quantity) : undefined,
-      }))
-    : [];
+  const acts = parseActsFromServer(data);
 
   return {
     id: localId,
@@ -105,10 +109,10 @@ function parseServerInvoice(
     status: (data.status as InvoiceDetail['status']) ?? 'draft',
     vitaleStatus: (data.vitale_status as InvoiceDetail['vitaleStatus']) ?? 'not_read',
     acts,
-    totalAmount: Number(data.total_ttc ?? data.total_amount ?? 0),
-    amountAmo: Number(data.amount_amo ?? 0),
-    amountAmc: Number(data.amount_amc ?? 0),
-    amountPatient: Number(data.amount_patient ?? 0),
+    totalAmount: Number(data.total_amount ?? data.total_ttc ?? 0),
+    amountAmo: Number(data.total_amo ?? data.amount_amo ?? 0),
+    amountAmc: Number(data.total_amc ?? data.amount_amc ?? 0),
+    amountPatient: Number(data.total_patient ?? data.amount_patient ?? 0),
     pdfLocalPath: null,
   };
 }
@@ -134,12 +138,31 @@ export async function getInvoiceForAppointment(
 
   if (localInvoices.length > 0) {
     const invoice = localInvoices[0];
+    let patient: Patient;
     try {
-      const patient = await database.get<Patient>('patients').find(invoice.patientId);
-      return buildInvoiceDetail(invoice, patient);
+      patient = await database.get<Patient>('patients').find(invoice.patientId);
     } catch {
-      return buildInvoiceDetail(invoice, { firstName: '', lastName: 'Inconnu' } as Patient);
+      patient = { firstName: '', lastName: 'Inconnu' } as Patient;
     }
+    const detail = buildInvoiceDetail(invoice, patient);
+
+    // Enrich with acts + amounts from server (local DB doesn't store invoice lines)
+    if (apiClient) {
+      try {
+        // appointmentId here is the WatermelonDB ID (= server UUID via sync)
+        const response = await apiClient.get(`/appointments/${appointmentId}/invoice`);
+        const data = response.data as Record<string, unknown>;
+        detail.acts = parseActsFromServer(data);
+        detail.totalAmount = Number(data.total_amount ?? detail.totalAmount);
+        detail.amountAmo = Number(data.total_amo ?? detail.amountAmo);
+        detail.amountAmc = Number(data.total_amc ?? detail.amountAmc);
+        detail.amountPatient = Number(data.total_patient ?? detail.amountPatient);
+      } catch {
+        // Enrichment failure is non-critical
+      }
+    }
+
+    return detail;
   }
 
   // 2. Try server
@@ -208,22 +231,18 @@ export async function getInvoiceById(
     const patient = await database.get<Patient>('patients').find(invoice.patientId);
     const detail = buildInvoiceDetail(invoice, patient);
 
-    // If we have a server ID and online, try to enrich with acts
-    if (detail.serverId && apiClient && detail.acts.length === 0) {
+    // If we have a server ID and online, enrich with acts + amounts
+    if (detail.serverId && apiClient) {
       try {
         const response = await apiClient.get(`/invoices/${detail.serverId}`);
         const data = response.data as Record<string, unknown>;
-        if (Array.isArray(data.items)) {
-          detail.acts = (data.items as Record<string, unknown>[]).map((item) => ({
-            code: String(item.act_code ?? ''),
-            label: String(item.label ?? item.description ?? ''),
-            amount: Number(item.amount ?? 0),
-            coefficient: item.coefficient != null ? Number(item.coefficient) : undefined,
-            quantity: item.quantity != null ? Number(item.quantity) : undefined,
-          }));
-        }
+        detail.acts = parseActsFromServer(data);
+        detail.totalAmount = Number(data.total_amount ?? detail.totalAmount);
+        detail.amountAmo = Number(data.total_amo ?? detail.amountAmo);
+        detail.amountAmc = Number(data.total_amc ?? detail.amountAmc);
+        detail.amountPatient = Number(data.total_patient ?? detail.amountPatient);
       } catch {
-        // Acts enrichment failure is non-critical
+        // Enrichment failure is non-critical
       }
     }
 

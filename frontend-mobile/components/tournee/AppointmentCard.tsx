@@ -24,6 +24,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
 import Badge from '@/components/ui/Badge';
 import { formatTime } from '@/utils/dateHelpers';
@@ -162,6 +163,7 @@ function AppointmentCardInner({
   }, [appointment, onNavigate]);
 
   const handleMarkComplete = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onMarkComplete(appointment);
   }, [appointment, onMarkComplete]);
 

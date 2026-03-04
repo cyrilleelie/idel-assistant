@@ -1,6 +1,7 @@
 import { Directory, Paths } from 'expo-file-system';
 import { AuditLogger } from '@/security/auditLogger';
 import * as keyManager from '@/security/keyManager';
+import { getDatabaseRef } from '@/contexts/DatabaseContext';
 
 /**
  * Performs a secure wipe of all local data. This is used for:
@@ -22,14 +23,27 @@ export async function performSecureWipe(reason: string): Promise<void> {
     // Audit logging failure must not prevent wipe
   }
 
-  // Step 2: Delete the SQLite database file(s)
+  // Step 2: Reset WatermelonDB via unsafeResetDatabase()
+  // This drops all rows from every table while keeping the database
+  // instance and its adapter alive, so the app can immediately write
+  // new data after the next user logs in.
   try {
-    const sqliteDir = new Directory(Paths.document, 'SQLite');
-    if (sqliteDir.exists) {
-      sqliteDir.delete();
+    const db = getDatabaseRef();
+    if (db) {
+      await db.write(async () => {
+        await db.unsafeResetDatabase();
+      });
     }
   } catch {
-    // Continue with remaining wipe steps
+    // Fallback: delete SQLite files on disk (instance may be broken)
+    try {
+      const sqliteDir = new Directory(Paths.document, 'SQLite');
+      if (sqliteDir.exists) {
+        sqliteDir.delete();
+      }
+    } catch {
+      // Continue with remaining wipe steps
+    }
   }
 
   // Step 3: Delete encrypted/cached files in known directories
@@ -72,6 +86,20 @@ export async function performSecureWipe(reason: string): Promise<void> {
   try {
     const { useSyncStore } = await import('@/stores/syncStore');
     useSyncStore.getState().reset();
+  } catch {
+    // Store may not be initialized
+  }
+
+  try {
+    const { useTourneeStore } = await import('@/stores/tourneeStore');
+    useTourneeStore.getState().reset();
+  } catch {
+    // Store may not be initialized
+  }
+
+  try {
+    const { usePreparationStore } = await import('@/stores/preparationStore');
+    usePreparationStore.getState().reset();
   } catch {
     // Store may not be initialized
   }

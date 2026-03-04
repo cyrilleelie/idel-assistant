@@ -53,7 +53,12 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
         status: str | None = None,
         skip: int = 0,
         limit: int = 50,
+        date_from: datetime.date | None = None,
+        date_to: datetime.date | None = None,
     ) -> tuple[list[Appointment], int]:
+        from zoneinfo import ZoneInfo
+        paris_tz = ZoneInfo("Europe/Paris")
+
         query = select(AppointmentModel).where(
             AppointmentModel.cabinet_id == cabinet_id
         )
@@ -61,11 +66,18 @@ class SQLAlchemyAppointmentRepo(AppointmentRepository):
         if idel_id:
             query = query.where(AppointmentModel.idel_id == idel_id)
         if date:
-            day_start = datetime.datetime.combine(date, datetime.time.min, tzinfo=datetime.UTC)
-            day_end = datetime.datetime.combine(date, datetime.time.max, tzinfo=datetime.UTC)
+            # Use Paris timezone boundaries so date filtering matches local time
+            day_start = datetime.datetime.combine(date, datetime.time.min, tzinfo=paris_tz)
+            day_end = datetime.datetime.combine(date, datetime.time.max, tzinfo=paris_tz)
             query = query.where(
                 AppointmentModel.scheduled_at.between(day_start, day_end)
             )
+        if date_from:
+            range_start = datetime.datetime.combine(date_from, datetime.time.min, tzinfo=paris_tz)
+            query = query.where(AppointmentModel.scheduled_at >= range_start)
+        if date_to:
+            range_end = datetime.datetime.combine(date_to, datetime.time.max, tzinfo=paris_tz)
+            query = query.where(AppointmentModel.scheduled_at <= range_end)
         if status:
             query = query.where(AppointmentModel.status == status)
 

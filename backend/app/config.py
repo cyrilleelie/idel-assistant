@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     # Agent IA / Fine-tuning — itération E
     lora_model_name: str = ""                     # Ex: "idel-v1" — vide = pas de LoRA
 
+    # Secrétaire médical IA — itération F
+    receptionist_enabled: bool = False
+    receptionist_greeting_delay_ms: int = 500
+    ovh_sms_app_key: str = ""
+    ovh_sms_app_secret: str = ""
+    ovh_sms_consumer_key: str = ""
+    ovh_sms_account: str = ""
+    ovh_sms_sender: str = "Cabinet IDEL"
+    cabinet_service_token: str = ""               # Token service pour Asterisk → WS
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

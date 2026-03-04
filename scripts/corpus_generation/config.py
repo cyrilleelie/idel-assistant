@@ -12,10 +12,11 @@ class CorpusConfig:
     categories: dict[str, int] = field(default_factory=lambda: {
         "cotation_ngap": 5000,
         "transmission_dar": 4000,
-        "rdv_planning": 3000,
+        "appel_patient_rdv": 4000,
         "ordonnance": 3000,
         "reglementation": 3000,
-        "general": 2000,
+        "appel_difficile": 2000,
+        "general": 1000,
     })
 
     # Paramètres de génération

@@ -21,6 +21,7 @@ import { listCareLabels } from './api/care-labels';
 import { listCareActCodes } from './api/cotation';
 import ChatPanel from './components/agent/ChatPanel';
 import AgentMonitorWidget from './components/agent/AgentMonitorWidget';
+import ReceptionistMonitorWidget from './components/receptionist/ReceptionistMonitorWidget';
 import { useNavigationHistory } from './hooks/useNavigationHistory';
 import Header from './components/Header';
 import InfoBanner from './components/InfoBanner';
@@ -1474,6 +1475,7 @@ export default function App() {
           </button>
           <ChatPanel isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
           {userRole === 'admin' && <AgentMonitorWidget />}
+          {userRole === 'admin' && <ReceptionistMonitorWidget />}
         </>
       )}
 

@@ -39,6 +39,7 @@ from app.infrastructure.api.v1 import (
     transmission_routes,
     sync_routes,
     preparation_routes,
+    receptionist_routes,
 )
 from app.infrastructure.persistence.database import async_session_factory, engine
 from app.infrastructure.persistence.seeds.seed_ngap_catalog import seed_ngap_catalog
@@ -137,6 +138,7 @@ app.include_router(transmission_routes.router, prefix="/api/v1")
 app.include_router(sync_routes.router, prefix="/api/v1")
 app.include_router(preparation_routes.router, prefix="/api/v1")
 app.include_router(agent_routes.router, prefix="/api/v1")
+app.include_router(receptionist_routes.router, prefix="/api/v1")
 
 
 @app.exception_handler(RequestValidationError)

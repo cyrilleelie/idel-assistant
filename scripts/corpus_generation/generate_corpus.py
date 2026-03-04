@@ -1,6 +1,6 @@
 """Script principal de génération du corpus synthétique IDEL.
 
-Génère 20 000 exemples au total, les valide, et les sauvegarde.
+Génère 22 000 exemples au total, les valide, et les sauvegarde.
 
 Usage :
   python generate_corpus.py --dry-run     # Génère 10 exemples par catégorie pour tester
@@ -28,9 +28,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import CORPUS_CONFIG
 from generators.cotation_ngap import CotationNGAPGenerator
 from generators.transmission_dar import TransmissionDARGenerator
-from generators.rdv_planning import RDVPlanningGenerator
+from generators.appel_patient_rdv import AppelPatientRDVGenerator
 from generators.ordonnance import OrdonnanceGenerator
 from generators.reglementation import ReglementationGenerator
+from generators.appel_difficile import AppelDifficileGenerator
 from generators.general import GeneralConversationGenerator
 from validators.ngap_validator import NGAPValidator
 from validators.format_validator import FormatValidator
@@ -38,9 +39,10 @@ from validators.format_validator import FormatValidator
 CATEGORIES: dict[str, tuple[type, int]] = {
     "cotation_ngap": (CotationNGAPGenerator, CORPUS_CONFIG.categories["cotation_ngap"]),
     "transmission_dar": (TransmissionDARGenerator, CORPUS_CONFIG.categories["transmission_dar"]),
-    "rdv_planning": (RDVPlanningGenerator, CORPUS_CONFIG.categories["rdv_planning"]),
+    "appel_patient_rdv": (AppelPatientRDVGenerator, CORPUS_CONFIG.categories["appel_patient_rdv"]),
     "ordonnance": (OrdonnanceGenerator, CORPUS_CONFIG.categories["ordonnance"]),
     "reglementation": (ReglementationGenerator, CORPUS_CONFIG.categories["reglementation"]),
+    "appel_difficile": (AppelDifficileGenerator, CORPUS_CONFIG.categories["appel_difficile"]),
     "general": (GeneralConversationGenerator, CORPUS_CONFIG.categories["general"]),
 }
 

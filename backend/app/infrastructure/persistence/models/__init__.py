@@ -10,6 +10,7 @@ from app.infrastructure.persistence.models.document_model import DocumentModel
 from app.infrastructure.persistence.models.tariff_update_model import TariffUpdateModel
 from app.infrastructure.persistence.models.invoice_model import InvoiceLineModel, InvoiceModel
 from app.infrastructure.persistence.models.patient_model import PatientModel
+from app.infrastructure.persistence.models.receptionist_call_log_model import ReceptionistCallLogModel
 from app.infrastructure.persistence.models.sector_model import SectorModel
 from app.infrastructure.persistence.models.tournee_model import TourneeModel, TourneeStopModel
 from app.infrastructure.persistence.models.transmission_model import TransmissionModel
@@ -30,6 +31,7 @@ __all__ = [
     "InvoiceLineModel",
     "InvoiceModel",
     "PatientModel",
+    "ReceptionistCallLogModel",
     "SectorModel",
     "TourneeModel",
     "TourneeStopModel",

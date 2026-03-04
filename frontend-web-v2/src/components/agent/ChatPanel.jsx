@@ -151,6 +151,7 @@ export default function ChatPanel({ isOpen, onClose }) {
     connect,
     disconnect,
     toggleTts,
+    sessionId,
   } = useAgentWebSocket({ onAudioChunk: playChunk });
 
   const [activeMode, setActiveMode] = useState('general');

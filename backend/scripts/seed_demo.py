@@ -23,6 +23,7 @@ from app.infrastructure.persistence.models.cabinet_model import CabinetModel
 from app.infrastructure.persistence.models.patient_model import PatientModel
 from app.infrastructure.persistence.models.sector_model import SectorModel
 from app.infrastructure.persistence.models.appointment_model import AppointmentModel
+from app.infrastructure.persistence.models.transmission_model import TransmissionModel
 from app.infrastructure.security.password_handler import hash_password
 from app.infrastructure.security.encryption import encrypt, compute_search_hash
 from app.infrastructure.security.key_manager import KeyManager
@@ -263,6 +264,7 @@ async def main():
 
         appts = appts_today + appts_tomorrow
 
+        appt_models = []
         for (patient, scheduled, dur, care) in appts:
             a = AppointmentModel(
                 id=uuid4(), cabinet_id=cabinet_id, idel_id=user_id,
@@ -275,11 +277,293 @@ async def main():
                 created_by="manual",
             )
             session.add(a)
+            appt_models.append(a)
+
+        await session.flush()
+
+        # --- Transmissions (exemples variés) ---
+        # Dates passées pour les transmissions historiques
+        YESTERDAY = TODAY - datetime.timedelta(days=1)
+        TWO_DAYS_AGO = TODAY - datetime.timedelta(days=2)
+        THREE_DAYS_AGO = TODAY - datetime.timedelta(days=3)
+
+        transmissions_data = [
+            # 1. Transmission vocale complétée avec synthèse — Lucienne Moreau (diabète)
+            {
+                "patient": patient_models[0],
+                "appointment": appt_models[0],
+                "type": "vocal",
+                "status": "completed",
+                "transcription": (
+                    "Passage chez Madame Moreau ce matin a 7h30. Glycemie capillaire a jeun : "
+                    "1.42 g/L, un peu elevee par rapport a hier ou c'etait a 1.28. "
+                    "Injection insuline Lantus 22 unites dans la cuisse gauche, bonne rotation "
+                    "des points d'injection. Pas de lipodystrophie. La patiente se plaint de "
+                    "picotements dans les pieds depuis quelques jours, je note pour signaler au "
+                    "Dr Renaud lors du prochain passage. Etat general correct, patiente souriante. "
+                    "Petit-dejeuner pris avant mon arrivee, conforme au regime."
+                ),
+                "structured_data": {
+                    "synthese": "Suivi diabetique quotidien. Glycemie legerement elevee (1.42 g/L vs 1.28 la veille). Paresthesies des pieds a signaler au medecin traitant.",
+                    "soins": "Glycemie capillaire a jeun, injection insuline Lantus 22 UI cuisse gauche",
+                    "constantes": "Glycemie : 1.42 g/L (a jeun)",
+                    "observations": "Bonne rotation des points d'injection, pas de lipodystrophie. Picotements des pieds depuis quelques jours.",
+                    "actions": "Signaler paresthesies des pieds au Dr Renaud. Surveiller evolution glycemie.",
+                },
+                "recording_duration_seconds": 45,
+                "generation_time_ms": 3200,
+                "created_at": make_dt(YESTERDAY, 7, 52),
+            },
+            # 2. Transmission vocale validée — Marcel Gauthier (pansement)
+            {
+                "patient": patient_models[1],
+                "appointment": None,
+                "type": "vocal",
+                "status": "validated",
+                "transcription": (
+                    "Pansement de Monsieur Gauthier. Ulcere veineux jambe droite, face interne. "
+                    "Bonne evolution, le bourgeonnement progresse bien sur les berges. "
+                    "Nettoyage serum physiologique, meche Algostéril au centre, interface "
+                    "Urgotul, compresses, bande de contention Biflex 17. Pas de signe "
+                    "d'infection, pas d'odeur. Le patient dit avoir bien porte sa contention "
+                    "hier toute la journee. Prochain pansement dans 2 jours."
+                ),
+                "structured_data": {
+                    "synthese": "Pansement ulcere veineux jambe droite en bonne evolution. Bourgeonnement actif, pas d'infection.",
+                    "soins": "Refection pansement : nettoyage serum phy, meche Algosteril, interface Urgotul, compresses, bande Biflex 17",
+                    "constantes": "",
+                    "observations": "Bourgeonnement progressant sur les berges. Pas d'infection, pas d'odeur. Contention bien portee.",
+                    "actions": "Prochain pansement dans 2 jours. Continuer contention veineuse.",
+                },
+                "recording_duration_seconds": 38,
+                "generation_time_ms": 2800,
+                "created_at": make_dt(TWO_DAYS_AGO, 8, 45),
+            },
+            # 3. Transmission écrite complétée — Yvette Robin (Alzheimer)
+            {
+                "patient": patient_models[2],
+                "appointment": None,
+                "type": "written",
+                "status": "completed",
+                "transcription": (
+                    "Toilette et aide a l'habillage de Mme Robin. Patiente desorientee ce matin, "
+                    "ne reconnaissait pas son domicile. Agitation moderee en debut de soins, "
+                    "calmee apres quelques minutes. Peau seche au niveau des jambes, application "
+                    "de creme hydratante Dexeryl. Repas du midi prepare et laisse a portee. "
+                    "Pilulier du jour verifie, medications du matin prises. Fille prevenue par "
+                    "telephone de l'episode de desorientation."
+                ),
+                "structured_data": {
+                    "synthese": "Soins d'hygiene avec episode de desorientation et agitation moderee. Peau seche traitee. Famille prevenue.",
+                    "soins": "Toilette complete, aide habillage, application Dexeryl jambes, verification pilulier",
+                    "constantes": "",
+                    "observations": "Desorientation temporospatiale ce matin (ne reconnait pas son domicile). Agitation moderee en debut de soins. Peau seche jambes.",
+                    "actions": "Fille prevenue de l'episode. Surveiller frequence des episodes de desorientation. Signaler au Dr si aggravation.",
+                },
+                "recording_duration_seconds": 0,
+                "generation_time_ms": 2500,
+                "created_at": make_dt(YESTERDAY, 9, 35),
+            },
+            # 4. Transmission vocale complétée — Simone Dupuis (escarres)
+            {
+                "patient": patient_models[8],
+                "appointment": None,
+                "type": "vocal",
+                "status": "completed",
+                "transcription": (
+                    "Soins d'escarre sacree chez Madame Dupuis. Escarre stade 3, "
+                    "dimensions 4 cm par 3 cm, profondeur estimee 0.5 cm. Fond fibrineux "
+                    "jaune sur environ 40%, le reste en bourgeonnement rouge. Legere exsudation "
+                    "sereuse. Detersion mecanique douce a la curette des fibres, nettoyage "
+                    "serum physiologique. Application Purilon gel sur zones fibrineuses, "
+                    "Aquacel Foam en couverture. Patiente positionnee en decubitus lateral "
+                    "gauche, coussin entre les jambes. Rappel a l'aide a domicile de changer "
+                    "de position toutes les 2 heures."
+                ),
+                "structured_data": {
+                    "synthese": "Pansement escarre sacree stade 3 (4x3x0.5 cm). Fond mixte fibrineux/bourgeonnement. Detersion mecanique et pansement adapte.",
+                    "soins": "Detersion mecanique curette, nettoyage serum phy, Purilon gel sur fibrine, Aquacel Foam. Repositionnement decubitus lateral gauche.",
+                    "constantes": "Escarre sacree : 4x3x0.5 cm, stade 3, 40% fibrine, 60% bourgeonnement",
+                    "observations": "Exsudation sereuse legere. Evolution lente mais favorable (bourgeonnement en progression).",
+                    "actions": "Rappel aide a domicile : repositionnement toutes les 2h. Prochain pansement dans 2 jours. Photo de suivi a faire au prochain passage.",
+                },
+                "recording_duration_seconds": 52,
+                "generation_time_ms": 3500,
+                "created_at": make_dt(YESTERDAY, 10, 50),
+            },
+            # 5. Transmission écrite — Henri Bardin (cancer/perfusion)
+            {
+                "patient": patient_models[3],
+                "appointment": None,
+                "type": "written",
+                "status": "validated",
+                "transcription": (
+                    "Perfusion sous-cutanee d'hydratation chez M. Bardin. 500 mL NaCl 0.9% "
+                    "sur 4 heures, debit 125 mL/h. Site de ponction face anterieure cuisse "
+                    "droite, pas de rougeur ni d'induration au point de ponction precedent "
+                    "(cuisse gauche hier). Patient asthénique mais conscient et oriente, "
+                    "apyrétique au toucher. Se plaint de nausees matinales persistantes depuis "
+                    "la derniere chimio (J+5). A peu mange ce matin. Epouse presente et "
+                    "informee de la surveillance du debit et du point de ponction."
+                ),
+                "structured_data": {
+                    "synthese": "Perfusion SC hydratation 500 mL NaCl J+5 post-chimio. Patient asthenique avec nausees persistantes. Epouse formee a la surveillance.",
+                    "soins": "Perfusion sous-cutanee NaCl 0.9% 500 mL en 4h (125 mL/h), cuisse droite. Retrait perfusion precedente cuisse gauche.",
+                    "constantes": "Apyretique (au toucher). Etat general : asthenique, conscient, oriente.",
+                    "observations": "Nausees matinales persistantes depuis chimio J+5. Alimentation reduite. Point de ponction precedent : pas de rougeur.",
+                    "actions": "Signaler nausees persistantes a l'oncologue si pas d'amelioration demain. Surveiller hydratation orale.",
+                },
+                "recording_duration_seconds": 0,
+                "generation_time_ms": 2900,
+                "created_at": make_dt(TWO_DAYS_AGO, 14, 10),
+            },
+            # 6. Transmission vocale — Bernard Chauveau (anticoagulant/INR)
+            {
+                "patient": patient_models[9],
+                "appointment": None,
+                "type": "vocal",
+                "status": "completed",
+                "transcription": (
+                    "Prelevement INR chez Monsieur Chauveau. INR du jour : 2.8, dans la cible "
+                    "therapeutique 2 a 3. Prekalicréine, pas de signe hémorragique, pas "
+                    "d'hematome. Le patient prend bien son Previscan a heure fixe le soir "
+                    "a 19 heures. Pas de modification alimentaire recente. Prochain controle "
+                    "dans 15 jours sauf avis contraire du Dr Leblanc. Resultats transmis au "
+                    "laboratoire et au medecin traitant."
+                ),
+                "structured_data": {
+                    "synthese": "Controle INR dans la cible (2.8 pour cible 2-3). Pas de signe hemorragique. Prochain controle dans 15 jours.",
+                    "soins": "Prelevement sanguin INR capillaire",
+                    "constantes": "INR : 2.8 (cible 2.0 - 3.0)",
+                    "observations": "Pas de signe hemorragique, pas d'hematome. Previscan pris regulierement a 19h. Pas de modification alimentaire.",
+                    "actions": "Resultats transmis labo et Dr Leblanc. Prochain INR dans 15 jours.",
+                },
+                "recording_duration_seconds": 30,
+                "generation_time_ms": 2200,
+                "created_at": make_dt(THREE_DAYS_AGO, 10, 20),
+            },
+            # 7. Transmission vocale — Germaine Paillat (dépendance/toilette)
+            {
+                "patient": patient_models[15],
+                "appointment": None,
+                "type": "vocal",
+                "status": "completed",
+                "transcription": (
+                    "Toilette de Madame Paillat. La patiente est de bonne humeur ce matin, "
+                    "a bien dormi. Mobilisation au fauteuil apres la toilette, transfert "
+                    "avec aide d'un seul soignant. Legers oedemes des chevilles, signe du "
+                    "godet positif bilaterale. Peau correcte, pas de rougeur aux points "
+                    "d'appui. Pilulier verifie, tous les medicaments de la veille ont ete pris. "
+                    "La patiente demande si on peut lui rapporter du journal la prochaine fois."
+                ),
+                "structured_data": {
+                    "synthese": "Soins d'hygiene et mobilisation. Oedemes des chevilles a surveiller. Etat general satisfaisant.",
+                    "soins": "Toilette au lit, mobilisation au fauteuil, verification pilulier",
+                    "constantes": "Oedemes chevilles bilateraux (signe du godet +)",
+                    "observations": "Bonne humeur, bon sommeil. Transfert fauteuil avec 1 aide. Peau OK aux points d'appui.",
+                    "actions": "Surveiller evolution oedemes. Signaler au medecin si aggravation. Penser a apporter le journal.",
+                },
+                "recording_duration_seconds": 35,
+                "generation_time_ms": 2600,
+                "created_at": make_dt(YESTERDAY, 8, 15),
+            },
+            # 8. Transmission écrite courte — Paulette Guerin (tension)
+            {
+                "patient": patient_models[4],
+                "appointment": None,
+                "type": "written",
+                "status": "completed",
+                "transcription": (
+                    "Surveillance tensionnelle de Mme Guerin. TA 145/82 mmHg au bras gauche, "
+                    "position assise apres 5 minutes de repos. Pouls 72 bpm regulier. "
+                    "Patiente asymptomatique, pas de cephalees, pas de vertiges. Traitement "
+                    "antihypertenseur pris ce matin (Amlodipine 5 mg)."
+                ),
+                "structured_data": {
+                    "synthese": "Surveillance tensionnelle. TA legerement elevee (145/82) sous traitement. Patiente asymptomatique.",
+                    "soins": "Mesure tensionnelle bras gauche, prise de pouls",
+                    "constantes": "TA : 145/82 mmHg (bras gauche, assise). Pouls : 72 bpm regulier.",
+                    "observations": "Asymptomatique. Amlodipine 5 mg pris ce matin.",
+                    "actions": "Continuer surveillance. Consulter medecin si TA > 160/95 ou symptomes.",
+                },
+                "recording_duration_seconds": 0,
+                "generation_time_ms": 1800,
+                "created_at": make_dt(THREE_DAYS_AGO, 8, 10),
+            },
+            # 9. Transmission vocale en attente de synthèse (pour tester le statut)
+            {
+                "patient": patient_models[12],
+                "appointment": None,
+                "type": "vocal",
+                "status": "transcribed",
+                "transcription": (
+                    "Passage chez Monsieur Arnault pour injection insuline. Glycemie ce matin "
+                    "1.15 g/L, dans la cible. Injection Novorapid 8 unites avant le petit "
+                    "dejeuner, abdomen cote droit. Bon etat general, patient autonome pour "
+                    "la preparation de ses repas."
+                ),
+                "structured_data": {},
+                "recording_duration_seconds": 18,
+                "generation_time_ms": 0,
+                "created_at": make_dt(TODAY, 8, 5),
+            },
+            # 10. Transmission vocale — Roger Merlet (pansement post-op)
+            {
+                "patient": patient_models[16],
+                "appointment": None,
+                "type": "vocal",
+                "status": "validated",
+                "transcription": (
+                    "Pansement post-operatoire genou droit chez Monsieur Merlet, J+12 "
+                    "apres prothese totale de genou. Cicatrice propre, agrafes en place, "
+                    "pas de rougeur pericicatricielle, pas d'ecoulement. Flexion du genou "
+                    "a 90 degres, bonne progression par rapport a la semaine derniere. "
+                    "Le kine passe 3 fois par semaine. Patient marche avec une canne, "
+                    "bonne stabilite. Ablation des agrafes prevue J+15 par le chirurgien."
+                ),
+                "structured_data": {
+                    "synthese": "Pansement PTG droite J+12. Cicatrice propre, flexion 90°. Bonne evolution. Ablation agrafes J+15.",
+                    "soins": "Pansement cicatrice genou droit : nettoyage Biseptine, compresses steriles, Micropore",
+                    "constantes": "Flexion genou : 90°. Cicatrice : propre, agrafes en place, pas d'ecoulement.",
+                    "observations": "Bonne progression. Marche avec canne, stable. Kinesitherapie 3x/semaine.",
+                    "actions": "Ablation agrafes J+15 par chirurgien. Continuer pansements jusqu'a ablation.",
+                },
+                "recording_duration_seconds": 40,
+                "generation_time_ms": 3100,
+                "created_at": make_dt(TWO_DAYS_AGO, 15, 0),
+            },
+        ]
+
+        for tx_data in transmissions_data:
+            encrypted_transcription = None
+            if tx_data["transcription"]:
+                encrypted_transcription = _encrypt(tx_data["transcription"], cab_key)
+
+            tx = TransmissionModel(
+                id=uuid4(),
+                cabinet_id=cabinet_id,
+                idel_id=user_id,
+                patient_id=tx_data["patient"].id,
+                appointment_id=tx_data["appointment"].id if tx_data.get("appointment") else None,
+                type=tx_data["type"],
+                status=tx_data["status"],
+                transcription_encrypted=encrypted_transcription,
+                structured_data=tx_data.get("structured_data") or None,
+                recording_duration_seconds=tx_data.get("recording_duration_seconds", 0),
+                generation_time_ms=tx_data.get("generation_time_ms", 0),
+                created_at=tx_data["created_at"],
+                updated_at=tx_data["created_at"],
+            )
+            session.add(tx)
 
         await session.commit()
 
         active_count = sum(1 for d in patients_data if d[-1] == "active")
         archived_count = sum(1 for d in patients_data if d[-1] == "archived")
+
+        tx_count = len(transmissions_data)
+        tx_vocal = sum(1 for t in transmissions_data if t["type"] == "vocal")
+        tx_written = sum(1 for t in transmissions_data if t["type"] == "written")
 
         print("=" * 50)
         print("  Donnees de demo inserees avec succes !")
@@ -294,6 +578,7 @@ async def main():
         print(f"  Communes: Damvix (6), Maillé (5), Saint-Sigismond (4), Le Mazeau (5)")
         print(f"  RDV aujourd'hui ({TODAY}): {len(appts_today)}")
         print(f"  RDV demain ({TOMORROW}): {len(appts_tomorrow)}")
+        print(f"  Transmissions: {tx_count} ({tx_vocal} vocales, {tx_written} ecrites)")
         print()
         print("  Connectez-vous avec ces identifiants dans l'app.")
         print("=" * 50)

@@ -1,11 +1,13 @@
+import { useState } from 'react';
 import {
   ArrowLeft, UserMinus, UserPlus, Edit, UserCircle, Activity,
-  MapPin, Phone, Mail, Stethoscope, FileText, ClipboardList, ScrollText
+  MapPin, Phone, Mail, Stethoscope, FileText, ClipboardList, ScrollText, MessageSquare
 } from 'lucide-react';
 import PrescriptionsTab from './PrescriptionsTab';
 import PrescriptionList from '../prescriptions/PrescriptionList';
 import DoctorAutocomplete from '../common/DoctorAutocomplete';
 import AddressAutocomplete from '../common/AddressAutocomplete';
+import TransmissionsTab from '../transmissions/TransmissionsTab';
 
 export default function PatientDetail({
   selectedPatientId, patientForm, setPatientForm,
@@ -20,6 +22,13 @@ export default function PatientDetail({
   initialEditProtocolId
 }) {
   const isInactive = patientForm.active === false;
+  const [transmissionPreFilter, setTransmissionPreFilter] = useState(null);
+
+  const navigateToTransmissions = (prescriptionId) => {
+    setTransmissionPreFilter(prescriptionId);
+    setPatientSubTab('transmissions');
+  };
+
   return (
     <div className="animate-in slide-in-from-right-4 duration-300 flex flex-col h-full">
 
@@ -84,6 +93,9 @@ export default function PatientDetail({
         </button>
         <button onClick={() => setPatientSubTab('ordonnances')} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'ordonnances' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
           <ScrollText size={16}/> Ordonnances
+        </button>
+        <button onClick={() => { setTransmissionPreFilter(null); setPatientSubTab('transmissions'); }} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${patientSubTab === 'transmissions' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <MessageSquare size={16}/> Transmissions
         </button>
       </div>
 
@@ -274,6 +286,16 @@ export default function PatientDetail({
           <PrescriptionList
             patientId={patientForm.id}
             patientDoctor={patientForm.doctorName ? { name: patientForm.doctorName, rpps_number: patientForm.doctorRpps || null } : null}
+            onViewTransmissions={navigateToTransmissions}
+          />
+        )}
+
+        {/* TRANSMISSIONS TAB */}
+        {patientSubTab === 'transmissions' && patientForm.id && (
+          <TransmissionsTab
+            patientId={patientForm.id}
+            nurses={nurses}
+            initialPrescriptionFilter={transmissionPreFilter}
           />
         )}
 

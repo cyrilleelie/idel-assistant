@@ -19,6 +19,7 @@ _SYNTHESIS_SYSTEM_PROMPT = """Tu es un assistant spécialisé en soins infirmier
 - "constantes": constantes mesurées (TA, glycémie, température, pouls, SpO2...)
 - "observations": observations cliniques et état du patient
 - "actions": actions à suivre, points de vigilance, prochains RDV
+- "alertes": tableau de strings signalant des points d'alerte clinique AVÉRÉS (ex: chute, fièvre, douleur aiguë, signes d'infection, décompensation, escarre qui s'aggrave...). Ne signale PAS l'absence d'un problème (ex: "pas d'infection" n'est PAS une alerte). Tableau vide [] si aucune alerte.
 
 Sois précis, factuel, utilise le vocabulaire médical NGAP approprié.
 Réponds UNIQUEMENT en JSON valide, sans texte avant ou après."""
@@ -35,6 +36,7 @@ class SynthesisServiceImpl(SynthesisService):
                 "constantes": "",
                 "observations": "",
                 "actions": "",
+                "alertes": [],
             }
 
         try:
@@ -84,6 +86,8 @@ async def _call_mistral(transcription: str) -> dict:
     for key in expected:
         if key not in result:
             result[key] = ""
+    if "alertes" not in result:
+        result["alertes"] = []
 
     return result
 
@@ -96,6 +100,7 @@ def _stub_synthesis(transcription: str) -> dict:
         "constantes": "",
         "observations": transcription[:200],
         "actions": "",
+        "alertes": [],
     }
 
 

@@ -312,6 +312,7 @@ function buildLocalAiSummary(transmissions: TransmissionView[]): AiSummary | nul
 
   const syntheses: string[] = [];
   const alerts: string[] = [];
+  const seenAlerts = new Set<string>();
   let lastVitals: Record<string, string> | null = null;
 
   for (const tx of transmissions) {
@@ -323,13 +324,28 @@ function buildLocalAiSummary(transmissions: TransmissionView[]): AiSummary | nul
       if (!lastVitals && tx.contentStructured.constantes) {
         lastVitals = parseVitals(tx.contentStructured.constantes);
       }
-      // Check all structured fields for alert keywords
-      const allText = [
-        tx.contentStructured.synthese,
-        tx.contentStructured.observations,
-        tx.contentStructured.actions,
-      ].filter(Boolean).join(' ');
-      extractAlerts(allText, alerts);
+
+      // 1. Prefer IA-generated alerts (context-aware, no false positives)
+      const iaAlerts = tx.contentStructured.alertes;
+      if (iaAlerts && iaAlerts.length > 0) {
+        for (const a of iaAlerts) {
+          const aLower = a.toLowerCase();
+          if (!seenAlerts.has(aLower)) {
+            seenAlerts.add(aLower);
+            alerts.push(a);
+          }
+        }
+        continue;
+      }
+
+      // 2. Fallback: keyword matching only for transmissions without IA synthesis
+      if (!tx.contentStructured.synthese) {
+        const allText = [
+          tx.contentStructured.observations,
+          tx.contentStructured.actions,
+        ].filter(Boolean).join(' ');
+        extractAlerts(allText, alerts);
+      }
     } else if (tx.contentText) {
       // No structured content — use raw text
       syntheses.push(tx.contentText.slice(0, 200));

@@ -14,6 +14,7 @@ from app.infrastructure.persistence.models.receptionist_call_log_model import Re
 from app.infrastructure.persistence.models.sector_model import SectorModel
 from app.infrastructure.persistence.models.tournee_model import TourneeModel, TourneeStopModel
 from app.infrastructure.persistence.models.transmission_model import TransmissionModel
+from app.infrastructure.persistence.models.transmission_prescription_model import TransmissionPrescriptionModel
 from app.infrastructure.persistence.models.user_model import CabinetMemberModel, UserModel
 
 __all__ = [
@@ -36,5 +37,6 @@ __all__ = [
     "TourneeModel",
     "TourneeStopModel",
     "TransmissionModel",
+    "TransmissionPrescriptionModel",
     "UserModel",
 ]

@@ -1,6 +1,6 @@
 from sqlalchemy import ForeignKey, Integer, LargeBinary, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID, TIMESTAMP
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.persistence.models.base import Base
 
@@ -22,3 +22,10 @@ class TransmissionModel(Base):
     generation_time_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    transmission_prescriptions = relationship(
+        "TransmissionPrescriptionModel",
+        back_populates="transmission",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )

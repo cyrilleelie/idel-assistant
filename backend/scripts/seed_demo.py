@@ -23,7 +23,9 @@ from app.infrastructure.persistence.models.cabinet_model import CabinetModel
 from app.infrastructure.persistence.models.patient_model import PatientModel
 from app.infrastructure.persistence.models.sector_model import SectorModel
 from app.infrastructure.persistence.models.appointment_model import AppointmentModel
+from app.infrastructure.persistence.models.prescription_model import PrescriptionModel
 from app.infrastructure.persistence.models.transmission_model import TransmissionModel
+from app.infrastructure.persistence.models.transmission_prescription_model import TransmissionPrescriptionModel
 from app.infrastructure.security.password_handler import hash_password
 from app.infrastructure.security.encryption import encrypt, compute_search_hash
 from app.infrastructure.security.key_manager import KeyManager
@@ -224,8 +226,11 @@ async def main():
 
         await session.flush()
 
-        # --- Appointments (today + tomorrow) ---
+        # --- Appointments (today + tomorrow + past for transmissions) ---
         TOMORROW = TODAY + datetime.timedelta(days=1)
+        YESTERDAY = TODAY - datetime.timedelta(days=1)
+        TWO_DAYS_AGO = TODAY - datetime.timedelta(days=2)
+        THREE_DAYS_AGO = TODAY - datetime.timedelta(days=3)
 
         def make_dt(day, hour, minute):
             from zoneinfo import ZoneInfo
@@ -262,6 +267,30 @@ async def main():
             (patient_models[17], make_dt(TOMORROW, 15, 30), 30, "pansement"),
         ]
 
+        # Past appointments (completed, linked to transmissions below)
+        appts_past = [
+            # Tx#1: Lucienne — injection insuline yesterday
+            (patient_models[0],  make_dt(YESTERDAY, 7, 30),     20, "injection_insuline", "completed"),
+            # Tx#2: Marcel — pansement 2 days ago
+            (patient_models[1],  make_dt(TWO_DAYS_AGO, 8, 30),  30, "pansement", "completed"),
+            # Tx#3: Yvette — soins hygiene yesterday
+            (patient_models[2],  make_dt(YESTERDAY, 9, 15),     30, "soins_hygiene", "completed"),
+            # Tx#4: Simone — pansement yesterday
+            (patient_models[8],  make_dt(YESTERDAY, 10, 30),    45, "pansement", "completed"),
+            # Tx#5: Henri — perfusion 2 days ago
+            (patient_models[3],  make_dt(TWO_DAYS_AGO, 13, 30), 45, "perfusion", "completed"),
+            # Tx#6: Bernard — prise_de_sang 3 days ago
+            (patient_models[9],  make_dt(THREE_DAYS_AGO, 10, 0), 15, "prise_de_sang", "completed"),
+            # Tx#7: Germaine — soins_hygiene yesterday
+            (patient_models[15], make_dt(YESTERDAY, 8, 0),      30, "soins_hygiene", "completed"),
+            # Tx#8: Paulette — surveillance_tension 3 days ago
+            (patient_models[4],  make_dt(THREE_DAYS_AGO, 8, 0), 15, "surveillance_tension", "completed"),
+            # Tx#9: Rene — injection_insuline today
+            (patient_models[12], make_dt(TODAY, 7, 45),         20, "injection_insuline", "completed"),
+            # Tx#10: Roger — pansement 2 days ago
+            (patient_models[16], make_dt(TWO_DAYS_AGO, 14, 30), 30, "pansement", "completed"),
+        ]
+
         appts = appts_today + appts_tomorrow
 
         appt_models = []
@@ -279,19 +308,216 @@ async def main():
             session.add(a)
             appt_models.append(a)
 
+        # Past appointments (completed)
+        past_appt_models = []
+        for (patient, scheduled, dur, care, status) in appts_past:
+            a = AppointmentModel(
+                id=uuid4(), cabinet_id=cabinet_id, idel_id=user_id,
+                patient_id=patient.id,
+                scheduled_at=scheduled,
+                duration_minutes=dur,
+                care_type=care,
+                location_type="home",
+                status=status,
+                created_by="manual",
+            )
+            session.add(a)
+            past_appt_models.append(a)
+
         await session.flush()
 
-        # --- Transmissions (exemples variés) ---
-        # Dates passées pour les transmissions historiques
-        YESTERDAY = TODAY - datetime.timedelta(days=1)
-        TWO_DAYS_AGO = TODAY - datetime.timedelta(days=2)
-        THREE_DAYS_AGO = TODAY - datetime.timedelta(days=3)
+        # --- Prescriptions (ordonnances pour les patients qui ont des transmissions) ---
+        THIRTY_DAYS_AGO = TODAY - datetime.timedelta(days=30)
+        IN_SIXTY_DAYS = TODAY + datetime.timedelta(days=60)
+        IN_THIRTY_DAYS = TODAY + datetime.timedelta(days=30)
+        IN_TEN_DAYS = TODAY + datetime.timedelta(days=10)
+
+        prescriptions_data = [
+            # 0: Lucienne Moreau — injection insuline (diabète)
+            {
+                "patient": patient_models[0],
+                "label": "Injection insuline Lantus quotidienne",
+                "prescriber_name": "Renaud",
+                "prescriber_rpps": "99900012345",
+                "prescription_date": THIRTY_DAYS_AGO,
+                "start_date": THIRTY_DAYS_AGO,
+                "end_date": IN_SIXTY_DAYS,
+                "duration_days": 90,
+                "care_description": "Injection sous-cutanee insuline Lantus 22 UI/jour + glycemie capillaire",
+                "act_codes": ["AMI", "injection_insuline"],
+                "frequency": "1x/jour",
+                "status": "active",
+            },
+            # 1: Marcel Gauthier — pansement ulcère veineux
+            {
+                "patient": patient_models[1],
+                "label": "Pansement ulcere veineux jambe droite",
+                "prescriber_name": "Renaud",
+                "prescriber_rpps": "99900012345",
+                "prescription_date": THIRTY_DAYS_AGO,
+                "start_date": THIRTY_DAYS_AGO,
+                "end_date": IN_THIRTY_DAYS,
+                "duration_days": 60,
+                "care_description": "Pansement ulcere veineux : nettoyage serum phy, Algosteril, Urgotul, contention Biflex",
+                "act_codes": ["AMI", "pansement"],
+                "frequency": "3x/semaine",
+                "status": "active",
+            },
+            # 2: Yvette Robin — soins hygiene (Alzheimer)
+            {
+                "patient": patient_models[2],
+                "label": "Toilette et aide a l'habillage",
+                "prescriber_name": "Renaud",
+                "prescriber_rpps": "99900012345",
+                "prescription_date": THIRTY_DAYS_AGO,
+                "start_date": THIRTY_DAYS_AGO,
+                "end_date": IN_SIXTY_DAYS,
+                "duration_days": 90,
+                "care_description": "Soins d'hygiene quotidiens, aide a l'habillage, verification pilulier",
+                "act_codes": ["AIS", "soins_hygiene"],
+                "frequency": "1x/jour",
+                "status": "active",
+            },
+            # 3: Henri Bardin — perfusion (cancer)
+            {
+                "patient": patient_models[3],
+                "label": "Perfusion SC hydratation post-chimio",
+                "prescriber_name": "Martin",
+                "prescriber_rpps": "99900067890",
+                "prescription_date": TODAY - datetime.timedelta(days=10),
+                "start_date": TODAY - datetime.timedelta(days=10),
+                "end_date": IN_TEN_DAYS,
+                "duration_days": 20,
+                "care_description": "Perfusion sous-cutanee NaCl 0.9% 500 mL sur 4h, quotidien post-chimio",
+                "act_codes": ["AMI", "perfusion"],
+                "frequency": "1x/jour",
+                "status": "active",
+            },
+            # 4: Paulette Guerin — surveillance tension
+            {
+                "patient": patient_models[4],
+                "label": "Surveillance tensionnelle",
+                "prescriber_name": "Renaud",
+                "prescriber_rpps": "99900012345",
+                "prescription_date": THIRTY_DAYS_AGO,
+                "start_date": THIRTY_DAYS_AGO,
+                "end_date": IN_THIRTY_DAYS,
+                "duration_days": 60,
+                "care_description": "Mesure TA et pouls, 2x/semaine, sous Amlodipine 5 mg",
+                "act_codes": ["AMI", "surveillance_tension", "prise_de_sang"],
+                "frequency": "2x/semaine",
+                "status": "active",
+            },
+            # 5: Simone Dupuis — pansement escarre
+            {
+                "patient": patient_models[8],
+                "label": "Pansement escarre sacree stade 3",
+                "prescriber_name": "Leblanc",
+                "prescriber_rpps": "99900054321",
+                "prescription_date": THIRTY_DAYS_AGO,
+                "start_date": THIRTY_DAYS_AGO,
+                "end_date": IN_SIXTY_DAYS,
+                "duration_days": 90,
+                "care_description": "Pansement escarre sacree : detersion, Purilon gel, Aquacel Foam, repositionnement",
+                "act_codes": ["AMI", "pansement"],
+                "frequency": "3x/semaine",
+                "status": "active",
+            },
+            # 6: Bernard Chauveau — INR/anticoagulant
+            {
+                "patient": patient_models[9],
+                "label": "Controle INR sous Previscan",
+                "prescriber_name": "Leblanc",
+                "prescriber_rpps": "99900054321",
+                "prescription_date": THIRTY_DAYS_AGO,
+                "start_date": THIRTY_DAYS_AGO,
+                "end_date": IN_SIXTY_DAYS,
+                "duration_days": 90,
+                "care_description": "Prelevement capillaire INR, cible 2.0-3.0, transmission resultats labo et medecin",
+                "act_codes": ["AMI", "prise_de_sang"],
+                "frequency": "tous les 15 jours",
+                "status": "active",
+            },
+            # 7: Germaine Paillat — soins dépendance
+            {
+                "patient": patient_models[15],
+                "label": "Soins d'hygiene et mobilisation",
+                "prescriber_name": "Renaud",
+                "prescriber_rpps": "99900012345",
+                "prescription_date": THIRTY_DAYS_AGO,
+                "start_date": THIRTY_DAYS_AGO,
+                "end_date": IN_SIXTY_DAYS,
+                "duration_days": 90,
+                "care_description": "Toilette, mobilisation au fauteuil, verification pilulier",
+                "act_codes": ["AIS", "soins_hygiene"],
+                "frequency": "1x/jour",
+                "status": "active",
+            },
+            # 8: Rene Arnault — injection insuline (diabète)
+            {
+                "patient": patient_models[12],
+                "label": "Injection insuline Novorapid",
+                "prescriber_name": "Renaud",
+                "prescriber_rpps": "99900012345",
+                "prescription_date": THIRTY_DAYS_AGO,
+                "start_date": THIRTY_DAYS_AGO,
+                "end_date": IN_SIXTY_DAYS,
+                "duration_days": 90,
+                "care_description": "Injection SC insuline Novorapid 8 UI avant petit-dejeuner + glycemie capillaire",
+                "act_codes": ["AMI", "injection_insuline"],
+                "frequency": "1x/jour",
+                "status": "active",
+            },
+            # 9: Roger Merlet — pansement post-op
+            {
+                "patient": patient_models[16],
+                "label": "Pansement PTG droite post-operatoire",
+                "prescriber_name": "Duval",
+                "prescriber_rpps": "99900098765",
+                "prescription_date": TODAY - datetime.timedelta(days=12),
+                "start_date": TODAY - datetime.timedelta(days=12),
+                "end_date": IN_TEN_DAYS,
+                "duration_days": 22,
+                "care_description": "Pansement cicatrice genou droit post-PTG : nettoyage Biseptine, compresses, Micropore",
+                "act_codes": ["AMI", "pansement"],
+                "frequency": "3x/semaine",
+                "status": "active",
+            },
+        ]
+
+        prescription_models = []
+        for px in prescriptions_data:
+            p = PrescriptionModel(
+                id=uuid4(),
+                cabinet_id=cabinet_id,
+                patient_id=px["patient"].id,
+                label=px["label"],
+                prescriber_name=px["prescriber_name"],
+                prescriber_rpps=px["prescriber_rpps"],
+                prescription_date=px["prescription_date"],
+                start_date=px["start_date"],
+                end_date=px["end_date"],
+                duration_days=px["duration_days"],
+                care_description=px["care_description"],
+                act_codes=px["act_codes"],
+                frequency=px["frequency"],
+                status=px["status"],
+            )
+            session.add(p)
+            prescription_models.append(p)
+
+        await session.flush()
+
+        # --- Transmissions (exemples variés, liées aux RDV passés et ordonnances) ---
+        # past_appt_models indices match transmissions 0-9
+        # prescription_models indices match transmissions 0-9
 
         transmissions_data = [
             # 1. Transmission vocale complétée avec synthèse — Lucienne Moreau (diabète)
             {
                 "patient": patient_models[0],
-                "appointment": appt_models[0],
+                "appointment": past_appt_models[0],
+                "prescription": prescription_models[0],
                 "type": "vocal",
                 "status": "completed",
                 "transcription": (
@@ -309,6 +535,7 @@ async def main():
                     "constantes": "Glycemie : 1.42 g/L (a jeun)",
                     "observations": "Bonne rotation des points d'injection, pas de lipodystrophie. Picotements des pieds depuis quelques jours.",
                     "actions": "Signaler paresthesies des pieds au Dr Renaud. Surveiller evolution glycemie.",
+                    "alertes": ["Glycemie legerement elevee (1.42 g/L)", "Paresthesies des pieds a signaler au medecin"],
                 },
                 "recording_duration_seconds": 45,
                 "generation_time_ms": 3200,
@@ -317,7 +544,8 @@ async def main():
             # 2. Transmission vocale validée — Marcel Gauthier (pansement)
             {
                 "patient": patient_models[1],
-                "appointment": None,
+                "appointment": past_appt_models[1],
+                "prescription": prescription_models[1],
                 "type": "vocal",
                 "status": "validated",
                 "transcription": (
@@ -334,6 +562,7 @@ async def main():
                     "constantes": "",
                     "observations": "Bourgeonnement progressant sur les berges. Pas d'infection, pas d'odeur. Contention bien portee.",
                     "actions": "Prochain pansement dans 2 jours. Continuer contention veineuse.",
+                    "alertes": [],
                 },
                 "recording_duration_seconds": 38,
                 "generation_time_ms": 2800,
@@ -342,7 +571,8 @@ async def main():
             # 3. Transmission écrite complétée — Yvette Robin (Alzheimer)
             {
                 "patient": patient_models[2],
-                "appointment": None,
+                "appointment": past_appt_models[2],
+                "prescription": prescription_models[2],
                 "type": "written",
                 "status": "completed",
                 "transcription": (
@@ -359,6 +589,7 @@ async def main():
                     "constantes": "",
                     "observations": "Desorientation temporospatiale ce matin (ne reconnait pas son domicile). Agitation moderee en debut de soins. Peau seche jambes.",
                     "actions": "Fille prevenue de l'episode. Surveiller frequence des episodes de desorientation. Signaler au Dr si aggravation.",
+                    "alertes": ["Desorientation temporospatiale et agitation — surveiller frequence des episodes"],
                 },
                 "recording_duration_seconds": 0,
                 "generation_time_ms": 2500,
@@ -367,7 +598,8 @@ async def main():
             # 4. Transmission vocale complétée — Simone Dupuis (escarres)
             {
                 "patient": patient_models[8],
-                "appointment": None,
+                "appointment": past_appt_models[3],
+                "prescription": prescription_models[5],
                 "type": "vocal",
                 "status": "completed",
                 "transcription": (
@@ -386,6 +618,7 @@ async def main():
                     "constantes": "Escarre sacree : 4x3x0.5 cm, stade 3, 40% fibrine, 60% bourgeonnement",
                     "observations": "Exsudation sereuse legere. Evolution lente mais favorable (bourgeonnement en progression).",
                     "actions": "Rappel aide a domicile : repositionnement toutes les 2h. Prochain pansement dans 2 jours. Photo de suivi a faire au prochain passage.",
+                    "alertes": ["Escarre stade 3 sacree — evolution lente, necessite suivi rapproche"],
                 },
                 "recording_duration_seconds": 52,
                 "generation_time_ms": 3500,
@@ -394,7 +627,8 @@ async def main():
             # 5. Transmission écrite — Henri Bardin (cancer/perfusion)
             {
                 "patient": patient_models[3],
-                "appointment": None,
+                "appointment": past_appt_models[4],
+                "prescription": prescription_models[3],
                 "type": "written",
                 "status": "validated",
                 "transcription": (
@@ -412,6 +646,7 @@ async def main():
                     "constantes": "Apyretique (au toucher). Etat general : asthenique, conscient, oriente.",
                     "observations": "Nausees matinales persistantes depuis chimio J+5. Alimentation reduite. Point de ponction precedent : pas de rougeur.",
                     "actions": "Signaler nausees persistantes a l'oncologue si pas d'amelioration demain. Surveiller hydratation orale.",
+                    "alertes": ["Nausees persistantes J+5 post-chimio — alimentation reduite, surveiller hydratation"],
                 },
                 "recording_duration_seconds": 0,
                 "generation_time_ms": 2900,
@@ -420,7 +655,8 @@ async def main():
             # 6. Transmission vocale — Bernard Chauveau (anticoagulant/INR)
             {
                 "patient": patient_models[9],
-                "appointment": None,
+                "appointment": past_appt_models[5],
+                "prescription": prescription_models[6],
                 "type": "vocal",
                 "status": "completed",
                 "transcription": (
@@ -437,6 +673,7 @@ async def main():
                     "constantes": "INR : 2.8 (cible 2.0 - 3.0)",
                     "observations": "Pas de signe hemorragique, pas d'hematome. Previscan pris regulierement a 19h. Pas de modification alimentaire.",
                     "actions": "Resultats transmis labo et Dr Leblanc. Prochain INR dans 15 jours.",
+                    "alertes": [],
                 },
                 "recording_duration_seconds": 30,
                 "generation_time_ms": 2200,
@@ -445,7 +682,8 @@ async def main():
             # 7. Transmission vocale — Germaine Paillat (dépendance/toilette)
             {
                 "patient": patient_models[15],
-                "appointment": None,
+                "appointment": past_appt_models[6],
+                "prescription": prescription_models[7],
                 "type": "vocal",
                 "status": "completed",
                 "transcription": (
@@ -462,6 +700,7 @@ async def main():
                     "constantes": "Oedemes chevilles bilateraux (signe du godet +)",
                     "observations": "Bonne humeur, bon sommeil. Transfert fauteuil avec 1 aide. Peau OK aux points d'appui.",
                     "actions": "Surveiller evolution oedemes. Signaler au medecin si aggravation. Penser a apporter le journal.",
+                    "alertes": ["Oedemes des chevilles bilateraux (signe du godet +) — a surveiller"],
                 },
                 "recording_duration_seconds": 35,
                 "generation_time_ms": 2600,
@@ -470,7 +709,8 @@ async def main():
             # 8. Transmission écrite courte — Paulette Guerin (tension)
             {
                 "patient": patient_models[4],
-                "appointment": None,
+                "appointment": past_appt_models[7],
+                "prescription": prescription_models[4],
                 "type": "written",
                 "status": "completed",
                 "transcription": (
@@ -485,6 +725,7 @@ async def main():
                     "constantes": "TA : 145/82 mmHg (bras gauche, assise). Pouls : 72 bpm regulier.",
                     "observations": "Asymptomatique. Amlodipine 5 mg pris ce matin.",
                     "actions": "Continuer surveillance. Consulter medecin si TA > 160/95 ou symptomes.",
+                    "alertes": [],
                 },
                 "recording_duration_seconds": 0,
                 "generation_time_ms": 1800,
@@ -493,7 +734,8 @@ async def main():
             # 9. Transmission vocale en attente de synthèse (pour tester le statut)
             {
                 "patient": patient_models[12],
-                "appointment": None,
+                "appointment": past_appt_models[8],
+                "prescription": prescription_models[8],
                 "type": "vocal",
                 "status": "transcribed",
                 "transcription": (
@@ -510,7 +752,8 @@ async def main():
             # 10. Transmission vocale — Roger Merlet (pansement post-op)
             {
                 "patient": patient_models[16],
-                "appointment": None,
+                "appointment": past_appt_models[9],
+                "prescription": prescription_models[9],
                 "type": "vocal",
                 "status": "validated",
                 "transcription": (
@@ -527,6 +770,7 @@ async def main():
                     "constantes": "Flexion genou : 90°. Cicatrice : propre, agrafes en place, pas d'ecoulement.",
                     "observations": "Bonne progression. Marche avec canne, stable. Kinesitherapie 3x/semaine.",
                     "actions": "Ablation agrafes J+15 par chirurgien. Continuer pansements jusqu'a ablation.",
+                    "alertes": [],
                 },
                 "recording_duration_seconds": 40,
                 "generation_time_ms": 3100,
@@ -534,6 +778,7 @@ async def main():
             },
         ]
 
+        tx_models = []
         for tx_data in transmissions_data:
             encrypted_transcription = None
             if tx_data["transcription"]:
@@ -555,6 +800,21 @@ async def main():
                 updated_at=tx_data["created_at"],
             )
             session.add(tx)
+            tx_models.append((tx, tx_data))
+
+        await session.flush()
+
+        # --- Transmission ↔ Prescription links (auto-resolved from appointment) ---
+        for tx, tx_data in tx_models:
+            prescription = tx_data.get("prescription")
+            if prescription:
+                link = TransmissionPrescriptionModel(
+                    id=uuid4(),
+                    transmission_id=tx.id,
+                    prescription_id=prescription.id,
+                    is_auto_resolved=True,
+                )
+                session.add(link)
 
         await session.commit()
 
@@ -564,6 +824,7 @@ async def main():
         tx_count = len(transmissions_data)
         tx_vocal = sum(1 for t in transmissions_data if t["type"] == "vocal")
         tx_written = sum(1 for t in transmissions_data if t["type"] == "written")
+        tx_linked = sum(1 for t in transmissions_data if t.get("prescription"))
 
         print("=" * 50)
         print("  Donnees de demo inserees avec succes !")
@@ -576,9 +837,13 @@ async def main():
         print(f"  Secteurs: 3 (Damvix, Nord/Maillé, Sud/Mazeau-Sigismond)")
         print(f"  Patients: {len(patient_models)} ({active_count} actifs, {archived_count} inactifs)")
         print(f"  Communes: Damvix (6), Maillé (5), Saint-Sigismond (4), Le Mazeau (5)")
+        print(f"  Ordonnances: {len(prescriptions_data)}")
         print(f"  RDV aujourd'hui ({TODAY}): {len(appts_today)}")
         print(f"  RDV demain ({TOMORROW}): {len(appts_tomorrow)}")
+        print(f"  RDV passes (completes): {len(appts_past)}")
         print(f"  Transmissions: {tx_count} ({tx_vocal} vocales, {tx_written} ecrites)")
+        print(f"    → {tx_linked} liees a une ordonnance (auto-resolved)")
+        print(f"    → {sum(1 for t in transmissions_data if t.get('appointment'))} liees a un RDV")
         print()
         print("  Connectez-vous avec ces identifiants dans l'app.")
         print("=" * 50)

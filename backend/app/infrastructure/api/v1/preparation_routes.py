@@ -199,21 +199,35 @@ async def get_preparation(
 
 
 def _extract_alerts(transmissions) -> list[str]:
-    """Extrait les alertes depuis les transmissions récentes."""
+    """Extrait les alertes depuis les transmissions récentes.
+
+    Priorité aux alertes produites par la synthèse IA (champ ``alertes``
+    dans ``structured_data``), qui comprennent le contexte et ne signalent
+    que les problèmes avérés.  Le keyword matching sert de fallback pour
+    les transmissions qui n'ont pas encore de synthèse IA.
+    """
     alerts: list[str] = []
     seen: set[str] = set()
 
     for t in transmissions:
-        text = (t.transcription or "").lower()
         structured = t.structured_data or {}
 
-        # Check structured data actions/observations
-        for field in ["actions", "observations", "synthese"]:
-            text += " " + (structured.get(field, "") or "").lower()
+        # 1. Prefer IA-generated alerts (context-aware, no false positives)
+        ia_alerts = structured.get("alertes") or structured.get("alerts") or []
+        if isinstance(ia_alerts, list) and ia_alerts:
+            for a in ia_alerts:
+                a_lower = str(a).lower()
+                if a_lower not in seen:
+                    seen.add(a_lower)
+                    alerts.append(str(a))
+            continue
 
-        for keyword in _ALERT_KEYWORDS:
-            if keyword in text and keyword not in seen:
-                seen.add(keyword)
-                alerts.append(keyword)
+        # 2. Fallback: keyword matching only for transmissions without IA synthesis
+        if not structured.get("synthese"):
+            text = (t.transcription or "").lower()
+            for keyword in _ALERT_KEYWORDS:
+                if keyword in text and keyword not in seen:
+                    seen.add(keyword)
+                    alerts.append(keyword)
 
     return alerts

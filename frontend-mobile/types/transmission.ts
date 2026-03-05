@@ -30,6 +30,7 @@ export interface StructuredContent {
   constantes: string;
   observations: string;
   actions: string;
+  alertes?: string[];
 }
 
 export interface TransmissionView {
@@ -77,12 +78,14 @@ export function buildTransmissionView(tx: Transmission): TransmissionView {
     try {
       const parsed = JSON.parse(structuredJson);
       // LLM may return arrays/objects instead of strings — coerce to strings
+      const iaAlerts = parsed.alertes ?? parsed.alerts;
       contentStructured = {
         synthese: coerceToString(parsed.synthese),
         soins: coerceToString(parsed.soins),
         constantes: coerceToString(parsed.constantes),
         observations: coerceToString(parsed.observations),
         actions: coerceToString(parsed.actions),
+        alertes: Array.isArray(iaAlerts) ? iaAlerts.map(String) : undefined,
       };
     } catch {
       contentStructured = null;

@@ -3,6 +3,7 @@ import { FileText, RefreshCw, AlertTriangle, CheckCircle, Clock, XCircle, Pencil
 import { listPrescriptions, createPrescription } from '../../api/prescriptions';
 import client from '../../api/client';
 import PrescriptionForm from './PrescriptionForm';
+import PrescriptionTransmissions from '../transmissions/PrescriptionTransmissions';
 
 function formatDateFr(dateStr) {
   if (!dateStr) return '-';
@@ -57,7 +58,7 @@ function StatusBadge({ status, daysRemaining }) {
  *   - patientId: UUID (obligatoire)
  *   - patientDoctor: { name, rpps_number } (optionnel) — médecin traitant pour pré-remplissage
  */
-export default function PrescriptionList({ patientId, patientDoctor = null }) {
+export default function PrescriptionList({ patientId, patientDoctor = null, onViewTransmissions }) {
   const [prescriptions, setPrescriptions] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -265,6 +266,11 @@ export default function PrescriptionList({ patientId, patientDoctor = null }) {
                   )}
                 </div>
               </div>
+              <PrescriptionTransmissions
+                prescriptionId={p.id}
+                maxItems={3}
+                onViewAll={onViewTransmissions}
+              />
             </div>
           ))}
         </div>

@@ -461,3 +461,78 @@ async def link_prescription_to_invoice(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return {"ok": True}
+
+
+@router.get("/{prescription_id}/transmissions")
+async def get_transmissions_for_prescription(
+    prescription_id: UUID,
+    request: Request,
+    limit: int = 50,
+    skip: int = 0,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve transmissions linked to a specific prescription."""
+    from sqlalchemy import func, select
+    from app.infrastructure.persistence.models.transmission_model import TransmissionModel
+    from app.infrastructure.persistence.models.transmission_prescription_model import TransmissionPrescriptionModel
+    from app.infrastructure.api.schemas.transmission_schemas import PrescriptionBrief
+    from app.infrastructure.api.v1.transmission_routes import _build_prescription_briefs
+
+    request.state.user_id = auth.user_id
+    request.state.cabinet_id = auth.cabinet_id
+
+    # Count
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(TransmissionModel)
+        .join(TransmissionPrescriptionModel, TransmissionPrescriptionModel.transmission_id == TransmissionModel.id)
+        .where(
+            TransmissionPrescriptionModel.prescription_id == prescription_id,
+            TransmissionModel.cabinet_id == auth.cabinet_id,
+        )
+    )
+    total = count_result.scalar_one()
+
+    # Fetch
+    result = await db.execute(
+        select(TransmissionModel)
+        .join(TransmissionPrescriptionModel, TransmissionPrescriptionModel.transmission_id == TransmissionModel.id)
+        .where(
+            TransmissionPrescriptionModel.prescription_id == prescription_id,
+            TransmissionModel.cabinet_id == auth.cabinet_id,
+        )
+        .order_by(TransmissionModel.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    models = result.scalars().all()
+
+    from app.infrastructure.security.key_manager import KeyManager
+    from app.config import settings
+    km = KeyManager(settings.encryption_master_key)
+
+    items = []
+    for m in models:
+        from app.infrastructure.persistence.repositories.sqlalchemy_transmission_repo import SQLAlchemyTransmissionRepo
+        entity = SQLAlchemyTransmissionRepo(db, km)._to_entity(m, auth.cabinet_id)
+        prescriptions = await _build_prescription_briefs(db, entity.id)
+        items.append({
+            "id": str(entity.id),
+            "cabinet_id": str(entity.cabinet_id),
+            "idel_id": str(entity.idel_id),
+            "patient_id": str(entity.patient_id),
+            "appointment_id": str(entity.appointment_id) if entity.appointment_id else None,
+            "type": entity.type,
+            "status": entity.status,
+            "transcription": entity.transcription,
+            "structured_data": entity.structured_data,
+            "audio_file_path": entity.audio_file_path,
+            "recording_duration_seconds": entity.recording_duration_seconds,
+            "generation_time_ms": entity.generation_time_ms,
+            "prescriptions": [p.model_dump() for p in prescriptions],
+            "created_at": entity.created_at.isoformat(),
+            "updated_at": entity.updated_at.isoformat(),
+        })
+
+    return {"items": items, "total": total}

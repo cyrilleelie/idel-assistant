@@ -1,0 +1,31 @@
+{
+  "appel_difficile:0": {
+    "comment": "3.5g/L c'est une glycémie très haute et non très basse (mais dépend du moment de la journée)",
+    "verdict": "ko"
+  },
+  "appel_difficile:1": {
+    "comment": "Dans ce cas (personne âgée + chute + difficulté à se déplacer), dire au patient d'appeler les pompiers ou le 15 pour prise en charge. Transmettre à l'infirmière en plus pour information.",
+    "verdict": "ko"
+  },
+  "appel_difficile:2": {
+    "verdict": "ok"
+  },
+  "appel_difficile:3": {
+    "verdict": "ko",
+    "comment": "Dans ce cas (personne âgée + chute + difficulté à se déplacer), dire au patient d'appeler les pompiers ou le 15 pour prise en charge. Transmettre à l'infirmière en plus pour information."
+  },
+  "appel_difficile:4": {
+    "verdict": "ko",
+    "comment": "Dans ce cas (personne âgée + chute + difficulté à se déplacer), dire au patient d'appeler les pompiers ou le 15 pour prise en charge. Transmettre à l'infirmière en plus pour information."
+  },
+  "appel_difficile:5": {
+    "verdict": "ok"
+  },
+  "appel_patient_rdv:0": {
+    "verdict": "ok"
+  },
+  "appel_patient_rdv:1": {
+    "verdict": "ko",
+    "comment": "Pour une prise de sang, les rdv ne peuvent pas être pris le dimanche (labo fermé) et doivent être réalisés avant 10h30 ou 11h en fonction du laboratoire."
+  }
+}

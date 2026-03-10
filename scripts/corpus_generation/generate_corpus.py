@@ -22,6 +22,11 @@ import random
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Charge le .env du backend
+load_dotenv(Path(__file__).resolve().parent.parent.parent / "backend" / ".env")
+
 # Ajoute le dossier courant au path pour les imports
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -107,13 +112,16 @@ async def generate_category(
 
 
 async def main(dry_run: bool = False) -> None:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("ERREUR: Variable d'environnement ANTHROPIC_API_KEY non definie.")
-        print("  export ANTHROPIC_API_KEY=sk-ant-...")
+        print("ERREUR: Variable d'environnement GEMINI_API_KEY non definie.")
+        print("  Ajoutez GEMINI_API_KEY=... dans backend/.env")
+        print("  Cle disponible sur https://aistudio.google.com/apikey")
         sys.exit(1)
 
-    base_dir = Path(CORPUS_CONFIG.output_dir)
+    # Résout le chemin de sortie relatif au projet (toujours backend/data/corpus)
+    project_root = Path(__file__).resolve().parent.parent.parent
+    base_dir = project_root / "backend" / "data" / "corpus"
     raw_dir = base_dir / CORPUS_CONFIG.raw_subdir
     raw_dir.mkdir(parents=True, exist_ok=True)
 

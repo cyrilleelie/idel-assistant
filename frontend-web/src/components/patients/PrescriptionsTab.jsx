@@ -828,7 +828,6 @@ function SoinFormItem({ soin, index, onChange, onRemove, canRemove, careLabels =
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">
             Renouvellements autorises
-            <span className="ml-1 text-slate-400 font-normal">(0 = non renouvelable)</span>
           </label>
           <input
             type="number"

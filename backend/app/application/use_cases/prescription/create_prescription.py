@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.dtos.prescription_dto import CreatePrescriptionDTO, PrescriptionDTO
 from app.domain.entities.prescription import Prescription
 from app.domain.repositories.prescription_repository import PrescriptionRepository
-from app.domain.rules.prescription_rules import compute_end_date, days_remaining
+from app.domain.rules.prescription_rules import compute_end_date, compute_prescription_status, days_remaining
 
 
 def _entity_to_dto(p: Prescription, **kwargs) -> PrescriptionDTO:
@@ -35,7 +35,7 @@ def _entity_to_dto(p: Prescription, **kwargs) -> PrescriptionDTO:
         max_renewals=p.max_renewals,
         current_renewal=p.current_renewal,
         parent_prescription_id=p.parent_prescription_id,
-        status=p.status,
+        status=compute_prescription_status(p),
         document_url=p.document_url,
         document_filename=p.document_filename,
         document_type=p.document_type,

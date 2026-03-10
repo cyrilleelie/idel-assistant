@@ -24,6 +24,14 @@ class PatientCreate(BaseModel):
     sector_id: UUID | None = None
     postal_code: str = Field(default="", max_length=10)
     city: str = Field(default="", max_length=100)
+    # SESAM-Vitale / assurance
+    amo_code: str = Field(default="", max_length=9)
+    amo_center: str = Field(default="", max_length=100)
+    amc_code: str = Field(default="", max_length=10)
+    amc_name: str = Field(default="", max_length=200)
+    amc_contract: str = Field(default="", max_length=100)
+    exoneration_type: str = Field(default="", pattern=r"^(ALD|MAT|AT|100|)$")
+    birth_rank: int | None = Field(default=None, ge=1, le=9)
 
 
 class PatientUpdate(BaseModel):

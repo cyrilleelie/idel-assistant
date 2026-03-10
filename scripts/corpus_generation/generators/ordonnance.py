@@ -88,10 +88,10 @@ Retourne UNIQUEMENT ce JSON :
       "type": "function",
       "function": {{
         "name": "interpreter_ordonnance",
-        "arguments": "<json string des arguments>"
+        "arguments": {{"texte_ordonnance": "<texte dicté>", "patient_id": "uuid-fictif"}}
       }}
     }}]}},
-    {{"role": "tool", "tool_call_id": "call_001", "content": "<json string du résultat structuré>"}},
+    {{"role": "tool", "tool_call_id": "call_001", "content": "<résultat structuré en JSON string>"}},
     {{"role": "assistant", "content": "<plan de soins résumé + demande confirmation>"}}
   ]
 }}
@@ -103,16 +103,4 @@ IMPORTANT :
 - Utilise {patient} comme nom de patient"""
 
     async def generate_batch(self, n: int = 50, **kwargs) -> list[TrainingExample]:
-        examples: list[TrainingExample] = []
-
-        for _ in range(n):
-            difficulty = self._pick_difficulty()
-
-            prompt = self._build_generation_prompt(difficulty)
-            response = await self._call_claude(prompt)
-            example = self._parse_response(response, self.CATEGORY)
-
-            if example:
-                examples.append(example)
-
-        return examples
+        return await self._generate_parallel(n, self.CATEGORY)

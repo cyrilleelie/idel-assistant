@@ -99,10 +99,10 @@ Retourne UNIQUEMENT ce JSON :
       "type": "function",
       "function": {{
         "name": "{'escalader_urgence' if urgency_score >= 3 else 'prendre_message'}",
-        "arguments": "<json string>"
+        "arguments": {{"message": "<résumé de la situation>", "priorite": {urgency_score}, "patient_nom": "{patient}"}}
       }}
     }}]}},
-    {{"role": "tool", "tool_call_id": "call_001", "content": "<json string résultat>"}},
+    {{"role": "tool", "tool_call_id": "call_001", "content": "<résultat en JSON string>"}},
     {{"role": "assistant", "content": "<conclusion appropriée au score d'urgence>"}}
   ]
 }}
@@ -116,12 +116,4 @@ IMPORTANT :
 - Utilise {patient} comme nom de patient"""
 
     async def generate_batch(self, n: int = 50, **kwargs) -> list[TrainingExample]:
-        examples: list[TrainingExample] = []
-        for _ in range(n):
-            difficulty = self._pick_difficulty()
-            prompt = self._build_generation_prompt(difficulty)
-            response = await self._call_claude(prompt)
-            example = self._parse_response(response, self.CATEGORY)
-            if example:
-                examples.append(example)
-        return examples
+        return await self._generate_parallel(n, self.CATEGORY)

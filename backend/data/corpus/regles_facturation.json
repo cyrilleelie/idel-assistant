@@ -1,0 +1,182 @@
+[
+  {
+    "id": "MAJ_NUIT_PROF",
+    "category": "majoration_horaire",
+    "code": "MAJ_NUIT_PROF",
+    "label": "Nuit profonde",
+    "montant": "18.30",
+    "condition": "23h00 – 5h00",
+    "description": "Majoration nuit profonde applicable aux actes techniques AMI/AMX uniquement (pas aux forfaits BSI)."
+  },
+  {
+    "id": "MAJ_NUIT",
+    "category": "majoration_horaire",
+    "code": "MAJ_NUIT",
+    "label": "Nuit",
+    "montant": "9.15",
+    "condition": "20h00 – 23h00 / 5h00 – 8h00",
+    "description": "Majoration nuit applicable aux actes techniques AMI/AMX uniquement."
+  },
+  {
+    "id": "MAJ_DIM",
+    "category": "majoration_horaire",
+    "code": "MAJ_DIM",
+    "label": "Dimanche / jour férié",
+    "montant": "8.50",
+    "condition": "Dimanche ou jour férié (toute la journée)",
+    "description": "Cumulable avec majoration nuit. 11 jours fériés français reconnus."
+  },
+  {
+    "id": "MCI",
+    "category": "majoration_acte",
+    "code": "MCI",
+    "label": "Coordination infirmière",
+    "montant": "5.00",
+    "condition": "1er soin technique de la journée pour ce patient",
+    "description": "S'applique une seule fois par patient par jour, uniquement s'il y a au moins 1 acte technique."
+  },
+  {
+    "id": "MAU",
+    "category": "majoration_acte",
+    "code": "MAU",
+    "label": "Acte unique",
+    "montant": "1.35",
+    "condition": "Exactement 1 seul acte technique dans le passage, AMI <= 1.5 uniquement",
+    "description": "Mutuellement exclusif avec l'article 11 (cumul d'actes) en pratique."
+  },
+  {
+    "id": "MIE",
+    "category": "majoration_acte",
+    "code": "MIE",
+    "label": "Enfant < 7 ans",
+    "montant": "3.15",
+    "condition": "Patient < 7 ans, 1 MIE par acte technique",
+    "description": "Si 2 actes techniques, 2 lignes MIE sont ajoutées."
+  },
+  {
+    "id": "IFD",
+    "category": "indemnite",
+    "code": "IFD",
+    "label": "Forfait déplacement (hors BSI)",
+    "montant": "2.75",
+    "condition": "Lieu = domicile, patient sans BSI",
+    "description": "Forfait fixe de déplacement."
+  },
+  {
+    "id": "IFI",
+    "category": "indemnite",
+    "code": "IFI",
+    "label": "Forfait infirmier BSI",
+    "montant": "2.75",
+    "condition": "Lieu = domicile, patient avec BSI",
+    "description": "Remplace IFD pour les patients BSI. Auto-correction tracée."
+  },
+  {
+    "id": "IK_PLAINE",
+    "category": "indemnite",
+    "code": "IK",
+    "label": "Kilométrique plaine",
+    "montant": "0.35",
+    "condition": "Par km après abattement de 4 km",
+    "description": "distance_facturable = max(0, distance_km − 4). Montant = distance_facturable × 0.35€/km."
+  },
+  {
+    "id": "IK_MONTAGNE",
+    "category": "indemnite",
+    "code": "IK",
+    "label": "Kilométrique montagne",
+    "montant": "0.50",
+    "condition": "Par km après abattement de 2 km",
+    "description": "distance_facturable = max(0, distance_km − 2). Montant = distance_facturable × 0.50€/km."
+  },
+  {
+    "id": "ETAPE_1",
+    "category": "pipeline",
+    "code": "AMI→AMX",
+    "label": "Résolution AMI → AMX (patient BSI)",
+    "montant": "",
+    "condition": "has_active_bsi = true",
+    "description": "Tous les codes AMI sont convertis en AMX. Le suffixe (coefficient) est conservé."
+  },
+  {
+    "id": "ETAPE_2",
+    "category": "pipeline",
+    "code": "ART_11",
+    "label": "Article 11 — cumul d'actes techniques",
+    "montant": "",
+    "condition": "Plusieurs actes AMI/AMX dans le même passage",
+    "description": "1er acte : 100 %. 2e acte : 50 %. 3e et suivants : 0 %. Tri par coefficient décroissant."
+  },
+  {
+    "id": "ETAPE_3",
+    "category": "pipeline",
+    "code": "BSI_FORFAIT",
+    "label": "Ajout forfait BSI",
+    "montant": "",
+    "condition": "BSI actif + pas déjà facturé aujourd'hui + niveau défini",
+    "description": "Forfait journalier unique par patient (BSA/BSB/BSC). Déduplication multi-IDEL."
+  },
+  {
+    "id": "ETAPE_9",
+    "category": "pipeline",
+    "code": "TOTAUX",
+    "label": "Calcul totaux et répartition AMO/AMC",
+    "montant": "",
+    "condition": "Toujours",
+    "description": "ALD/Maternité : 100% AMO. Standard : 60% AMO, 40% AMC. Arrondi ROUND_HALF_UP."
+  },
+  {
+    "id": "REVIEW_ORDO_MANQUANTE",
+    "category": "needs_review",
+    "code": "ORDO_MANQUANTE",
+    "label": "Ordonnance manquante",
+    "montant": "",
+    "condition": "Aucune ordonnance rattachée au plan de soins",
+    "description": "Facture marquée needs_review = true."
+  },
+  {
+    "id": "REVIEW_ORDO_INVALIDE",
+    "category": "needs_review",
+    "code": "ORDO_INVALIDE",
+    "label": "Ordonnance invalide",
+    "montant": "",
+    "condition": "Ordonnance expirée ou incomplète",
+    "description": "Message spécifique de l'erreur affiché."
+  },
+  {
+    "id": "REVIEW_ORDO_EXPIRANTE",
+    "category": "needs_review",
+    "code": "ORDO_EXPIRANTE",
+    "label": "Ordonnance expirante",
+    "montant": "",
+    "condition": "Ordonnance expire bientôt (statut expiring)",
+    "description": "Message : Ordonnance expire dans X jour(s)."
+  },
+  {
+    "id": "REVIEW_HORAIRE",
+    "category": "needs_review",
+    "code": "HORAIRE_EXCEP",
+    "label": "Horaire exceptionnel",
+    "montant": "",
+    "condition": "Soin avant 7h ou après 20h",
+    "description": "Vérifier majorations appliquées."
+  },
+  {
+    "id": "REVIEW_MONTANT_ELEVE",
+    "category": "needs_review",
+    "code": "MONTANT_ELEVE",
+    "label": "Montant élevé",
+    "montant": "80",
+    "condition": "total > 80 €",
+    "description": "Seuil de vérification."
+  },
+  {
+    "id": "REVIEW_MONTANT_FAIBLE",
+    "category": "needs_review",
+    "code": "MONTANT_FAIBLE",
+    "label": "Montant très faible",
+    "montant": "3",
+    "condition": "0 < total < 3 €",
+    "description": "Seuil de vérification."
+  }
+]

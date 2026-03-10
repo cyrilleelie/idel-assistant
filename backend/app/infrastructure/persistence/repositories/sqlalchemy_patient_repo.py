@@ -81,6 +81,14 @@ class SQLAlchemyPatientRepo(PatientRepository):
             archived_at=model.archived_at,
             created_at=model.created_at,
             updated_at=model.updated_at,
+            # SESAM-Vitale / assurance
+            amo_code=model.amo_code or "",
+            amo_center=model.amo_center or "",
+            amc_code=model.amc_code or "",
+            amc_name=model.amc_name or "",
+            amc_contract=model.amc_contract or "",
+            exoneration_type=model.exoneration_type or "",
+            birth_rank=model.birth_rank,
         )
 
     def _entity_to_model_data(self, patient: Patient) -> dict:
@@ -147,6 +155,14 @@ class SQLAlchemyPatientRepo(PatientRepository):
         data["doctor_contact_encrypted"] = (
             self._encrypt_field(patient.doctor_contact, cid) if patient.doctor_contact else None
         )
+        # SESAM-Vitale / assurance (non chiffres)
+        data["amo_code"] = patient.amo_code or None
+        data["amo_center"] = patient.amo_center or None
+        data["amc_code"] = patient.amc_code or None
+        data["amc_name"] = patient.amc_name or None
+        data["amc_contract"] = patient.amc_contract or None
+        data["exoneration_type"] = patient.exoneration_type or None
+        data["birth_rank"] = patient.birth_rank
         return data
 
     async def get_by_id(self, patient_id: UUID) -> Patient | None:

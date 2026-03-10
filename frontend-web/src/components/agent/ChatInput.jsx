@@ -1,0 +1,115 @@
+/**
+ * Zone de saisie du chat agent IA.
+ * Enter = envoyer, Shift+Enter = nouvelle ligne.
+ * Itération C : bouton microphone push-to-talk intégré à gauche.
+ */
+import { useRef, useState } from 'react';
+import { Send } from 'lucide-react';
+import VoiceInput from './VoiceInput';
+
+const MAX_CHARS = 2000;
+
+/**
+ * @param {{
+ *   onSend: (text: string) => void,
+ *   disabled: boolean,
+ *   placeholder?: string,
+ *   onVoiceWarning?: (msg: string) => void,
+ *   onVoiceError?: (msg: string) => void,
+ * }} props
+ */
+export default function ChatInput({ onSend, disabled, placeholder, onVoiceWarning, onVoiceError }) {
+  const [text, setText] = useState('');
+  const textareaRef = useRef(null);
+
+  const canSend = text.trim().length > 0 && !disabled && text.length <= MAX_CHARS;
+
+  const handleSend = () => {
+    if (!canSend) return;
+    onSend(text.trim());
+    setText('');
+    textareaRef.current?.focus();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // Insère la transcription dans le champ (l'IDEL peut relire et corriger avant envoi)
+  const handleTranscript = (transcribedText) => {
+    setText((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
+    textareaRef.current?.focus();
+  };
+
+  const remaining = MAX_CHARS - text.length;
+
+  return (
+    <div className="border-t border-slate-200 bg-white p-3">
+      <div className="flex gap-2 items-end">
+        {/* Bouton microphone push-to-talk */}
+        <VoiceInput
+          onTranscript={handleTranscript}
+          onWarning={onVoiceWarning}
+          onError={onVoiceError}
+          disabled={disabled}
+        />
+
+        {/* Champ de saisie */}
+        <div className="flex-1 relative">
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              disabled
+                ? "L'assistant répond..."
+                : (placeholder || 'Écris ou maintiens 🎤 pour dicter...')
+            }
+            disabled={disabled}
+            rows={1}
+            className={`w-full resize-none rounded-xl border px-3 py-2 text-sm leading-relaxed outline-none transition-colors
+              max-h-32 overflow-y-auto
+              ${disabled
+                ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                : 'bg-white text-slate-800 border-slate-300 focus:border-blue-400'
+              }`}
+            style={{ minHeight: '38px', height: 'auto' }}
+            onInput={(e) => {
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+            }}
+          />
+          {/* Compteur caractères */}
+          {text.length > MAX_CHARS * 0.8 && (
+            <span
+              className={`absolute bottom-1.5 right-2 text-xs ${
+                remaining < 0 ? 'text-red-500' : 'text-slate-400'
+              }`}
+            >
+              {remaining}
+            </span>
+          )}
+        </div>
+
+        {/* Bouton envoyer */}
+        <button
+          onClick={handleSend}
+          disabled={!canSend}
+          title="Envoyer (Entrée)"
+          className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-colors
+            ${canSend
+              ? 'bg-blue-600 hover:bg-blue-700 text-white'
+              : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+            }`}
+        >
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
+      <p className="text-xs text-slate-400 mt-1">Shift+Entrée pour aller à la ligne</p>
+    </div>
+  );
+}

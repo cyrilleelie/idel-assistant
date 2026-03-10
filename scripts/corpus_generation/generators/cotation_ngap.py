@@ -70,7 +70,7 @@ class CotationNGAPGenerator(BaseGenerator):
         "patient vu au cabinet (pas d'IK)",
         # Cas ambigus
         "escarre stade 2 → AMI 4 (pas AIS)",
-        "pansement post-opératoire simple → AIS 1 (pas AMI)",
+        "pansement post-opératoire simple → AIS 3 (pas AMI)",
         "injection dans le cadre BSI → IFI (pas IFD)",
         "glycémie + injection insuline même patient (cumul art. 11)",
     ]
@@ -93,6 +93,10 @@ Heure du soin : {heure}
 
 RÈGLES DE COTATION NGAP À APPLIQUER CORRECTEMENT :
 - AMI 1 (coeff 1) = 9,10€, AMI 2 = 18,20€, AMI 3 = 27,30€, AMI 4 = 36,40€
+- AIS 3 = 27,30€ — ATTENTION : les codes AIS 1 et AIS 2 n'existent PAS en NGAP. Le coefficient minimum AIS est 3.
+- IFD = 2,50€ (indemnité forfaitaire de déplacement)
+- IFI = 2,50€ (indemnité forfaitaire BSI — même tarif que IFD, applicable si BSI actif)
+- BSA = 29,70€, BSB = 33,30€, BSC = 47,85€
 - Si patient BSI actif : AMI → AMX (même tarif), IFD → IFI
 - MAU (+9,15€) : soins entre 20h-23h OU 5h-8h
 - MCI (+9,15€) : soins le dimanche ou jours fériés
@@ -119,10 +123,10 @@ Retourne UNIQUEMENT ce JSON :
       "type": "function",
       "function": {{
         "name": "analyser_et_coter",
-        "arguments": "<json string des arguments>"
+        "arguments": {{"description_soin": "<description du soin>", "heure": "{heure}", "patient_id": "uuid-fictif"}}
       }}
     }}]}},
-    {{"role": "tool", "tool_call_id": "call_001", "content": "<json string du résultat outil>"}},
+    {{"role": "tool", "tool_call_id": "call_001", "content": "<résultat cotation en JSON string>"}},
     {{"role": "assistant", "content": "<réponse concise de l'agent, max 5 lignes, demande confirmation>"}}
   ]
 }}
@@ -135,22 +139,12 @@ IMPORTANT :
 - Varie les formulations, les contextes, les heures"""
 
     async def generate_batch(self, n: int = 50, **kwargs) -> list[TrainingExample]:
-        examples: list[TrainingExample] = []
+        def _kwargs():
+            cas = (
+                random.choice(self.CAS_LIMITES)
+                if random.random() < self.config.edge_case_ratio
+                else None
+            )
+            return {"cas_specifique": cas}
 
-        for i in range(n):
-            difficulty = self._pick_difficulty()
-
-            # 40% cas limites, 60% cas courants
-            if random.random() < self.config.edge_case_ratio:
-                cas = random.choice(self.CAS_LIMITES)
-            else:
-                cas = None
-
-            prompt = self._build_generation_prompt(difficulty, cas)
-            response = await self._call_claude(prompt)
-            example = self._parse_response(response, self.CATEGORY)
-
-            if example:
-                examples.append(example)
-
-        return examples
+        return await self._generate_parallel(n, self.CATEGORY, build_kwargs_fn=_kwargs)

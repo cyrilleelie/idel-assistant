@@ -101,6 +101,13 @@ La question doit être :
 - Précise mais avec des termes courants (pas forcément le terme exact)
 - Réaliste (question qu'une IDEL poserait vraiment à son assistant)
 
+TARIFS DE RÉFÉRENCE MAJORATIONS (à utiliser dans les réponses quand pertinent) :
+- MAU = 9,15€ (majoration acte unique, nuit 20h-23h et 5h-8h)
+- MCI = 9,15€ (majoration dimanche et jours fériés)
+- MAD = 19,50€ (majoration nuit profonde 23h-5h)
+- MAU et MCI ne se cumulent JAMAIS
+- Si tu n'es pas certain d'un montant ou d'une règle, ne l'invente pas — indique que l'IDEL doit vérifier auprès de sa CPAM ou de l'Ordre.
+
 La réponse de l'agent doit :
 - Être factuelle et à jour (post-avenant 10 NGAP janvier 2024)
 - Être concise (max 6 lignes) avec les informations essentielles
@@ -108,6 +115,7 @@ La réponse de l'agent doit :
 - Orienter vers les sources officielles si la situation est complexe
 - Ne JAMAIS donner de conseils médicaux
 - Signaler clairement si l'information peut avoir changé
+- Ne JAMAIS inventer un montant ou une règle si l'information n'est pas certaine
 
 Retourne UNIQUEMENT ce JSON :
 {{
@@ -124,20 +132,12 @@ IMPORTANT : Pas d'appels d'outils pour cette catégorie — réponse directe.
 Varie les formulations et les niveaux de connaissance de l'IDEL."""
 
     async def generate_batch(self, n: int = 50, **kwargs) -> list[TrainingExample]:
-        examples: list[TrainingExample] = []
-
-        # Alterne les sous-catégories pour une bonne couverture
         subcategories = list(self.THEMES.keys())
+        counter = {"i": 0}
 
-        for i in range(n):
-            difficulty = self._pick_difficulty()
-            theme_cat = subcategories[i % len(subcategories)]
+        def _kwargs():
+            theme_cat = subcategories[counter["i"] % len(subcategories)]
+            counter["i"] += 1
+            return {"theme_category": theme_cat}
 
-            prompt = self._build_generation_prompt(difficulty, theme_cat)
-            response = await self._call_claude(prompt)
-            example = self._parse_response(response, self.CATEGORY)
-
-            if example:
-                examples.append(example)
-
-        return examples
+        return await self._generate_parallel(n, self.CATEGORY, build_kwargs_fn=_kwargs)

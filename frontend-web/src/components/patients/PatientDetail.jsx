@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   ArrowLeft, UserMinus, UserPlus, Edit, UserCircle, Activity,
   MapPin, Phone, Mail, Stethoscope, FileText, ClipboardList, ScrollText, MessageSquare,
-  Calendar, Users, AlertTriangle, ChevronDown
+  Calendar, Users, AlertTriangle, ChevronDown, ShieldCheck
 } from 'lucide-react';
 import PrescriptionsTab from './PrescriptionsTab';
 import PrescriptionList from '../prescriptions/PrescriptionList';
@@ -485,20 +485,7 @@ function renderDrawerSection({
   onOrdonnancesCountChange,
 }) {
   if (sectionId === 'info') {
-    if (!isEditingPatient) {
-      return <DrawerInfoView patientForm={patientForm} />;
-    }
-    // Editing mode: show full info + medical fields merged
-    return renderTabContent({
-      patientSubTab: 'info', patientForm, setPatientForm, isEditingPatient, setIsEditingPatient,
-      selectedPatientId, appointments, nurses, schedule, configs, getActiveConfigForDate,
-      onCreateAppointment, onCancelAppointment,
-      onSavePrescription, onDeletePrescription, prescriptionsLoading,
-      careLabels, careDurations, careLabelCodeMap,
-      cabinetData, patients, initialEditProtocolId,
-      navigateToTransmissions, transmissionPreFilter,
-      isDrawerMode: true,
-    });
+    return <DrawerInfoView patientForm={patientForm} setPatientForm={setPatientForm} isEditing={isEditingPatient} />;
   }
 
   if (sectionId === 'prescriptions') {
@@ -552,9 +539,15 @@ function renderDrawerSection({
   return <p className="text-sm text-slate-400 italic">Enregistrez le patient pour acceder a cette section.</p>;
 }
 
-// Drawer-specific compact info view (read-only, card-based) — includes merged medical content
-function DrawerInfoView({ patientForm }) {
+// Drawer-specific info view (read + edit) — includes merged medical content + health coverage cards
+function DrawerInfoView({ patientForm, setPatientForm, isEditing = false }) {
   const pathologies = patientForm.antecedents ? patientForm.antecedents.split('\n').filter(Boolean) : [];
+  const set = (field, value) => setPatientForm(prev => ({ ...prev, [field]: value }));
+
+  const hasVitale = !!(patientForm.ssn || patientForm.amo_code);
+  const hasMutuelle = !!(patientForm.amc_name || patientForm.amc_code || patientForm.amc_contract);
+
+  const ci = "w-full bg-white/20 border border-white/30 rounded px-2 py-1 text-sm placeholder-white/50 outline-none focus:border-white/60 focus:bg-white/25 transition-colors";
 
   return (
     <div className="space-y-4">
@@ -565,16 +558,36 @@ function DrawerInfoView({ patientForm }) {
             <Phone size={14} className="text-primary" />
             <span className="text-[11px] font-semibold text-slate-400 uppercase">Telephone</span>
           </div>
-          <p className="text-sm font-semibold text-slate-800">{patientForm.phone || '-'}</p>
+          {isEditing
+            ? <input type="tel" value={patientForm.phone} onChange={e => set('phone', e.target.value)} className="w-full border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-primary/30 outline-none" placeholder="06..." />
+            : <p className="text-sm font-semibold text-slate-800">{patientForm.phone || '-'}</p>
+          }
         </div>
         <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
           <div className="flex items-center gap-2 mb-1">
-            <Calendar size={14} className="text-primary" />
-            <span className="text-[11px] font-semibold text-slate-400 uppercase">Prochain RDV</span>
+            <Mail size={14} className="text-primary" />
+            <span className="text-[11px] font-semibold text-slate-400 uppercase">Email</span>
           </div>
-          <p className="text-sm font-semibold text-slate-800">-</p>
+          {isEditing
+            ? <input type="email" value={patientForm.email} onChange={e => set('email', e.target.value)} className="w-full border rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-primary/30 outline-none" placeholder="@" />
+            : <p className="text-sm font-semibold text-slate-800">{patientForm.email || '-'}</p>
+          }
         </div>
       </div>
+
+      {/* Identity */}
+      {isEditing && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Nom</label>
+            <input type="text" value={patientForm.lastName} onChange={e => set('lastName', e.target.value.toUpperCase())} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 outline-none uppercase" placeholder="DUPONT" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Prenom</label>
+            <input type="text" value={patientForm.firstName} onChange={e => set('firstName', e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 outline-none capitalize" placeholder="Jean" />
+          </div>
+        </div>
+      )}
 
       {/* Address */}
       <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
@@ -582,83 +595,201 @@ function DrawerInfoView({ patientForm }) {
           <MapPin size={14} className="text-primary" />
           <span className="text-[11px] font-semibold text-slate-400 uppercase">Adresse</span>
         </div>
-        <p className="text-sm text-slate-700">{patientForm.address || '-'}</p>
+        {isEditing
+          ? <AddressAutocomplete value={patientForm.address} onChange={address => set('address', address)} placeholder="12 rue de la Paix, 75000 Paris" />
+          : <p className="text-sm text-slate-700">{patientForm.address || '-'}</p>
+        }
       </div>
-
-      {/* Email */}
-      {patientForm.email && (
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-          <div className="flex items-center gap-2 mb-1">
-            <Mail size={14} className="text-primary" />
-            <span className="text-[11px] font-semibold text-slate-400 uppercase">Email</span>
-          </div>
-          <p className="text-sm text-slate-700">{patientForm.email}</p>
-        </div>
-      )}
-
-      {/* Contact de confiance */}
-      {patientForm.doctorContact && (
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-          <div className="flex items-center gap-2 mb-1">
-            <Users size={14} className="text-primary" />
-            <span className="text-[11px] font-semibold text-slate-400 uppercase">Contact de confiance</span>
-          </div>
-          <p className="text-sm text-slate-700">{patientForm.doctorContact}</p>
-        </div>
-      )}
 
       {/* Medical info */}
       <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-3">
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Informations medicales</h4>
 
-        {patientForm.doctorName && (
+        <div>
+          <span className="text-[11px] text-slate-400 font-medium">Medecin traitant</span>
+          {isEditing
+            ? <DoctorAutocomplete
+                value={{ name: patientForm.doctorName, rpps_number: patientForm.doctorRpps || null }}
+                onChange={({ name, rpps_number }) => setPatientForm({ ...patientForm, doctorName: name, doctorRpps: rpps_number || '' })}
+                placeholder="Dr. ..."
+              />
+            : patientForm.doctorName
+              ? <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                  <Stethoscope size={13} className="text-primary" />
+                  {patientForm.doctorName}
+                  {patientForm.doctorRpps && <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1 py-0.5 rounded">RPPS</span>}
+                </p>
+              : <p className="text-xs text-slate-400 italic">Non renseigne</p>
+          }
+        </div>
+
+        {isEditing ? (
           <div>
-            <span className="text-[11px] text-slate-400 font-medium">Medecin traitant</span>
-            <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
-              <Stethoscope size={13} className="text-primary" />
-              {patientForm.doctorName}
-              {patientForm.doctorRpps && (
-                <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1 py-0.5 rounded">RPPS</span>
+            <span className="text-[11px] text-slate-400 font-medium">Contact cabinet</span>
+            <input type="text" value={patientForm.doctorContact} onChange={e => set('doctorContact', e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 outline-none mt-1" placeholder="Tel ou Email..." />
+          </div>
+        ) : patientForm.doctorContact ? (
+          <div>
+            <span className="text-[11px] text-slate-400 font-medium">Contact cabinet</span>
+            <p className="text-sm text-slate-700">{patientForm.doctorContact}</p>
+          </div>
+        ) : null}
+
+        <div>
+          <span className="text-[11px] text-slate-400 font-medium">Antecedents medicaux</span>
+          {isEditing
+            ? <textarea value={patientForm.antecedents} onChange={e => set('antecedents', e.target.value)} rows={3} className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary/30 outline-none mt-1" placeholder="Allergies, pathologies..." />
+            : pathologies.length > 0
+              ? <div className="flex flex-wrap gap-1.5 mt-1">
+                  {pathologies.map((p, i) => (
+                    <span key={i} className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">{p}</span>
+                  ))}
+                </div>
+              : <p className="text-xs text-slate-400 italic">Aucun</p>
+          }
+        </div>
+      </div>
+
+      {/* Couverture sante */}
+      <div>
+        <h4 className="text-slate-800 font-bold text-sm flex items-center gap-2 mb-3">
+          <ShieldCheck size={16} className="text-primary" />
+          Couverture Sante
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Carte Vitale */}
+          <div className={`relative overflow-hidden rounded-xl text-white shadow-lg ${hasVitale || isEditing ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-slate-300 to-slate-400'}`} style={{ aspectRatio: '1.586' }}>
+            <div className="absolute inset-0 p-3 flex flex-col">
+              <div className="flex justify-between items-start">
+                <FileText size={20} className="opacity-80" />
+                <span className="text-[8px] font-bold tracking-widest uppercase opacity-80">Carte Vitale</span>
+              </div>
+              {isEditing ? (
+                <div className="flex-1 flex flex-col justify-center gap-1.5 mt-1">
+                  <div>
+                    <p className="text-[8px] opacity-70">N. Securite Sociale</p>
+                    <input type="text" value={patientForm.ssn || ''} onChange={e => set('ssn', e.target.value)} placeholder="1 80 12 75 000 00" maxLength={15} style={{ fontFamily: 'monospace', letterSpacing: '0.1em', fontSize: '10px' }} className={ci} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>
+                      <p className="text-[7px] opacity-70">Organisme</p>
+                      <input type="text" value={patientForm.amo_code || ''} onChange={e => set('amo_code', e.target.value)} placeholder="750100001" maxLength={9} style={{ fontFamily: 'monospace', fontSize: '9px' }} className={ci} />
+                    </div>
+                    <div>
+                      <p className="text-[7px] opacity-70">Centre</p>
+                      <input type="text" value={patientForm.amo_center || ''} onChange={e => set('amo_center', e.target.value)} placeholder="CPAM" style={{ fontSize: '9px' }} className={ci} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>
+                      <p className="text-[7px] opacity-70">Exoneration</p>
+                      <select value={patientForm.exoneration_type || ''} onChange={e => set('exoneration_type', e.target.value)} style={{ fontSize: '9px' }} className={ci}>
+                        <option value="" className="text-slate-800">Aucune</option>
+                        <option value="ALD" className="text-slate-800">ALD</option>
+                        <option value="MAT" className="text-slate-800">MAT</option>
+                        <option value="AT" className="text-slate-800">AT</option>
+                        <option value="100" className="text-slate-800">100%</option>
+                      </select>
+                    </div>
+                    <div>
+                      <p className="text-[7px] opacity-70">Rang</p>
+                      <input type="number" value={patientForm.birth_rank || ''} onChange={e => set('birth_rank', e.target.value ? parseInt(e.target.value) : null)} placeholder="1" min={1} max={9} style={{ fontSize: '9px' }} className={ci} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col justify-between mt-2">
+                  <div>
+                    <p className="text-[8px] opacity-70">N. Securite Sociale</p>
+                    <p className="text-xs font-mono tracking-wider font-bold">
+                      {patientForm.ssn ? patientForm.ssn.replace(/(\d)(?=(\d{2})+(?!\d))/g, '$1 ') : '- - -'}
+                    </p>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-[10px] font-medium uppercase truncate">{patientForm.lastName || ''} {patientForm.firstName || ''}</p>
+                      {patientForm.birth_rank && <p className="text-[8px] opacity-70">Rang {patientForm.birth_rank}</p>}
+                    </div>
+                    <div className="text-right">
+                      {patientForm.amo_center && <p className="text-[8px] opacity-70">{patientForm.amo_center}</p>}
+                      {patientForm.amo_code && <p className="text-[9px] font-mono font-semibold">{patientForm.amo_code}</p>}
+                    </div>
+                  </div>
+                </div>
               )}
-            </p>
+            </div>
+            <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-2xl" />
           </div>
-        )}
 
-        {patientForm.exoneration_type && (
-          <div>
-            <span className="text-[11px] text-slate-400 font-medium">Exoneration</span>
-            <p className="text-sm text-slate-700">{patientForm.exoneration_type}</p>
+          {/* Carte Mutuelle */}
+          <div className={`relative overflow-hidden rounded-xl text-white shadow-lg ${hasMutuelle || isEditing ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-slate-300 to-slate-400'}`} style={{ aspectRatio: '1.586' }}>
+            <div className="absolute inset-0 p-3 flex flex-col">
+              <div className="flex justify-between items-start">
+                <ShieldCheck size={20} className="opacity-80" />
+                <span className="text-[8px] font-bold tracking-widest uppercase opacity-80">Mutuelle</span>
+              </div>
+              {isEditing ? (
+                <div className="flex-1 flex flex-col justify-center gap-1.5 mt-1">
+                  <div>
+                    <p className="text-[8px] opacity-70">Nom de la mutuelle</p>
+                    <input type="text" value={patientForm.amc_name || ''} onChange={e => set('amc_name', e.target.value)} placeholder="MGEN, Harmonie..." style={{ fontSize: '10px' }} className={ci} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>
+                      <p className="text-[7px] opacity-70">Code AMC</p>
+                      <input type="text" value={patientForm.amc_code || ''} onChange={e => set('amc_code', e.target.value)} placeholder="Code" maxLength={10} style={{ fontFamily: 'monospace', fontSize: '9px' }} className={ci} />
+                    </div>
+                    <div>
+                      <p className="text-[7px] opacity-70">N. contrat</p>
+                      <input type="text" value={patientForm.amc_contract || ''} onChange={e => set('amc_contract', e.target.value)} placeholder="Contrat" style={{ fontFamily: 'monospace', fontSize: '9px' }} className={ci} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col justify-between mt-2">
+                  <div>
+                    <p className="text-[8px] opacity-70">{hasMutuelle ? 'Organisme' : ''}</p>
+                    <p className="text-sm font-bold">{hasMutuelle ? (patientForm.amc_name || 'Mutuelle') : 'Non renseignee'}</p>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <p className="text-[10px] font-medium uppercase truncate">{patientForm.lastName || ''} {patientForm.firstName || ''}</p>
+                    <div className="text-right">
+                      {patientForm.amc_contract && <p className="text-[8px] opacity-70">Contrat</p>}
+                      {patientForm.amc_contract && <p className="text-[9px] font-mono font-semibold">{patientForm.amc_contract}</p>}
+                      {patientForm.amc_code && <p className="text-[8px] font-mono opacity-70 mt-0.5">{patientForm.amc_code}</p>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-2xl" />
           </div>
-        )}
+        </div>
 
-        {pathologies.length > 0 && (
-          <div>
-            <span className="text-[11px] text-slate-400 font-medium">Pathologies / Allergies</span>
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {pathologies.map((p, i) => (
-                <span key={i} className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
-                  {p}
-                </span>
-              ))}
+        {/* Info pills: exoneration */}
+        {!isEditing && patientForm.exoneration_type && (
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            <div className="bg-white p-3 rounded-2xl border border-slate-200 flex flex-col items-center gap-1.5 text-center">
+              <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
+                <AlertTriangle size={16} />
+              </div>
+              <p className="text-xs font-bold text-slate-700">{patientForm.exoneration_type}</p>
+              <p className="text-[10px] text-slate-500 uppercase">Exoneration</p>
             </div>
           </div>
         )}
-
-        {!patientForm.doctorName && !patientForm.exoneration_type && pathologies.length === 0 && (
-          <p className="text-xs text-slate-400 italic">Aucune information medicale renseignee.</p>
-        )}
       </div>
 
-      {/* SSN */}
-      {patientForm.ssn && (
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-          <span className="text-[11px] text-slate-400 font-medium">N. Securite Sociale</span>
-          <p className="text-sm font-mono tracking-wider text-slate-800">{patientForm.ssn}</p>
+      {/* Notes internes */}
+      {isEditing ? (
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle size={13} className="text-amber-600" />
+            <span className="text-[11px] font-semibold text-amber-600 uppercase">Notes internes</span>
+          </div>
+          <textarea value={patientForm.notes} onChange={e => set('notes', e.target.value)} rows={3} className="w-full border border-amber-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-amber-300/30 outline-none bg-amber-50" placeholder="Codes porte, habitudes du patient..." />
         </div>
-      )}
-
-      {/* Notes (if any, shown as amber card) */}
-      {patientForm.notes && (
+      ) : patientForm.notes ? (
         <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
           <div className="flex items-center gap-2 mb-1">
             <AlertTriangle size={13} className="text-amber-600" />
@@ -666,7 +797,7 @@ function DrawerInfoView({ patientForm }) {
           </div>
           <p className="text-sm text-amber-800 italic whitespace-pre-wrap">{patientForm.notes}</p>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

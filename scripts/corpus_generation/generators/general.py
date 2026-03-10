@@ -124,16 +124,4 @@ IMPORTANT :
 - Varie les formulations"""
 
     async def generate_batch(self, n: int = 50, **kwargs) -> list[TrainingExample]:
-        examples: list[TrainingExample] = []
-
-        for _ in range(n):
-            difficulty = self._pick_difficulty()
-
-            prompt = self._build_generation_prompt(difficulty)
-            response = await self._call_claude(prompt)
-            example = self._parse_response(response, self.CATEGORY)
-
-            if example:
-                examples.append(example)
-
-        return examples
+        return await self._generate_parallel(n, self.CATEGORY)

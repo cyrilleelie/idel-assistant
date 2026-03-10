@@ -84,12 +84,15 @@ La dictée de l'IDEL doit être :
 - PAS structurée (elle ne dit pas "D : ..., A : ..., R : ...")
 - Réaliste : mélange d'observations, d'actions et de résultats entremêlés
 - Inclure des valeurs de constantes vitales ({constantes_str})
-- En difficulté "complexe" : situation préoccupante nécessitant une alerte
+- En difficulté "simple" : visite de routine, tout va bien, pas d'alerte, 1-2 constantes normales
+- En difficulté "moyen" : situation normale avec un point d'attention mineur (pas d'alerte clinique)
+- En difficulté "complexe" : situation préoccupante nécessitant une alerte clinique justifiée
 
 La structuration DAR de l'agent doit :
 - Extraire proprement les 3 sections D (Données), A (Actions), R (Résultats)
 - Identifier les constantes vitales séparément
-- Générer une alerte si situation préoccupante (ex: TA > 180, SpO2 < 90, glycémie > 3g/L)
+- Générer une alerte UNIQUEMENT si situation préoccupante (ex: TA > 180, SpO2 < 90, glycémie > 3g/L)
+- En difficulté "simple" ou "moyen", alerte_clinique doit être null
 - Être fidèle aux observations (ne rien inventer)
 
 Retourne UNIQUEMENT ce JSON :
@@ -104,10 +107,10 @@ Retourne UNIQUEMENT ce JSON :
       "type": "function",
       "function": {{
         "name": "structurer_transmission",
-        "arguments": "{{\\"dictee_libre\\": \\"<la dictée>\\", \\"patient_id\\": \\"uuid-fictif\\"}}"
+        "arguments": {{"dictee_libre": "<la dictée>", "patient_id": "uuid-fictif"}}
       }}
     }}]}},
-    {{"role": "tool", "tool_call_id": "call_001", "content": "<json string du DAR structuré>"}},
+    {{"role": "tool", "tool_call_id": "call_001", "content": "<DAR structuré en JSON string — DOIT respecter EXACTEMENT ce schéma : {{\"donnees\": \"...\", \"actions\": \"...\", \"resultats\": \"...\", \"constantes_vitales\": {{\"ta\": \"...\", \"fc\": \"...\", ...}}, \"alerte_clinique\": \"...\" ou null}}>"}},
     {{"role": "assistant", "content": "<preview du DAR + demande de confirmation>"}}
   ]
 }}
@@ -116,20 +119,16 @@ IMPORTANT :
 - Utilise {patient} comme nom de patient
 - Varie les formulations, le niveau de détail, le vocabulaire
 - En difficulté "complexe", inclure une alerte clinique justifiée
-- La réponse de l'agent montre le DAR structuré et demande confirmation"""
+- En difficulté "simple" ou "moyen", alerte_clinique DOIT être null
+- La réponse de l'agent montre le DAR structuré et demande confirmation
+
+SCHÉMA OBLIGATOIRE du tool result (content de structurer_transmission) :
+Le content DOIT être un JSON string avec EXACTEMENT ces clés :
+{{"donnees": "<observations du patient>", "actions": "<soins réalisés>", "resultats": "<résultats observés>", "constantes_vitales": {{"ta": "12/8", "fc": "72", ...}}, "alerte_clinique": "<texte alerte>" ou null}}
+Ne jamais utiliser d'autres clés ou un autre format."""
 
     async def generate_batch(self, n: int = 50, **kwargs) -> list[TrainingExample]:
-        examples: list[TrainingExample] = []
+        def _kwargs():
+            return {"pathologie": random.choice(self.PATHOLOGIES_COURANTES)}
 
-        for _ in range(n):
-            difficulty = self._pick_difficulty()
-            pathologie = random.choice(self.PATHOLOGIES_COURANTES)
-
-            prompt = self._build_generation_prompt(difficulty, pathologie)
-            response = await self._call_claude(prompt)
-            example = self._parse_response(response, self.CATEGORY)
-
-            if example:
-                examples.append(example)
-
-        return examples
+        return await self._generate_parallel(n, self.CATEGORY, build_kwargs_fn=_kwargs)

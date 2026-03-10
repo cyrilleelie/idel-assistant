@@ -52,18 +52,15 @@ class NGAPValidator:
                 args_str = func.get("arguments", "")
                 if isinstance(args_str, str):
                     try:
-                        args = json.loads(args_str)
+                        json.loads(args_str)
                     except json.JSONDecodeError:
                         return False
-                elif isinstance(args_str, dict):
-                    args = args_str
-                else:
+                elif not isinstance(args_str, dict):
                     return False
 
-                # Cherche les actes dans les arguments (différents formats possibles)
-                actes = self._extract_actes(args)
-                if actes and not self._validate_actes(actes):
-                    return False
+                # Les arguments contiennent des descriptions en langage naturel,
+                # pas des codes NGAP — on ne valide que le format JSON.
+                # Les codes NGAP sont validés dans les résultats d'outils ci-dessous.
 
         # Vérifie aussi le résultat de l'outil (role: tool)
         for msg in messages:
@@ -90,11 +87,24 @@ class NGAPValidator:
         """Extrait les codes d'actes depuis les arguments ou résultats."""
         actes = []
 
-        # Format possible : {"actes": ["AMI 4", "MAU"]}
+        def _append_if_str(value):
+            if isinstance(value, str):
+                actes.append(value)
+            elif isinstance(value, list):
+                for v in value:
+                    _append_if_str(v)
+
+        # Format possible : {"actes": ["AMI 4", "MAU"]} ou {"actes": [{"code": "AMI 4"}, ...]}
         if "actes" in data:
             raw = data["actes"]
             if isinstance(raw, list):
-                actes.extend(raw)
+                for item in raw:
+                    if isinstance(item, str):
+                        actes.append(item)
+                    elif isinstance(item, dict) and "code" in item:
+                        _append_if_str(item["code"])
+                    elif isinstance(item, list):
+                        _append_if_str(item)
             elif isinstance(raw, str):
                 actes.append(raw)
 
@@ -102,11 +112,11 @@ class NGAPValidator:
         if "lignes" in data:
             for ligne in data.get("lignes", []):
                 if isinstance(ligne, dict) and "code" in ligne:
-                    actes.append(ligne["code"])
+                    _append_if_str(ligne["code"])
 
         # Format possible : {"code_ngap": "AMI 4"}
         if "code_ngap" in data:
-            actes.append(data["code_ngap"])
+            _append_if_str(data["code_ngap"])
 
         return actes
 

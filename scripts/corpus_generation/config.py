@@ -5,25 +5,26 @@ from dataclasses import dataclass, field
 
 @dataclass
 class CorpusConfig:
-    # Modèle Claude pour la génération
-    generation_model: str = "claude-sonnet-4-20250514"
+    # Modèle pour la génération (Gemini 2.5 Flash)
+    generation_model: str = "gemini-2.5-flash-lite"
 
     # Répartition du corpus par catégorie
     categories: dict[str, int] = field(default_factory=lambda: {
-        "cotation_ngap": 5000,
-        "transmission_dar": 4000,
-        "appel_patient_rdv": 4000,
-        "ordonnance": 3000,
-        "reglementation": 3000,
-        "appel_difficile": 2000,
-        "general": 1000,
+        "cotation_ngap": 3000,
+        "transmission_dar": 2500,
+        "appel_patient_rdv": 2000,
+        "ordonnance": 1500,
+        "reglementation": 1500,
+        "appel_difficile": 1000,
+        "general": 500,
     })
 
     # Paramètres de génération
     batch_size: int = 50
+    concurrency: int = 20  # requêtes API en parallèle
     max_retries: int = 3
     retry_delay_base: float = 2.0
-    rate_limit_delay: float = 1.0  # secondes entre batches
+    rate_limit_delay: float = 0.5  # secondes entre batches
 
     # Répartition difficultés
     difficulty_weights: dict[str, float] = field(default_factory=lambda: {

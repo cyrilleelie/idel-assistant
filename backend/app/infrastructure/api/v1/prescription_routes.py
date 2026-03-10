@@ -30,7 +30,6 @@ from app.application.use_cases.prescription.renew_prescription import (
 )
 from app.domain.rules.prescription_rules import (
     compute_end_date,
-    compute_prescription_status,
     days_remaining,
 )
 from app.infrastructure.api.dependencies import (
@@ -246,9 +245,6 @@ async def get_prescription(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ordonnance introuvable")
 
     invoices = await repo.list_by_invoice(prescription_id, auth.cabinet_id)
-
-    effective_status = compute_prescription_status(prescription)
-    prescription.status = effective_status
 
     dto = _entity_to_dto(
         prescription,

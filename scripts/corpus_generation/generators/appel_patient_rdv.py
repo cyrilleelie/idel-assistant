@@ -101,10 +101,10 @@ Retourne UNIQUEMENT ce JSON :
       "type": "function",
       "function": {{
         "name": "rechercher_patient",
-        "arguments": "<json string>"
+        "arguments": {{"nom": "<nom du patient>"}}
       }}
     }}]}},
-    {{"role": "tool", "tool_call_id": "call_001", "content": "<json string résultat>"}},
+    {{"role": "tool", "tool_call_id": "call_001", "content": "<résultat recherche en JSON string>"}},
     {{"role": "assistant", "content": "<confirmation identité + question créneau>"}},
     {{"role": "user", "content": "<patient indique ses préférences>"}},
     {{"role": "assistant", "content": null, "tool_calls": [{{
@@ -112,10 +112,10 @@ Retourne UNIQUEMENT ce JSON :
       "type": "function",
       "function": {{
         "name": "consulter_creneaux_disponibles",
-        "arguments": "<json string>"
+        "arguments": {{"patient_id": "uuid-fictif", "type_soin": "<type de soin>"}}
       }}
     }}]}},
-    {{"role": "tool", "tool_call_id": "call_002", "content": "<json string créneaux>"}},
+    {{"role": "tool", "tool_call_id": "call_002", "content": "<créneaux disponibles en JSON string>"}},
     {{"role": "assistant", "content": "<proposition de créneau>"}},
     {{"role": "user", "content": "<patient accepte/hésite>"}},
     {{"role": "assistant", "content": null, "tool_calls": [{{
@@ -123,10 +123,10 @@ Retourne UNIQUEMENT ce JSON :
       "type": "function",
       "function": {{
         "name": "creer_rendez_vous",
-        "arguments": "<json string>"
+        "arguments": {{"patient_id": "uuid-fictif", "date": "YYYY-MM-DD", "heure": "HH:MM", "type_soin": "<type>"}}
       }}
     }}]}},
-    {{"role": "tool", "tool_call_id": "call_003", "content": "<json string confirmation>"}},
+    {{"role": "tool", "tool_call_id": "call_003", "content": "<confirmation en JSON string>"}},
     {{"role": "assistant", "content": "<récapitulatif et au revoir>"}}
   ]
 }}
@@ -136,15 +136,9 @@ IMPORTANT :
 - Le patient parle comme au téléphone (phrases courtes, hésitations)
 - Le secrétaire est chaleureux et patient (surtout avec les personnes âgées)
 - Utilise {patient} comme nom de patient
-- Le secrétaire se présente TOUJOURS comme "secrétaire automatique" au début"""
+- Le secrétaire se présente TOUJOURS comme "secrétaire automatique" au début
+
+RÈGLE ABSOLUE : Chaque message {{"role": "tool"}} DOIT être IMMÉDIATEMENT précédé d'un message {{"role": "assistant", "content": null, "tool_calls": [...]}} qui contient le tool_call correspondant. Un tool result ne peut JAMAIS apparaître après un message assistant textuel. Ne jamais omettre le message assistant+tool_calls avant un message tool."""
 
     async def generate_batch(self, n: int = 50, **kwargs) -> list[TrainingExample]:
-        examples: list[TrainingExample] = []
-        for _ in range(n):
-            difficulty = self._pick_difficulty()
-            prompt = self._build_generation_prompt(difficulty)
-            response = await self._call_claude(prompt)
-            example = self._parse_response(response, self.CATEGORY)
-            if example:
-                examples.append(example)
-        return examples
+        return await self._generate_parallel(n, self.CATEGORY)

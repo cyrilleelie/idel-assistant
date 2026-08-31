@@ -3,7 +3,7 @@
 
 **Mode d'emploi :**
 1. Ouvre Claude Code dans le dossier de ton projet
-2. Donne-lui le fichier `architecture-idel-assistant.md` en contexte (`/add docs/architecture.md`)
+2. Donne-lui le fichier `architecture-idel-assistant.md` en contexte (`/add docs/02-architecture-backend.md`)
 3. Exécute les prompts dans l'ordre, un par un
 4. Après chaque prompt, vérifie le checkpoint avant de passer au suivant
 5. Si quelque chose ne te convient pas, demande à Claude Code de corriger avant de continuer
@@ -131,7 +131,7 @@ Ne génère PAS encore de code applicatif, uniquement la structure et la configu
 ## PROMPT 1 — Domain Layer (entités, value objects, règles métier)
 
 ```
-Consulte le fichier docs/architecture.md pour le contexte complet du projet.
+Consulte le fichier docs/02-architecture-backend.md pour le contexte complet du projet.
 
 Implémente la couche Domain du projet. Cette couche ne doit avoir AUCUNE dépendance externe
 (pas de SQLAlchemy, FastAPI, ou bibliothèque tierce) sauf :
@@ -176,7 +176,7 @@ Crée les value objects suivants sur ce même pattern :
 
 Utilise des dataclasses régulières (pas frozen, car mutables).
 Utilise UUID pour les ids, avec default_factory=uuid4.
-Voici la liste complète des entités à créer (voir architecture.md section 3 pour tous les champs) :
+Voici la liste complète des entités à créer (voir 02-architecture-backend.md section 3 pour tous les champs) :
 - Cabinet, User, CabinetMember
 - Patient (note : les champs sensibles sont juste des str ici dans le domain, le chiffrement est dans infrastructure)
 - CareProtocol
@@ -283,7 +283,7 @@ Les tests ne doivent utiliser AUCUNE base de données, uniquement des entités i
 ## PROMPT 2 — Infrastructure : sécurité + persistence
 
 ```
-Consulte docs/architecture.md. On implémente maintenant la couche Infrastructure,
+Consulte docs/02-architecture-backend.md. On implémente maintenant la couche Infrastructure,
 en commençant par la sécurité et la persistence (SQLAlchemy).
 
 === SÉCURITÉ (infrastructure/security/) ===
@@ -425,7 +425,7 @@ tests/integration/test_patient_repo.py :
 ## PROMPT 3 — Infrastructure : API FastAPI
 
 ```
-Consulte docs/architecture.md. On ajoute maintenant la couche API HTTP (FastAPI).
+Consulte docs/02-architecture-backend.md. On ajoute maintenant la couche API HTTP (FastAPI).
 
 === CONFIG (app/config.py) ===
 
@@ -573,7 +573,7 @@ Swagger dispo sur : http://localhost:8000/docs
 ## PROMPT 4 — Suggestion de créneaux (killer feature)
 
 ```
-Consulte docs/architecture.md et docs/architecture-update-tournees.md.
+Consulte docs/02-architecture-backend.md et docs/02b-architecture-tournees.md.
 On implémente le moteur de suggestion de créneaux et la visualisation des tournées.
 
 === CONTEXTE MÉTIER ===
@@ -584,7 +584,7 @@ les détours et respecte la cohérence géographique par secteurs.
 
 === DOMAIN (domain/rules/slot_suggestion_rules.py) ===
 
-Implémente les fonctions suivantes (voir docs/architecture-update-tournees.md
+Implémente les fonctions suivantes (voir docs/02b-architecture-tournees.md
 pour les signatures détaillées) :
 
 - find_available_slots() : trouve les trous dans la journée et évalue chacun
@@ -628,7 +628,7 @@ Persistence :
 - SQLAlchemy repository pour Sector (CRUD simple)
 
 API Routes :
-- POST /api/v1/slots/suggest (voir contrat API dans architecture-update-tournees.md)
+- POST /api/v1/slots/suggest (voir contrat API dans 02b-architecture-tournees.md)
 - POST /api/v1/slots/suggest/{rank}/book (crée le RDV depuis la suggestion)
 - GET /api/v1/tournees/today (journée avec carte et métriques)
 - CRUD /api/v1/sectors
@@ -702,7 +702,7 @@ tests/unit/test_tournee_rules.py :
 ## PROMPT 5 — FRONTEND MOBILE (React Native + Expo)
 
 ```
-Consulte docs/architecture-frontend.md et docs/architecture-update-tournees.md.
+Consulte docs/03-architecture-frontend.md et docs/02b-architecture-tournees.md.
 
 On crée l'application mobile MVP avec React Native + Expo.
 
@@ -889,7 +889,7 @@ Pour tester sur le téléphone de ta femme :
 ## PROMPT 6 — FRONTEND WEB (React + Vite)
 
 ```
-Consulte docs/architecture-frontend.md et docs/architecture-update-tournees.md.
+Consulte docs/03-architecture-frontend.md et docs/02b-architecture-tournees.md.
 
 On crée le dashboard web MVP avec React + Vite + Tailwind + shadcn/ui.
 

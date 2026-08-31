@@ -491,7 +491,7 @@ idel-assistant/
 │   └── (à créer plus tard)
 │
 ├── docs/                             # Documentation
-│   ├── PRD.md
+│   ├── 01-produit-specifications.md
 │   ├── BUSINESS_PLAN.md
 │   └── API.md
 │

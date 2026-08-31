@@ -57,3 +57,13 @@ demo_output/
 # Node (frontend-mobile)
 node_modules/
 .expo/
+
+# Design references (Stitch mockups — not app source)
+/stitch_mobile/
+/stitch_web/
+
+# Runtime uploads
+backend/uploads/
+
+# Runtime PIDs (start-all.ps1)
+.running-pids.json

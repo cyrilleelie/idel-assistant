@@ -647,11 +647,11 @@ idel-assistant/
 ├── frontend-mobile/                         # React Native + Expo (Phase 3)
 │
 ├── docs/
-│   ├── architecture.md                      # CE DOCUMENT
-│   ├── PRD.md
+│   ├── 02-architecture-backend.md                      # CE DOCUMENT
+│   ├── 01-produit-specifications.md
 │   ├── adr/                                 # ADR individuels
 │   │   ├── 001-postgresql-unique.md
-│   │   ├── 002-clean-architecture.md
+│   │   ├── 002-clean-02-architecture-backend.md
 │   │   └── ...
 │   └── api/
 │       └── openapi.yaml                     # Contrat API
@@ -968,7 +968,7 @@ En continuant le projet idel-assistant existant, implémente la couche Infrastru
    - models/ : ORM models pour TOUTES les entités du domain, avec :
      - UUID primary keys (gen_random_uuid)
      - Timestamps created_at/updated_at automatiques
-     - Colonnes chiffrées pour données sensibles patients (voir liste dans architecture.md)
+     - Colonnes chiffrées pour données sensibles patients (voir liste dans 02-architecture-backend.md)
      - Le chiffrement utilise AES-256-GCM via la librairie cryptography (Fernet ou AESGCM)
      - Properties Python transparentes : model.first_name retourne le texte clair, model.first_name = "X" chiffre automatiquement
      - search_hash pour recherche par nom (HMAC-SHA256)

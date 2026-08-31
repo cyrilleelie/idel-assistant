@@ -3,7 +3,7 @@
 
 **Version :** 1.0
 **Date :** Février 2026
-**Basé sur :** PRD v1.0, architecture.md, architecture-update-tournees.md
+**Basé sur :** PRD v1.0, 02-architecture-backend.md, 02b-architecture-tournees.md
 
 ---
 
@@ -554,7 +554,7 @@ interface Sector {
 ## 6. PROMPT 5 — FRONTEND MOBILE (React Native + Expo)
 
 ```
-Consulte docs/architecture-frontend.md et docs/architecture-update-tournees.md.
+Consulte docs/03-architecture-frontend.md et docs/02b-architecture-tournees.md.
 
 On crée l'application mobile MVP avec React Native + Expo.
 
@@ -743,7 +743,7 @@ Pour tester sur le téléphone de ta femme :
 ## 7. PROMPT 6 — FRONTEND WEB (React + Vite)
 
 ```
-Consulte docs/architecture-frontend.md et docs/architecture-update-tournees.md.
+Consulte docs/03-architecture-frontend.md et docs/02b-architecture-tournees.md.
 
 On crée le dashboard web MVP avec React + Vite + Tailwind + shadcn/ui.
 
@@ -958,7 +958,7 @@ npm run dev
 Tu es un développeur React Native senior et UX designer spécialisé en apps terrain.
 Audite l'application mobile qu'on vient de générer.
 
-Consulte docs/architecture-frontend.md pour les spécifications.
+Consulte docs/03-architecture-frontend.md pour les spécifications.
 
 === UTILISABILITÉ TERRAIN ===
 Le contexte d'usage est critique : une infirmière entre deux patients, 
@@ -1015,7 +1015,7 @@ Pour chaque problème, donne sévérité et correction.
 Tu es un développeur frontend senior spécialisé en dashboards React.
 Audite le dashboard web qu'on vient de générer.
 
-Consulte docs/architecture-frontend.md pour les spécifications.
+Consulte docs/03-architecture-frontend.md pour les spécifications.
 
 === FONCTIONNEL ===
 - [ ] Le login fonctionne et redirige vers le dashboard

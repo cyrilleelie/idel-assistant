@@ -1,5 +1,5 @@
 # MISE À JOUR ARCHITECTURE — Refonte optimisation de tournées
-## Addendum à architecture.md v1.0
+## Addendum à 02-architecture-backend.md v1.0
 
 **Version :** 1.1
 **Date :** Février 2026
@@ -438,10 +438,10 @@ DELETE /api/v1/sectors/{id}
 
 ## PROMPT 4 RÉÉCRIT — Suggestion de créneaux
 
-Remplace entièrement le Prompt 4 dans `docs/prompts-claude-code.md` par :
+Remplace entièrement le Prompt 4 dans `docs/10-methodo-prompts.md` par :
 
 ```
-Consulte docs/architecture.md et docs/architecture-update-tournees.md.
+Consulte docs/02-architecture-backend.md et docs/02b-architecture-tournees.md.
 On implémente le moteur de suggestion de créneaux et la visualisation des tournées.
 
 === CONTEXTE MÉTIER ===
@@ -452,7 +452,7 @@ les détours et respecte la cohérence géographique par secteurs.
 
 === DOMAIN (domain/rules/slot_suggestion_rules.py) ===
 
-Implémente les fonctions suivantes (voir docs/architecture-update-tournees.md
+Implémente les fonctions suivantes (voir docs/02b-architecture-tournees.md
 pour les signatures détaillées) :
 
 - find_available_slots() : trouve les trous dans la journée et évalue chacun
@@ -496,7 +496,7 @@ Persistence :
 - SQLAlchemy repository pour Sector (CRUD simple)
 
 API Routes :
-- POST /api/v1/slots/suggest (voir contrat API dans architecture-update-tournees.md)
+- POST /api/v1/slots/suggest (voir contrat API dans 02b-architecture-tournees.md)
 - POST /api/v1/slots/suggest/{rank}/book (crée le RDV depuis la suggestion)
 - GET /api/v1/tournees/today (journée avec carte et métriques)
 - CRUD /api/v1/sectors
@@ -567,13 +567,13 @@ tests/unit/test_tournee_rules.py :
 
 ## REVIEW 4 RÉÉCRITE
 
-Remplace la Review 4 dans `docs/prompts-review.md` par :
+Remplace la Review 4 dans `docs/11-methodo-reviews.md` par :
 
 ```
 Tu es un product manager avec expertise en optimisation logistique.
 Audite le moteur de suggestion de créneaux et la visualisation des tournées.
 
-Consulte docs/architecture-update-tournees.md pour les exigences.
+Consulte docs/02b-architecture-tournees.md pour les exigences.
 
 === RÈGLE MÉTIER FONDAMENTALE ===
 - [ ] CRITIQUE : Aucune partie du code ne réordonne des RDV existants

@@ -114,5 +114,5 @@ uv run python ../scripts/benchmark_latency.py --mode cloud
 # Après migration
 uv run python ../scripts/benchmark_latency.py --mode gpu
 
-# Les rapports sont dans docs/benchmarks/
+# Rapport de référence : docs/08-benchmark-voice-latency.md
 ```

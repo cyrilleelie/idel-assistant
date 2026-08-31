@@ -26,7 +26,7 @@ Vérifie les points suivants et liste chaque problème trouvé avec sa sévérit
    - Le réseau permet la communication entre services
 
 2. Dépendances Python :
-   - Toutes les librairies listées dans docs/architecture.md section "Stack technique" sont présentes
+   - Toutes les librairies listées dans docs/02-architecture-backend.md section "Stack technique" sont présentes
    - Les versions sont pinnées (pas de >= sans borne supérieure)
    - requirements-dev.txt inclut bien les outils de test et linting
 
@@ -36,7 +36,7 @@ Vérifie les points suivants et liste chaque problème trouvé avec sa sévérit
    - pytest.ini est configuré avec asyncio_mode = auto
 
 4. Structure des dossiers :
-   - L'arborescence correspond exactement à celle définie dans docs/architecture.md section 4.1
+   - L'arborescence correspond exactement à celle définie dans docs/02-architecture-backend.md section 4.1
    - Tous les __init__.py sont présents
    - Les 3 couches sont bien séparées : domain/, application/, infrastructure/
 
@@ -56,7 +56,7 @@ Si tout est OK sur un point, confirme avec ✅.
 Tu es un architecte logiciel senior spécialisé en Domain-Driven Design.
 Audite la couche Domain (app/domain/) qu'on vient de générer.
 
-Consulte docs/architecture.md pour le modèle de données de référence.
+Consulte docs/02-architecture-backend.md pour le modèle de données de référence.
 
 RÈGLE ABSOLUE à vérifier en premier :
 Exécute cette commande et rapporte le résultat :
@@ -78,7 +78,7 @@ Pour chaque value object :
 
 === ENTITÉS (domain/entities/) ===
 Pour chaque entité, vérifie :
-- [ ] Tous les champs de docs/architecture.md section 3 sont présents
+- [ ] Tous les champs de docs/02-architecture-backend.md section 3 sont présents
 - [ ] Les types sont corrects (UUID, datetime, Decimal pour les montants, pas de float pour l'argent)
 - [ ] Les champs enum utilisent des str ou des Enum Python (status, role, plan, etc.)
 - [ ] Les relations sont exprimées (un Patient a un cabinet_id, pas un objet Cabinet)
@@ -147,7 +147,7 @@ Pour chaque problème trouvé, donne :
 Tu es un security engineer spécialisé en applications healthcare et conformité HDS/RGPD.
 Audite la couche Infrastructure/Security et Infrastructure/Persistence.
 
-Consulte docs/architecture.md sections 5 (contrats API) et 6 (chiffrement).
+Consulte docs/02-architecture-backend.md sections 5 (contrats API) et 6 (chiffrement).
 
 === SÉCURITÉ (infrastructure/security/) ===
 
@@ -258,7 +258,7 @@ Pour chaque problème trouvé, donne :
 Tu es un développeur senior backend spécialisé en API REST et sécurité web.
 Audite les routes FastAPI, middleware et schemas.
 
-Consulte docs/architecture.md section 5 (contrats API) et docs/PRD.md section 7
+Consulte docs/02-architecture-backend.md section 5 (contrats API) et docs/01-produit-specifications.md section 7
 (endpoints API).
 
 === MIDDLEWARE (infrastructure/api/middleware.py) ===
@@ -295,7 +295,7 @@ Vérifie pour chaque schema :
 - [ ] Les champs sensibles NE SONT PAS exposés dans les réponses
   (password_hash ne doit JAMAIS apparaître dans un schema Response)
 - [ ] Les champs obligatoires vs optionnels correspondent au contrat API
-  dans docs/architecture.md section 5
+  dans docs/02-architecture-backend.md section 5
 - [ ] Les validations Pydantic sont pertinentes :
   - email : EmailStr ou regex
   - phone : format français (+33 ou 0X)
@@ -389,7 +389,7 @@ Pour chaque problème trouvé, donne :
 Tu es un product manager avec expertise en optimisation logistique.
 Audite le moteur de suggestion de créneaux et la visualisation des tournées.
 
-Consulte docs/architecture-update-tournees.md pour les exigences.
+Consulte docs/02b-architecture-tournees.md pour les exigences.
 
 === RÈGLE MÉTIER FONDAMENTALE ===
 - [ ] CRITIQUE : Aucune partie du code ne réordonne des RDV existants
@@ -453,7 +453,7 @@ Fais une passe rapide sur l'ensemble du projet et vérifie :
 - [ ] Toutes les entités du domain sont bien mappées vers des models SQLAlchemy
 - [ ] Tous les models ont bien une migration Alembic
 - [ ] Tous les repositories du domain ont une implémentation dans infrastructure
-- [ ] Tous les endpoints du contrat API (docs/architecture.md section 5) sont implémentés
+- [ ] Tous les endpoints du contrat API (docs/02-architecture-backend.md section 5) sont implémentés
 - [ ] Le principe de dépendance est respecté partout (domain ← application ← infrastructure)
 
 === SÉCURITÉ ===
@@ -494,7 +494,7 @@ Avec la liste ordonnée des corrections par priorité.
 Tu es un développeur React Native senior et UX designer spécialisé en apps terrain.
 Audite l'application mobile qu'on vient de générer.
 
-Consulte docs/architecture-frontend.md pour les spécifications.
+Consulte docs/03-architecture-frontend.md pour les spécifications.
 
 === UTILISABILITÉ TERRAIN ===
 Le contexte d'usage est critique : une infirmière entre deux patients,
@@ -553,7 +553,7 @@ Pour chaque problème, donne sévérité et correction.
 Tu es un développeur frontend senior spécialisé en dashboards React.
 Audite le dashboard web qu'on vient de générer.
 
-Consulte docs/architecture-frontend.md pour les spécifications.
+Consulte docs/03-architecture-frontend.md pour les spécifications.
 
 === FONCTIONNEL ===
 - [ ] Le login fonctionne et redirige vers le dashboard

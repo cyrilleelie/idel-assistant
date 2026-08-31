@@ -7,17 +7,17 @@ Application SaaS pour infirmières libérales (IDEL) en France. Combinaison d'IA
 ## Documentation
 
 Tous les documents de référence sont dans `docs/` :
-- `docs/architecture.md` — **DOCUMENT PRINCIPAL** : architecture technique, ADR, modèle de données, structure Clean Architecture 3 couches. À lire en priorité.
-- `docs/prompts-claude-code.md` — Prompts séquentiels avec patterns de code attendus et checkpoints de validation.
-- `docs/prompts-review.md` — **Critères de review** détaillés pour chaque phase. À exécuter systématiquement après chaque prompt de génération.
-- `docs/PRD.md` — Product Requirements Document complet (user stories, endpoints API, flows).
+- `docs/02-architecture-backend.md` — **DOCUMENT PRINCIPAL** : architecture technique, ADR, modèle de données, structure Clean Architecture 3 couches. À lire en priorité.
+- `docs/10-methodo-prompts.md` — Prompts séquentiels avec patterns de code attendus et checkpoints de validation.
+- `docs/11-methodo-reviews.md` — **Critères de review** détaillés pour chaque phase. À exécuter systématiquement après chaque prompt de génération.
+- `docs/01-produit-specifications.md` — Product Requirements Document complet (user stories, endpoints API, flows).
 - `docs/cahier-des-charges.md` — Cahier des charges fonctionnel.
 - `docs/etude-faisabilite.md` — Étude de faisabilité technique.
 - `docs/planning.md` — Planning de réalisation itératif (44 semaines).
 - `docs/business-plan.md` — Business plan et projections financières.
-- `docs/architecture-update-tournees.md` — **ADDENDUM ARCHITECTURE v1.1** : refonte complète de l'optimisation de tournées. Remplace le VRPTW par un moteur de suggestion de créneaux. Contient les ADR-008/009, le nouveau modèle de données (Sector, modifications Patient/Appointment/Tournee), les contrats API révisés, et les **versions réécrites du Prompt 4 et de la Review 4** qui remplacent celles de `prompts-claude-code.md` et `prompts-review.md`.
-- `docs/architecture-frontend.md` — **ARCHITECTURE FRONTEND v1.0** : stratégie mobile-first + dashboard web. ADR-010 à ADR-013, spécifications écrans mobile (React Native + Expo) et web (React + Vite + Tailwind + shadcn/ui). Contient les **Prompt 5, Prompt 6, Review 5 et Review 6**.
-- `docs/developer-setup-guide.md` — Guide setup développeur Windows 11.
+- `docs/02b-architecture-tournees.md` — **ADDENDUM ARCHITECTURE v1.1** : refonte complète de l'optimisation de tournées. Remplace le VRPTW par un moteur de suggestion de créneaux. Contient les ADR-008/009, le nouveau modèle de données (Sector, modifications Patient/Appointment/Tournee), les contrats API révisés, et les **versions réécrites du Prompt 4 et de la Review 4** qui remplacent celles de `10-methodo-prompts.md` et `11-methodo-reviews.md`.
+- `docs/03-architecture-frontend.md` — **ARCHITECTURE FRONTEND v1.0** : stratégie mobile-first + dashboard web. ADR-010 à ADR-013, spécifications écrans mobile (React Native + Expo) et web (React + Vite + Tailwind + shadcn/ui). Contient les **Prompt 5, Prompt 6, Review 5 et Review 6**.
+- `docs/04-guide-setup-dev.md` — Guide setup développeur Windows 11.
 
 ## Architecture
 
@@ -35,7 +35,7 @@ Infrastructure → Application → Domain
 
 - Python 3.12, **uv** (gestionnaire de dépendances et venv), FastAPI, SQLAlchemy 2.0 async (asyncpg), Alembic
 - PostgreSQL 16 (PostGIS, pg_trgm, RLS), Redis 7
-- OR-Tools (matrices de distances — le VRPTW est abandonné, voir `docs/architecture-update-tournees.md`)
+- OR-Tools (matrices de distances — le VRPTW est abandonné, voir `docs/02b-architecture-tournees.md`)
 - Chiffrement AES-256-GCM (colonnes sensibles patients)
 - Pydantic v2, python-jose (JWT), passlib (bcrypt)
 - pytest, pytest-asyncio
@@ -63,12 +63,12 @@ Infrastructure → Application → Domain
 Après chaque phase de génération de code, suivre **obligatoirement** cette séquence :
 
 1. **Lancer les tests** concernés (`uv run pytest tests/unit/ -v`, etc.)
-2. **Lire le prompt de review** correspondant dans `docs/prompts-review.md` :
+2. **Lire le prompt de review** correspondant dans `docs/11-methodo-reviews.md` :
    - Review 0 → après setup projet (Prompt 0)
    - Review 1 → après domain layer (Prompt 1)
    - Review 2 → après persistence + sécurité (Prompt 2)
    - Review 3 → après API FastAPI (Prompt 3)
-   - Review 4 → après suggestion de créneaux (Prompt 4) — **utiliser la version réécrite dans `docs/architecture-update-tournees.md`**, pas celle de `prompts-review.md`
+   - Review 4 → après suggestion de créneaux (Prompt 4) — **utiliser la version réécrite dans `docs/02b-architecture-tournees.md`**, pas celle de `11-methodo-reviews.md`
    - Review 5 → après frontend mobile (Prompt 5)
    - Review 6 → après frontend web (Prompt 6)
 3. **Exécuter la review** soi-même sur le code qui vient d'être généré, en suivant chaque point de contrôle du prompt de review
@@ -76,7 +76,7 @@ Après chaque phase de génération de code, suivre **obligatoirement** cette s�
 5. **Relancer les tests** pour confirmer que les corrections sont bonnes
 6. **Résumer** les findings et corrections à l'utilisateur avant de passer à la phase suivante
 
-Le fichier `docs/prompts-review.md` contient les critères de validation détaillés pour chaque phase. Toujours s'y référer — ne jamais considérer une phase comme terminée sans avoir exécuté la review correspondante.
+Le fichier `docs/11-methodo-reviews.md` contient les critères de validation détaillés pour chaque phase. Toujours s'y référer — ne jamais considérer une phase comme terminée sans avoir exécuté la review correspondante.
 
 ## Pivot tournées (ADR-008/009)
 
@@ -86,7 +86,7 @@ Le VRPTW classique (réordonnancement de RDV) est **abandonné**. Les RDV une fo
 - **Secteurs géographiques** : entité `Sector` (label + codes postaux/communes) pour regrouper les patients par zone.
 - **Tournée = photo de la journée** (pas une optimisation) : ordre chronologique des RDV, métriques de trajet, détection d'allers-retours inutiles (informatif uniquement).
 
-**Pour le Prompt 4 et la Review 4**, utiliser les versions réécrites dans `docs/architecture-update-tournees.md` — elles remplacent intégralement celles de `docs/prompts-claude-code.md` et `docs/prompts-review.md`.
+**Pour le Prompt 4 et la Review 4**, utiliser les versions réécrites dans `docs/02b-architecture-tournees.md` — elles remplacent intégralement celles de `docs/10-methodo-prompts.md` et `docs/11-methodo-reviews.md`.
 
 ## Commandes utiles
 

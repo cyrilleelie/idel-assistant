@@ -2,8 +2,9 @@
  * TourneeScreen — Main daily round screen.
  *
  * Shows the nurse's appointments for the selected day with:
- * - DateSelector (sticky header area): switch between yesterday/today/tomorrow
- * - TourneeProgress: compact progress bar + summary
+ * - DateSelector (horizontal scrollable pills): switch between dates
+ * - TourneeProgress: card-based progress with percentage and time remaining
+ * - "PLANNING DU JOUR" section label
  * - FlatList of AppointmentCards
  * - ConfirmationModal: shown before marking an appointment as completed
  *
@@ -69,7 +70,7 @@ export default function TourneeScreen() {
   const setSelectedDate = useTourneeStore((s) => s.setSelectedDate);
   const markAsCompleted = useTourneeStore((s) => s.markAsCompleted);
 
-  // ── Dev seed (only in __DEV__, needs userId) ────────────────────────────
+  // -- Dev seed (only in __DEV__, needs userId) ----------------------------
 
   const bumpRefreshKey = useTourneeStore((s) => s.bumpRefreshKey);
 
@@ -87,18 +88,18 @@ export default function TourneeScreen() {
       });
   }, [database, userId, bumpRefreshKey]);
 
-  // ── View state ────────────────────────────────────────────────────────────
+  // -- View state ----------------------------------------------------------
 
   const [appointmentViews, setAppointmentViews] = useState<AppointmentView[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // ── Confirmation modal state ──────────────────────────────────────────────
+  // -- Confirmation modal state --------------------------------------------
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAppointment, setPendingAppointment] = useState<AppointmentView | null>(null);
 
-  // ── Fetch appointments (manual query — LokiJS doesn't fire observables) ──
+  // -- Fetch appointments (manual query -- LokiJS doesn't fire observables)
 
   useEffect(() => {
     if (!userId) {
@@ -140,11 +141,11 @@ export default function TourneeScreen() {
     // which triggers a re-fetch here.
   }, [database, selectedDate, userId, refreshKey]);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
+  // -- Stats ---------------------------------------------------------------
 
   const stats = useMemo(() => computeTourneeStats(appointmentViews), [appointmentViews]);
 
-  // ── Swipe boundaries (Hier / Auj. / Demain) ─────────────────────────────
+  // -- Swipe boundaries (Hier / Auj. / Demain) ----------------------------
 
   const today = useMemo(() => getTodayString(), []);
   const minDate = useMemo(() => addDays(today, -1), [today]);
@@ -158,7 +159,7 @@ export default function TourneeScreen() {
     if (selectedDate > minDate) setSelectedDate(addDays(selectedDate, -1));
   }, [selectedDate, minDate, setSelectedDate]);
 
-  // ── Callbacks ─────────────────────────────────────────────────────────────
+  // -- Callbacks -----------------------------------------------------------
 
   const handleDateChange = useCallback(
     (date: string) => {
@@ -219,12 +220,12 @@ export default function TourneeScreen() {
       await performSync(database, api);
       bumpRefreshKey();
     } catch {
-      // Sync failure is non-blocking — the local data is still displayed
+      // Sync failure is non-blocking -- the local data is still displayed
     }
     setIsRefreshing(false);
   }, [database, bumpRefreshKey]);
 
-  // ── Render helpers ────────────────────────────────────────────────────────
+  // -- Render helpers ------------------------------------------------------
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<AppointmentView>) => (
@@ -246,9 +247,14 @@ export default function TourneeScreen() {
       <>
         <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
         <TourneeProgress stats={stats} />
+
+        {/* Section label */}
+        {appointmentViews.length > 0 && (
+          <Text style={styles.sectionLabel}>PLANNING DU JOUR</Text>
+        )}
       </>
     ),
-    [selectedDate, handleDateChange, stats],
+    [selectedDate, handleDateChange, stats, appointmentViews.length],
   );
 
   const ListEmptyComponent = useMemo(() => {
@@ -264,12 +270,12 @@ export default function TourneeScreen() {
     );
   }, [isLoading]);
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // -- Render --------------------------------------------------------------
 
   return (
     <SwipeDateContainer onSwipeLeft={handleSwipeLeft} onSwipeRight={handleSwipeRight}>
       <View style={styles.container}>
-        {/* Error banner — shown when a write operation fails */}
+        {/* Error banner -- shown when a write operation fails */}
         {tourneeError != null && (
           <Pressable onPress={clearError} style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{tourneeError}</Text>
@@ -325,6 +331,16 @@ const styles = StyleSheet.create({
   listContent: {
     flexGrow: 1,
     paddingBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94A3B8',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   errorBanner: {
     backgroundColor: Colors.danger,

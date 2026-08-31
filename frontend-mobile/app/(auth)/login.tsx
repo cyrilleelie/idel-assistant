@@ -32,6 +32,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<LoginError>(null);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const isFormValid = email.trim().length > 0 && password.length > 0;
 
@@ -83,19 +84,19 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Logo / Title */}
-          <View style={styles.header}>
-            <View style={styles.logoContainer}>
-              <Ionicons name="medical" size={48} color={Colors.primary} />
+          {/* Card */}
+          <View style={styles.card}>
+            {/* Logo / Title */}
+            <View style={styles.header}>
+              <View style={styles.logoContainer}>
+                <Ionicons name="medical" size={32} color={Colors.primary} />
+              </View>
+              <Text style={styles.title}>IDEL Planning Pro</Text>
+              <Text style={styles.subtitle}>
+                Logiciel de gestion pour infirmiers{'\n'}lib{'\u00e9'}raux
+              </Text>
             </View>
-            <Text style={styles.title}>IDEL Assistant</Text>
-            <Text style={styles.subtitle}>
-              Connectez-vous pour accéder à vos patients
-            </Text>
-          </View>
 
-          {/* Form */}
-          <View style={styles.form}>
             {/* Error */}
             {errorMessage !== null && (
               <View style={styles.errorContainer}>
@@ -110,7 +111,7 @@ export default function LoginScreen() {
 
             {/* Email */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Adresse email</Text>
+              <Text style={styles.label}>Email</Text>
               <TextInput
                 style={styles.input}
                 value={email}
@@ -158,6 +159,25 @@ export default function LoginScreen() {
               </View>
             </View>
 
+            {/* Remember me + Forgot password row */}
+            <View style={styles.optionsRow}>
+              <TouchableOpacity
+                style={styles.checkboxRow}
+                onPress={() => setRememberMe((prev) => !prev)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                  {rememberMe && (
+                    <Ionicons name="checkmark" size={14} color={Colors.white} />
+                  )}
+                </View>
+                <Text style={styles.checkboxLabel}>Se souvenir de moi</Text>
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.7}>
+                <Text style={styles.forgotPassword}>Mot de passe oubli{'\u00e9'} ?</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Submit */}
             <TouchableOpacity
               style={[
@@ -192,35 +212,45 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 32,
+  },
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
     paddingHorizontal: 24,
     paddingVertical: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    gap: 16,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 8,
   },
   logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: Colors.primaryUltraLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center',
-  },
-  form: {
-    gap: 16,
+    lineHeight: 20,
   },
   errorContainer: {
     flexDirection: 'row',
@@ -248,7 +278,7 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#E2E8F0',
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -260,7 +290,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#E2E8F0',
     borderRadius: 10,
   },
   passwordInput: {
@@ -274,14 +304,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
-  button: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 10,
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
-    minHeight: 52,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  checkboxLabel: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  forgotPassword: {
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: '500',
+  },
+  button: {
+    backgroundColor: Colors.primary,
+    height: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
   buttonDisabled: {
     backgroundColor: Colors.disabled,

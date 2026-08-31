@@ -40,42 +40,52 @@ export default function PatientDetail({
   ];
 
   // Collapsible sections state for drawer mode
-  const defaultSections = { info: true, prescriptions: false, ordonnances: false, transmissions: false };
+  const defaultSections = { info: true, couverture: false, prescriptions: false, ordonnances: false, transmissions: false };
   const [openSections, setOpenSections] = useState(() => {
     if (patientSubTab && patientSubTab !== 'info') {
-      return { info: false, prescriptions: false, ordonnances: false, transmissions: false, [patientSubTab]: true };
+      return { info: false, couverture: false, prescriptions: false, ordonnances: false, transmissions: false, [patientSubTab]: true };
     }
     return defaultSections;
   });
   const toggleSection = (id) => setOpenSections(prev => {
     const wasOpen = prev[id];
     // Accordion: close all others, toggle the clicked one
-    const next = { info: false, prescriptions: false, ordonnances: false, transmissions: false };
+    const next = { info: false, couverture: false, prescriptions: false, ordonnances: false, transmissions: false };
     next[id] = !wasOpen;
     return next;
   });
 
   // Section counts
   const [ordonnancesCount, setOrdonnancesCount] = useState(0);
-  const prescriptionsCount = (patientForm.prescriptions || []).length;
+  const prescriptionsCount = (patientForm.prescriptions || []).filter(rx => {
+    if (rx.status === 'completed') return false;
+    const ends = (rx.soins || []).map(s => s.endDate).filter(Boolean).sort();
+    const endDate = ends[ends.length - 1] || '';
+    return endDate >= new Date().toISOString().split('T')[0];
+  }).length;
 
-  // Eagerly fetch ordonnances count when patient changes
+  // Eagerly fetch active ordonnances count when patient changes
   useEffect(() => {
     if (!patientForm.id) return;
-    listPrescriptions({ patient_id: patientForm.id, limit: 1 })
-      .then(data => setOrdonnancesCount(data.total || 0))
+    listPrescriptions({ patient_id: patientForm.id, limit: 100 })
+      .then(data => {
+        const items = data.items || [];
+        const activeCount = items.filter(p => p.status === 'active' || p.status === 'expiring').length;
+        setOrdonnancesCount(activeCount);
+      })
       .catch(() => {});
   }, [patientForm.id]);
 
   // React to external navigation (e.g. from Facturation → Ordonnances)
   useEffect(() => {
     if (patientSubTab && patientSubTab !== 'info') {
-      setOpenSections({ info: false, prescriptions: false, ordonnances: false, transmissions: false, [patientSubTab]: true });
+      setOpenSections({ info: false, couverture: false, prescriptions: false, ordonnances: false, transmissions: false, [patientSubTab]: true });
     }
   }, [patientSubTab, selectedPatientId]);
 
   const drawerSections = [
     { id: 'info', label: 'Informations', icon: UserCircle },
+    { id: 'couverture', label: 'Couverture Sante', icon: ShieldCheck },
     { id: 'prescriptions', label: 'Plans de soins', icon: ClipboardList },
     { id: 'ordonnances', label: 'Ordonnances', icon: ScrollText },
     { id: 'transmissions', label: 'Transmissions', icon: MessageSquare },
@@ -136,7 +146,7 @@ export default function PatientDetail({
                   <ChevronDown size={15} className={`ml-auto text-slate-400 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
                 </button>
                 {isOpen && (
-                  <div className="px-5 pb-5">
+                  <div className="px-5 pt-2 pb-5">
                     {renderDrawerSection({
                       sectionId: section.id,
                       patientForm, setPatientForm, isEditingPatient, setIsEditingPatient,
@@ -148,7 +158,7 @@ export default function PatientDetail({
                       onOrdonnancesCountChange: setOrdonnancesCount,
                       navigateToTransmissions: (prescriptionId) => {
                         setTransmissionPreFilter(prescriptionId);
-                        setOpenSections(prev => ({ info: false, prescriptions: false, ordonnances: false, transmissions: true }));
+                        setOpenSections(prev => ({ info: false, couverture: false, prescriptions: false, ordonnances: false, transmissions: true }));
                       },
                       transmissionPreFilter,
                     })}
@@ -488,6 +498,10 @@ function renderDrawerSection({
     return <DrawerInfoView patientForm={patientForm} setPatientForm={setPatientForm} isEditing={isEditingPatient} />;
   }
 
+  if (sectionId === 'couverture') {
+    return <DrawerCouvertureView patientForm={patientForm} setPatientForm={setPatientForm} isEditing={isEditingPatient} />;
+  }
+
   if (sectionId === 'prescriptions') {
     return (
       <PrescriptionsTab
@@ -539,15 +553,10 @@ function renderDrawerSection({
   return <p className="text-sm text-slate-400 italic">Enregistrez le patient pour acceder a cette section.</p>;
 }
 
-// Drawer-specific info view (read + edit) — includes merged medical content + health coverage cards
+// Drawer-specific info view (read + edit) — contact, identity, medical, notes
 function DrawerInfoView({ patientForm, setPatientForm, isEditing = false }) {
   const pathologies = patientForm.antecedents ? patientForm.antecedents.split('\n').filter(Boolean) : [];
   const set = (field, value) => setPatientForm(prev => ({ ...prev, [field]: value }));
-
-  const hasVitale = !!(patientForm.ssn || patientForm.amo_code);
-  const hasMutuelle = !!(patientForm.amc_name || patientForm.amc_code || patientForm.amc_contract);
-
-  const ci = "w-full bg-white/20 border border-white/30 rounded px-2 py-1 text-sm placeholder-white/50 outline-none focus:border-white/60 focus:bg-white/25 transition-colors";
 
   return (
     <div className="space-y-4">
@@ -650,136 +659,6 @@ function DrawerInfoView({ patientForm, setPatientForm, isEditing = false }) {
         </div>
       </div>
 
-      {/* Couverture sante */}
-      <div>
-        <h4 className="text-slate-800 font-bold text-sm flex items-center gap-2 mb-3">
-          <ShieldCheck size={16} className="text-primary" />
-          Couverture Sante
-        </h4>
-        <div className="grid grid-cols-2 gap-3">
-          {/* Carte Vitale */}
-          <div className={`relative overflow-hidden rounded-xl text-white shadow-lg ${hasVitale || isEditing ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-slate-300 to-slate-400'}`} style={{ aspectRatio: '1.586' }}>
-            <div className="absolute inset-0 p-3 flex flex-col">
-              <div className="flex justify-between items-start">
-                <FileText size={20} className="opacity-80" />
-                <span className="text-[8px] font-bold tracking-widest uppercase opacity-80">Carte Vitale</span>
-              </div>
-              {isEditing ? (
-                <div className="flex-1 flex flex-col justify-center gap-1.5 mt-1">
-                  <div>
-                    <p className="text-[8px] opacity-70">N. Securite Sociale</p>
-                    <input type="text" value={patientForm.ssn || ''} onChange={e => set('ssn', e.target.value)} placeholder="1 80 12 75 000 00" maxLength={15} style={{ fontFamily: 'monospace', letterSpacing: '0.1em', fontSize: '10px' }} className={ci} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    <div>
-                      <p className="text-[7px] opacity-70">Organisme</p>
-                      <input type="text" value={patientForm.amo_code || ''} onChange={e => set('amo_code', e.target.value)} placeholder="750100001" maxLength={9} style={{ fontFamily: 'monospace', fontSize: '9px' }} className={ci} />
-                    </div>
-                    <div>
-                      <p className="text-[7px] opacity-70">Centre</p>
-                      <input type="text" value={patientForm.amo_center || ''} onChange={e => set('amo_center', e.target.value)} placeholder="CPAM" style={{ fontSize: '9px' }} className={ci} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    <div>
-                      <p className="text-[7px] opacity-70">Exoneration</p>
-                      <select value={patientForm.exoneration_type || ''} onChange={e => set('exoneration_type', e.target.value)} style={{ fontSize: '9px' }} className={ci}>
-                        <option value="" className="text-slate-800">Aucune</option>
-                        <option value="ALD" className="text-slate-800">ALD</option>
-                        <option value="MAT" className="text-slate-800">MAT</option>
-                        <option value="AT" className="text-slate-800">AT</option>
-                        <option value="100" className="text-slate-800">100%</option>
-                      </select>
-                    </div>
-                    <div>
-                      <p className="text-[7px] opacity-70">Rang</p>
-                      <input type="number" value={patientForm.birth_rank || ''} onChange={e => set('birth_rank', e.target.value ? parseInt(e.target.value) : null)} placeholder="1" min={1} max={9} style={{ fontSize: '9px' }} className={ci} />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col justify-between mt-2">
-                  <div>
-                    <p className="text-[8px] opacity-70">N. Securite Sociale</p>
-                    <p className="text-xs font-mono tracking-wider font-bold">
-                      {patientForm.ssn ? patientForm.ssn.replace(/(\d)(?=(\d{2})+(?!\d))/g, '$1 ') : '- - -'}
-                    </p>
-                  </div>
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <p className="text-[10px] font-medium uppercase truncate">{patientForm.lastName || ''} {patientForm.firstName || ''}</p>
-                      {patientForm.birth_rank && <p className="text-[8px] opacity-70">Rang {patientForm.birth_rank}</p>}
-                    </div>
-                    <div className="text-right">
-                      {patientForm.amo_center && <p className="text-[8px] opacity-70">{patientForm.amo_center}</p>}
-                      {patientForm.amo_code && <p className="text-[9px] font-mono font-semibold">{patientForm.amo_code}</p>}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-2xl" />
-          </div>
-
-          {/* Carte Mutuelle */}
-          <div className={`relative overflow-hidden rounded-xl text-white shadow-lg ${hasMutuelle || isEditing ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-slate-300 to-slate-400'}`} style={{ aspectRatio: '1.586' }}>
-            <div className="absolute inset-0 p-3 flex flex-col">
-              <div className="flex justify-between items-start">
-                <ShieldCheck size={20} className="opacity-80" />
-                <span className="text-[8px] font-bold tracking-widest uppercase opacity-80">Mutuelle</span>
-              </div>
-              {isEditing ? (
-                <div className="flex-1 flex flex-col justify-center gap-1.5 mt-1">
-                  <div>
-                    <p className="text-[8px] opacity-70">Nom de la mutuelle</p>
-                    <input type="text" value={patientForm.amc_name || ''} onChange={e => set('amc_name', e.target.value)} placeholder="MGEN, Harmonie..." style={{ fontSize: '10px' }} className={ci} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    <div>
-                      <p className="text-[7px] opacity-70">Code AMC</p>
-                      <input type="text" value={patientForm.amc_code || ''} onChange={e => set('amc_code', e.target.value)} placeholder="Code" maxLength={10} style={{ fontFamily: 'monospace', fontSize: '9px' }} className={ci} />
-                    </div>
-                    <div>
-                      <p className="text-[7px] opacity-70">N. contrat</p>
-                      <input type="text" value={patientForm.amc_contract || ''} onChange={e => set('amc_contract', e.target.value)} placeholder="Contrat" style={{ fontFamily: 'monospace', fontSize: '9px' }} className={ci} />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col justify-between mt-2">
-                  <div>
-                    <p className="text-[8px] opacity-70">{hasMutuelle ? 'Organisme' : ''}</p>
-                    <p className="text-sm font-bold">{hasMutuelle ? (patientForm.amc_name || 'Mutuelle') : 'Non renseignee'}</p>
-                  </div>
-                  <div className="flex justify-between items-end">
-                    <p className="text-[10px] font-medium uppercase truncate">{patientForm.lastName || ''} {patientForm.firstName || ''}</p>
-                    <div className="text-right">
-                      {patientForm.amc_contract && <p className="text-[8px] opacity-70">Contrat</p>}
-                      {patientForm.amc_contract && <p className="text-[9px] font-mono font-semibold">{patientForm.amc_contract}</p>}
-                      {patientForm.amc_code && <p className="text-[8px] font-mono opacity-70 mt-0.5">{patientForm.amc_code}</p>}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-2xl" />
-          </div>
-        </div>
-
-        {/* Info pills: exoneration */}
-        {!isEditing && patientForm.exoneration_type && (
-          <div className="grid grid-cols-3 gap-3 mt-4">
-            <div className="bg-white p-3 rounded-2xl border border-slate-200 flex flex-col items-center gap-1.5 text-center">
-              <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
-                <AlertTriangle size={16} />
-              </div>
-              <p className="text-xs font-bold text-slate-700">{patientForm.exoneration_type}</p>
-              <p className="text-[10px] text-slate-500 uppercase">Exoneration</p>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Notes internes */}
       {isEditing ? (
         <div>
@@ -798,6 +677,138 @@ function DrawerInfoView({ patientForm, setPatientForm, isEditing = false }) {
           <p className="text-sm text-amber-800 italic whitespace-pre-wrap">{patientForm.notes}</p>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// Drawer-specific couverture sante view — Carte Vitale + Mutuelle cards
+function DrawerCouvertureView({ patientForm, setPatientForm, isEditing = false }) {
+  const set = (field, value) => setPatientForm(prev => ({ ...prev, [field]: value }));
+
+  const hasVitale = !!(patientForm.ssn || patientForm.amo_code);
+  const hasMutuelle = !!(patientForm.amc_name || patientForm.amc_code || patientForm.amc_contract);
+
+  const ci = "w-full bg-white/20 border border-white/30 rounded px-2 py-1 text-sm placeholder-white/50 outline-none focus:border-white/60 focus:bg-white/25 transition-colors";
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        {/* Carte Vitale */}
+        <div className={`relative overflow-hidden rounded-xl text-white shadow-lg ${hasVitale || isEditing ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-slate-300 to-slate-400'}`} style={isEditing ? undefined : { aspectRatio: '1.586' }}>
+          <div className={`${isEditing ? '' : 'absolute inset-0'} p-3 flex flex-col`}>
+            <div className="flex justify-between items-start">
+              <FileText size={20} className="opacity-80" />
+              <span className="text-[8px] font-bold tracking-widest uppercase opacity-80">Carte Vitale</span>
+            </div>
+            {isEditing ? (
+              <div className="flex-1 flex flex-col justify-center gap-1.5 mt-1">
+                <div>
+                  <p className="text-[8px] opacity-70">N. Securite Sociale</p>
+                  <input type="text" value={patientForm.ssn || ''} onChange={e => set('ssn', e.target.value)} placeholder="1 80 12 75 000 00" maxLength={15} style={{ fontFamily: 'monospace', letterSpacing: '0.1em', fontSize: '10px' }} className={ci} />
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <p className="text-[7px] opacity-70">Organisme</p>
+                    <input type="text" value={patientForm.amo_code || ''} onChange={e => set('amo_code', e.target.value)} placeholder="750100001" maxLength={9} style={{ fontFamily: 'monospace', fontSize: '9px' }} className={ci} />
+                  </div>
+                  <div>
+                    <p className="text-[7px] opacity-70">Centre</p>
+                    <input type="text" value={patientForm.amo_center || ''} onChange={e => set('amo_center', e.target.value)} placeholder="CPAM" style={{ fontSize: '9px' }} className={ci} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <p className="text-[7px] opacity-70">Exoneration</p>
+                    <select value={patientForm.exoneration_type || ''} onChange={e => set('exoneration_type', e.target.value)} style={{ fontSize: '9px' }} className={ci}>
+                      <option value="" className="text-slate-800">Aucune</option>
+                      <option value="ALD" className="text-slate-800">ALD</option>
+                      <option value="MAT" className="text-slate-800">MAT</option>
+                      <option value="AT" className="text-slate-800">AT</option>
+                      <option value="100" className="text-slate-800">100%</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-[7px] opacity-70">Rang</p>
+                    <input type="number" value={patientForm.birth_rank || ''} onChange={e => set('birth_rank', e.target.value ? parseInt(e.target.value) : null)} placeholder="1" min={1} max={9} style={{ fontSize: '9px' }} className={ci} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-between mt-2">
+                <div>
+                  <p className="text-[8px] opacity-70">N. Securite Sociale</p>
+                  <p className="text-xs font-mono tracking-wider font-bold">
+                    {patientForm.ssn ? patientForm.ssn.replace(/(\d)(?=(\d{2})+(?!\d))/g, '$1 ') : '- - -'}
+                  </p>
+                </div>
+                {patientForm.exoneration_type && (
+                  <div className="mt-1">
+                    <span className="inline-block text-[9px] font-bold uppercase tracking-wide bg-white/25 border border-white/40 rounded px-1.5 py-0.5">
+                      Exoneration : {patientForm.exoneration_type === '100' ? '100%' : patientForm.exoneration_type}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-end">
+                  <div>
+                    <p className="text-[10px] font-medium uppercase truncate">{patientForm.lastName || ''} {patientForm.firstName || ''}</p>
+                    {patientForm.birth_rank && <p className="text-[8px] opacity-70">Rang {patientForm.birth_rank}</p>}
+                  </div>
+                  <div className="text-right">
+                    {patientForm.amo_center && <p className="text-[8px] opacity-70">{patientForm.amo_center}</p>}
+                    {patientForm.amo_code && <p className="text-[9px] font-mono font-semibold">{patientForm.amo_code}</p>}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-2xl" />
+        </div>
+
+        {/* Carte Mutuelle */}
+        <div className={`relative overflow-hidden rounded-xl text-white shadow-lg ${hasMutuelle || isEditing ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-slate-300 to-slate-400'}`} style={isEditing ? undefined : { aspectRatio: '1.586' }}>
+          <div className={`${isEditing ? '' : 'absolute inset-0'} p-3 flex flex-col`}>
+            <div className="flex justify-between items-start">
+              <ShieldCheck size={20} className="opacity-80" />
+              <span className="text-[8px] font-bold tracking-widest uppercase opacity-80">Mutuelle</span>
+            </div>
+            {isEditing ? (
+              <div className="flex-1 flex flex-col justify-center gap-1.5 mt-1">
+                <div>
+                  <p className="text-[8px] opacity-70">Nom de la mutuelle</p>
+                  <input type="text" value={patientForm.amc_name || ''} onChange={e => set('amc_name', e.target.value)} placeholder="MGEN, Harmonie..." style={{ fontSize: '10px' }} className={ci} />
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <p className="text-[7px] opacity-70">Code AMC</p>
+                    <input type="text" value={patientForm.amc_code || ''} onChange={e => set('amc_code', e.target.value)} placeholder="Code" maxLength={10} style={{ fontFamily: 'monospace', fontSize: '9px' }} className={ci} />
+                  </div>
+                  <div>
+                    <p className="text-[7px] opacity-70">N. contrat</p>
+                    <input type="text" value={patientForm.amc_contract || ''} onChange={e => set('amc_contract', e.target.value)} placeholder="Contrat" style={{ fontFamily: 'monospace', fontSize: '9px' }} className={ci} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col justify-between mt-2">
+                <div>
+                  <p className="text-[8px] opacity-70">{hasMutuelle ? 'Organisme' : ''}</p>
+                  <p className="text-sm font-bold">{hasMutuelle ? (patientForm.amc_name || 'Mutuelle') : 'Non renseignee'}</p>
+                </div>
+                <div className="flex justify-between items-end">
+                  <p className="text-[10px] font-medium uppercase truncate">{patientForm.lastName || ''} {patientForm.firstName || ''}</p>
+                  <div className="text-right">
+                    {patientForm.amc_contract && <p className="text-[8px] opacity-70">Contrat</p>}
+                    {patientForm.amc_contract && <p className="text-[9px] font-mono font-semibold">{patientForm.amc_contract}</p>}
+                    {patientForm.amc_code && <p className="text-[8px] font-mono opacity-70 mt-0.5">{patientForm.amc_code}</p>}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-white/10 rounded-full blur-2xl" />
+        </div>
+      </div>
+
     </div>
   );
 }

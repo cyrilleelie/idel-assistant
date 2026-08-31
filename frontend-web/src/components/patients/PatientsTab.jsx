@@ -34,8 +34,8 @@ export default function PatientsTab({
 
   return (
     <div className="relative">
-      {/* Patient list (always visible) */}
-      <div className={`transition-all duration-300 ${isDrawerOpen ? 'lg:mr-[540px]' : ''}`}>
+      {/* Patient list (always visible, capped width so drawer doesn't overlap) */}
+      <div className="max-w-5xl">
         <PatientList
           patients={patients}
           patientSearch={patientSearch}

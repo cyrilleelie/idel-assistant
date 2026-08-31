@@ -2,7 +2,7 @@ export const DEFAULT_LOCK_TIMEOUT_MINUTES = 2;
 export const MAX_LOCK_TIMEOUT_MINUTES = 5;
 export const HARD_LOCK_TIMEOUT_MINUTES = 5;
 export const MAX_PIN_ATTEMPTS = 5;
-export const PIN_LENGTH = 6;
+export const PIN_LENGTH = 4;
 export const INACTIVITY_WIPE_DAYS = 30;
 export const AUDIT_LOG_RETENTION_DAYS = 7;
 

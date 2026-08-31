@@ -1,11 +1,8 @@
 /**
  * PreparationCard — Patient card for the preparation screen.
  *
- * Shows appointment time, patient name, care types, AI summary with alerts,
- * and expandable transmission list. Border color indicates priority:
- * - Orange: alerts detected
- * - Blue: new info, no alerts
- * - No border accent: no new info
+ * Shows patient avatar, name, critical badge, time slot, alert message,
+ * and expandable transmission list. Stitch-inspired design.
  */
 
 import React from 'react';
@@ -49,39 +46,60 @@ export default React.memo(function PreparationCard({
     hasAlerts,
   } = preparation;
 
-  const borderColor = hasAlerts
-    ? Colors.warning
-    : hasNewInfo
-      ? Colors.primary
-      : 'transparent';
-
   const careDisplay = careTypeLabels.length > 0 ? careTypeLabels.join(', ') : careTypes.join(' + ');
   const locationLabel = formatLocation(locationType);
   const lastVisitLabel = formatLastVisit(lastVisitByCurrentUser);
   const txCount = transmissionsSinceLastVisit.length;
 
+  // Patient initials for avatar
+  const initials = patientName
+    .split(' ')
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   return (
-    <View style={[styles.card, { borderLeftColor: borderColor, borderLeftWidth: borderColor === 'transparent' ? 0 : 3 }]}>
-      {/* Time + patient name */}
-      <Pressable onPress={onPressAppointment} hitSlop={4}>
-        <Text style={styles.timeRow}>
-          <Text style={styles.time}>{formatTime(appointmentTime)}</Text>
-          {' \u2014 '}
-          <Pressable onPress={onPressPatient}>
-            <Text style={styles.patientName}>{patientName}</Text>
-          </Pressable>
-        </Text>
-      </Pressable>
+    <View style={styles.card}>
+      {/* Top row: avatar + name + badge + time */}
+      <View style={styles.topRow}>
+        <Pressable onPress={onPressPatient} style={styles.avatarNameRow}>
+          <View style={[styles.avatar, hasAlerts && styles.avatarAlert]}>
+            <Text style={[styles.avatarText, hasAlerts && styles.avatarTextAlert]}>{initials}</Text>
+          </View>
+          <View style={styles.nameColumn}>
+            <View style={styles.nameRow}>
+              <Text style={styles.patientName} numberOfLines={1}>{patientName}</Text>
+              {hasAlerts && (
+                <View style={styles.criticalBadge}>
+                  <Text style={styles.criticalBadgeText}>INFO CRITIQUE</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.careRow}>
+              {careDisplay} {'\u00B7'} {locationLabel}
+            </Text>
+          </View>
+        </Pressable>
+        <Pressable onPress={onPressAppointment} hitSlop={8}>
+          <View style={styles.timeChip}>
+            <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
+            <Text style={styles.timeText}>{formatTime(appointmentTime)}</Text>
+          </View>
+        </Pressable>
+      </View>
 
-      {/* Care types + location */}
-      <Text style={styles.careRow}>
-        {careDisplay}
-        {' \u00B7 '}
-        {locationLabel}
-      </Text>
+      {/* Alert message block */}
+      {hasAlerts && aiSummary && aiSummary.alerts.length > 0 && (
+        <View style={styles.alertBlock}>
+          {aiSummary.alerts.map((alert, idx) => (
+            <Text key={idx} style={styles.alertText}>{alert}</Text>
+          ))}
+        </View>
+      )}
 
-      {/* AI Summary section */}
-      {hasNewInfo && aiSummary ? (
+      {/* AI Summary section (non-alert) */}
+      {hasNewInfo && aiSummary && !hasAlerts && (
         <View style={styles.summarySection}>
           <View style={styles.summaryHeader}>
             <Ionicons name="document-text-outline" size={14} color={Colors.primary} />
@@ -99,18 +117,6 @@ export default React.memo(function PreparationCard({
 
           <Text style={styles.summaryText}>{aiSummary.text}</Text>
 
-          {/* Alerts */}
-          {aiSummary.alerts.length > 0 && (
-            <View style={styles.alertsContainer}>
-              {aiSummary.alerts.map((alert, idx) => (
-                <View key={idx} style={styles.alertRow}>
-                  <Text style={styles.alertIcon}>&#9888;&#65039;</Text>
-                  <Text style={styles.alertText}>{alert}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
           {/* Key vitals */}
           {aiSummary.keyVitals && (
             <Text style={styles.vitalsText}>
@@ -118,7 +124,28 @@ export default React.memo(function PreparationCard({
             </Text>
           )}
         </View>
-      ) : (
+      )}
+
+      {/* AI Summary with alerts — show text too */}
+      {hasAlerts && aiSummary && aiSummary.text && (
+        <View style={styles.summarySection}>
+          <View style={styles.summaryHeader}>
+            <Ionicons name="document-text-outline" size={14} color={Colors.primary} />
+            <Text style={styles.summaryTitle}>
+              Resume {lastVisitLabel}
+            </Text>
+          </View>
+          <Text style={styles.summaryText}>{aiSummary.text}</Text>
+          {aiSummary.keyVitals && (
+            <Text style={styles.vitalsText}>
+              Constantes : {formatVitals(aiSummary.keyVitals)}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* No new info */}
+      {!hasNewInfo && (
         <View style={styles.noInfoSection}>
           <Ionicons name="checkmark-circle-outline" size={16} color={Colors.success} />
           <Text style={styles.noInfoText}>
@@ -223,7 +250,7 @@ function uniqueAuthors(txs: { authorName: string }[]): string {
 function formatVitals(vitals: Record<string, string>): string {
   const parts: string[] = [];
   if (vitals.ta) parts.push(`TA ${vitals.ta}`);
-  if (vitals.temperature) parts.push(`T° ${vitals.temperature}`);
+  if (vitals.temperature) parts.push(`T ${vitals.temperature}`);
   if (vitals.glycemie) parts.push(`Glyc. ${vitals.glycemie}`);
   if (vitals.pouls) parts.push(`Pouls ${vitals.pouls}`);
   return parts.join(', ');
@@ -236,38 +263,112 @@ function formatVitals(vitals: Record<string, string>): string {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 14,
+    padding: 16,
     marginHorizontal: 16,
-    marginBottom: 10,
-    gap: 8,
+    marginBottom: 12,
+    gap: 12,
   },
-  // Header
-  timeRow: {
-    fontSize: 15,
-    color: Colors.text,
+  // Top row
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  time: {
-    fontWeight: '700',
-    color: Colors.text,
+  avatarNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
   },
-  patientName: {
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primaryUltraLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarAlert: {
+    backgroundColor: Colors.errorLight,
+  },
+  avatarText: {
+    fontSize: 16,
     fontWeight: '700',
     color: Colors.primary,
+  },
+  avatarTextAlert: {
+    color: Colors.error,
+  },
+  nameColumn: {
+    flex: 1,
+    gap: 2,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  patientName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+    flexShrink: 1,
+  },
+  criticalBadge: {
+    backgroundColor: Colors.error,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  criticalBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.white,
+    letterSpacing: 0.3,
   },
   careRow: {
     fontSize: 13,
     color: Colors.textSecondary,
   },
-  careLabel: {
-    color: Colors.textTertiary,
+  // Time chip
+  timeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.borderLight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  timeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  // Alert block
+  alertBlock: {
+    backgroundColor: '#F8FAFC',
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.error,
+    borderRadius: 8,
+    padding: 12,
+    gap: 6,
+  },
+  alertText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: Colors.text,
+    lineHeight: 20,
   },
   // Summary
   summarySection: {
     backgroundColor: Colors.borderLight,
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 12,
     gap: 6,
   },
@@ -293,26 +394,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     lineHeight: 19,
   },
-  // Alerts
-  alertsContainer: {
-    gap: 4,
-    marginTop: 4,
-  },
-  alertRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-  },
-  alertIcon: {
-    fontSize: 13,
-  },
-  alertText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.warning,
-    lineHeight: 18,
-  },
   // Vitals
   vitalsText: {
     fontSize: 12,
@@ -325,7 +406,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 6,
+    paddingVertical: 4,
   },
   noInfoText: {
     fontSize: 13,
@@ -356,8 +437,8 @@ const styles = StyleSheet.create({
   // Expanded transmissions
   transmissionsContainer: {
     gap: 4,
-    marginHorizontal: -14,
-    marginBottom: -14,
+    marginHorizontal: -16,
+    marginBottom: -16,
     paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,

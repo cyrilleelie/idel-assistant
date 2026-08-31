@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, FileText, AlertTriangle, Clock, Check, RefreshCw, Pencil } from 'lucide-react';
 import { getPrescription, getPrescriptionInvoices, renewPrescription } from '../../api/prescriptions';
 import PrescriptionForm from './PrescriptionForm';
+import { useDialog } from '../ui/ConfirmDialog';
 
 function formatDateFr(dateStr) {
   if (!dateStr) return '-';
@@ -54,6 +55,7 @@ function InvoiceStatusBadge({ status }) {
  *   - onBack(): callback pour revenir à la liste
  */
 export default function PrescriptionDetail({ prescriptionId, onBack }) {
+  const dialog = useDialog();
   const [prescription, setPrescription] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -82,8 +84,9 @@ export default function PrescriptionDetail({ prescriptionId, onBack }) {
 
   const handleRenew = async () => {
     if (renewing) return;
-    const ok = window.confirm(
-      'Renouveler cette ordonnance ?\n\nL\'ancienne sera marquée comme terminée et une nouvelle sera créée.'
+    const ok = await dialog.confirm(
+      'Renouveler cette ordonnance ?\n\nL\'ancienne sera marquée comme terminée et une nouvelle sera créée.',
+      { title: 'Renouvellement' }
     );
     if (!ok) return;
     setRenewing(true);
@@ -91,7 +94,7 @@ export default function PrescriptionDetail({ prescriptionId, onBack }) {
       await renewPrescription(prescriptionId, {});
       load();
     } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors du renouvellement');
+      dialog.alert(err.response?.data?.detail || 'Erreur lors du renouvellement', { variant: 'error', title: 'Erreur' });
     } finally {
       setRenewing(false);
     }

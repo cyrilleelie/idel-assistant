@@ -9,8 +9,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '@/services/api';
-import type { NotificationPreferences } from '@/services/notificationService';
-import { DEFAULT_PREFERENCES } from '@/services/notificationService';
+import type { NotificationPreferences } from '@/services/notificationTypes';
+import { DEFAULT_PREFERENCES } from '@/services/notificationTypes';
 
 // ---------------------------------------------------------------------------
 // Types

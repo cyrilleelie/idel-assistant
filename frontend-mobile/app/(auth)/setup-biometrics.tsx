@@ -71,10 +71,10 @@ export default function SetupBiometricsScreen() {
         await initSecurity();
         router.replace('/(tabs)/tournee');
       } else {
-        setError(result.error ?? 'Authentification annulée');
+        setError(result.error ?? 'Authentification annul\u00e9e');
       }
     } catch {
-      setError('Erreur lors de l\'activation biométrique');
+      setError('Erreur lors de l\'activation biom\u00e9trique');
     } finally {
       setIsActivating(false);
     }
@@ -96,23 +96,34 @@ export default function SetupBiometricsScreen() {
   }
 
   const iconName: keyof typeof Ionicons.glyphMap =
-    displayType === 'face' ? 'scan' : 'finger-print';
-
-  const biometricLabel =
-    displayType === 'face' ? 'Face ID' : 'l\'empreinte digitale';
+    displayType === 'face' ? 'scan-outline' : 'finger-print';
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* Header bar */}
+      <View style={styles.headerBar}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>S{'\u00e9'}curit{'\u00e9'}</Text>
+        <View style={styles.backButton} />
+      </View>
+
       <View style={styles.container}>
-        {/* Header */}
+        {/* Icon section */}
         <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <Ionicons name={iconName} size={48} color={Colors.primary} />
+          <View style={styles.iconGlow}>
+            <View style={styles.iconContainer}>
+              <Ionicons name={iconName} size={56} color={Colors.primary} />
+            </View>
           </View>
-          <Text style={styles.title}>Activez {biometricLabel}</Text>
+          <Text style={styles.title}>Activer la biom{'\u00e9'}trie ?</Text>
           <Text style={styles.subtitle}>
-            Déverrouillez l'application rapidement et en toute sécurité avec{' '}
-            {displayType === 'face' ? 'la reconnaissance faciale' : 'votre empreinte digitale'}
+            S{'\u00e9'}curisez l'acc{'\u00e8'}s {'\u00e0'} vos tourn{'\u00e9'}es IDEL et gagnez du temps lors de vos connexions quotidiennes. Un simple regard ou une empreinte suffit.
           </Text>
         </View>
 
@@ -148,6 +159,12 @@ export default function SetupBiometricsScreen() {
             <Text style={styles.skipButtonText}>Plus tard</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Bottom security note */}
+        <View style={styles.securityNote}>
+          <Ionicons name="lock-closed-outline" size={16} color={Colors.textTertiary} />
+          <Text style={styles.securityNoteText}>Donn{'\u00e9'}es chiffr{'\u00e9'}es localement</Text>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -163,6 +180,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
   container: {
     flex: 1,
     justifyContent: 'center',
@@ -173,14 +208,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
+  iconGlow: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: Colors.primaryUltraLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 28,
+  },
   iconContainer: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: Colors.primaryUltraLight,
+    backgroundColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   title: {
     fontSize: 24,
@@ -213,11 +261,10 @@ const styles = StyleSheet.create({
   },
   activateButton: {
     backgroundColor: Colors.primary,
-    paddingVertical: 16,
-    borderRadius: 10,
+    height: 56,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 52,
   },
   activateButtonText: {
     color: Colors.white,
@@ -225,8 +272,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   skipButton: {
-    paddingVertical: 16,
-    borderRadius: 10,
+    backgroundColor: 'rgba(226, 232, 240, 0.5)',
+    height: 56,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -234,5 +282,15 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 16,
     fontWeight: '500',
+  },
+  securityNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 40,
+  },
+  securityNoteText: {
+    fontSize: 13,
+    color: Colors.textTertiary,
   },
 });

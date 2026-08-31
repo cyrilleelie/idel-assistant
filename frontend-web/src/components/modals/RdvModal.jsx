@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, AlertCircle, FileText, Loader2, User, Home, Building2, MapPin, CircleDot, CheckCircle2, XCircle, Plus } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -21,6 +21,18 @@ export default function RdvModal({
   patientsWithActivePlans,
 }) {
   const [showAddSoin, setShowAddSoin] = useState(false);
+
+  const isOpen = !!rdvModalParams;
+
+  // Close on Escape
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape' && isOpen) setRdvModalParams(null);
+  }, [isOpen, setRdvModalParams]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   if (!rdvModalParams) return null;
 
@@ -72,7 +84,6 @@ export default function RdvModal({
 
   const handleRemoveSoin = (label) => {
     const codesToRemove = labelToCodesMap[label] || [];
-    // Only remove codes that are exclusive to this soin (not used by other remaining soins)
     const remainingLabels = rdvForm.careLabels.filter(l => l !== label);
     const remainingCodes = new Set(remainingLabels.flatMap(l => labelToCodesMap[l] || []));
     const newActCodes = rdvForm.actCodes.filter(c => remainingCodes.has(c) || !codesToRemove.includes(c));
@@ -88,14 +99,45 @@ export default function RdvModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform transition-all">
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-          <h3 className="font-semibold text-lg text-slate-800">{isEditMode ? 'Modifier le Rendez-vous' : 'Nouveau Rendez-vous'}</h3>
-          <button onClick={() => setRdvModalParams(null)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20}/></button>
+    <>
+      {/* Backdrop overlay on small screens */}
+      <div
+        className="fixed inset-0 top-16 bg-black/20 z-30 lg:hidden"
+        onClick={() => setRdvModalParams(null)}
+      />
+
+      {/* Drawer panel — below header, no overlap with navbar */}
+      <div
+        className={`
+          fixed top-16 right-0 h-[calc(100vh-4rem)] z-40
+          w-full sm:w-[480px]
+          bg-white border-l border-slate-200 shadow-2xl
+          flex flex-col
+          transform transition-transform duration-300 ease-in-out
+          translate-x-0
+        `}
+      >
+        {/* Drawer header */}
+        <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
+          <h3 className="font-semibold text-lg text-slate-800">
+            {isEditMode ? 'Modifier le Rendez-vous' : 'Nouveau Rendez-vous'}
+          </h3>
+          <button
+            onClick={() => setRdvModalParams(null)}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <X size={18} />
+          </button>
         </div>
-        <form onSubmit={onSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
-          {rdvError && <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-medium flex gap-2"><AlertCircle size={18} className="shrink-0" /><p>{rdvError}</p></div>}
+
+        {/* Drawer content — scrollable form */}
+        <form onSubmit={onSubmit} className="flex-1 overflow-y-auto p-5 space-y-5">
+          {rdvError && (
+            <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-medium flex gap-2">
+              <AlertCircle size={18} className="shrink-0" />
+              <p>{rdvError}</p>
+            </div>
+          )}
 
           {/* Soignant (read-only) */}
           <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-2">
@@ -335,23 +377,31 @@ export default function RdvModal({
               <input type="time" value={rdvForm.endTime} onChange={e => setRdvForm({...rdvForm, endTime: e.target.value})} className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" required/>
             </div>
           </div>
-
-          <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
-            <button type="button" onClick={() => setRdvModalParams(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Annuler</button>
-            <button
-              type="submit"
-              disabled={!isEditMode && !rdvForm.careProtocolId}
-              className={`px-5 py-2 rounded-lg font-medium ${
-                !isEditMode && !rdvForm.careProtocolId
-                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              {isEditMode ? 'Modifier' : 'Enregistrer'}
-            </button>
-          </div>
         </form>
+
+        {/* Sticky footer — always visible */}
+        <div className="p-4 border-t border-slate-200 bg-white flex justify-end gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setRdvModalParams(null)}
+            className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!isEditMode && !rdvForm.careProtocolId}
+            className={`px-5 py-2 rounded-lg font-medium ${
+              !isEditMode && !rdvForm.careProtocolId
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
+          >
+            {isEditMode ? 'Modifier' : 'Enregistrer'}
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

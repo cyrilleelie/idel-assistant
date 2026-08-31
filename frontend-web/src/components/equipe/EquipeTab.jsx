@@ -87,8 +87,8 @@ export default function EquipeTab({
 
   return (
     <div className="relative">
-      {/* List area (shrinks when drawer open) */}
-      <div className={`transition-all duration-300 ${isDrawerOpen ? 'lg:mr-[540px]' : ''}`}>
+      {/* List area (capped width so drawer doesn't overlap) */}
+      <div className="max-w-5xl">
         <div className="space-y-6 animate-in fade-in duration-300">
           {/* Header */}
           <div className="flex justify-between items-start md:items-center gap-4">
@@ -415,15 +415,6 @@ export default function EquipeTab({
 }
 
 // Inline drawer content — form fields for nurse detail
-const availableColors = [
-  { label: 'Bleu', value: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { label: 'Vert', value: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  { label: 'Violet', value: 'bg-purple-100 text-purple-800 border-purple-200' },
-  { label: 'Rose', value: 'bg-pink-100 text-pink-800 border-pink-200' },
-  { label: 'Orange', value: 'bg-orange-100 text-orange-800 border-orange-200' },
-  { label: 'Cyan', value: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
-];
-
 function NurseDrawerContent({ nurseForm, setNurseForm, isEditingNurse }) {
   return (
     <div className="space-y-6">
@@ -458,32 +449,6 @@ function NurseDrawerContent({ nurseForm, setNurseForm, isEditingNurse }) {
             </select>
           ) : (
             <div className="inline-block text-sm font-medium text-slate-700 bg-slate-100 px-3 py-1 rounded-full">{nurseForm.role || '-'}</div>
-          )}
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">Couleur</label>
-          {isEditingNurse ? (
-            <div className="flex flex-wrap gap-2">
-              {availableColors.map(c => {
-                const isSelected = nurseForm.color === c.value;
-                return (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => setNurseForm({ ...nurseForm, color: c.value })}
-                    className={`w-9 h-9 rounded-full border-2 transition-all flex items-center justify-center ${c.value.split(' ')[0]} ${isSelected ? 'ring-2 ring-offset-2 ring-primary border-primary' : 'border-slate-200 hover:scale-110'}`}
-                    title={c.label}
-                  >
-                    {isSelected && <span className="text-xs font-bold">✓</span>}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className={`w-6 h-6 rounded-full border ${nurseForm.color || 'bg-slate-100 border-slate-200'}`}></div>
-              <span className="text-sm text-slate-600">{availableColors.find(c => c.value === nurseForm.color)?.label || 'Non definie'}</span>
-            </div>
           )}
         </div>
       </div>

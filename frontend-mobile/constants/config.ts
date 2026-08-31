@@ -19,3 +19,14 @@ export const API_UPLOAD_TIMEOUT_MS = 60_000;
 export const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 export const SYNC_WINDOW_DAYS = 3; // J-1, J, J+1
 export const TRANSMISSION_RETENTION_DAYS = 7;
+
+/**
+ * Transmission vocal mode:
+ * - 'dictation': Uses on-device speech recognition (no audio upload, text only).
+ *                Privacy-friendly, works offline, instant transcription.
+ * - 'recording': Uses the legacy audio recording + server-side STT pipeline.
+ *                Better accuracy on medical vocabulary, but requires network.
+ *
+ * To revert to the old behavior, simply change this to 'recording'.
+ */
+export const VOCAL_TRANSMISSION_MODE: 'dictation' | 'recording' = 'dictation';

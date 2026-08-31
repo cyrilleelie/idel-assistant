@@ -2,13 +2,10 @@
  * AppointmentCard — The primary list item for the tournee screen.
  *
  * Four visual states based on appointment status:
- *   COMPLETED  – successLight bg, green left border, compact (no actions)
- *   CANCELED   – borderLight bg, strikethrough patient name, badge "Annulé"
- *   NEXT       – white bg, primary left border, full detail + two action buttons
- *   SCHEDULED  – white bg, thin border left, full detail but no action buttons
- *
- * Action buttons (NEXT only) are rendered in their own TouchableOpacity views
- * to avoid nested Pressable conflicts in React Native.
+ *   COMPLETED  – emerald-100 bg, green checkmark circle, faded text, "Termine" badge
+ *   CANCELED   – borderLight bg, strikethrough patient name, "Annule" badge
+ *   NEXT       – white bg, left-4 primary border, "EN COURS" badge, full detail + action buttons
+ *   SCHEDULED  – white bg, slightly transparent, clock icon, compact layout, chevron right
  *
  * Wrapped in React.memo for FlatList performance.
  */
@@ -60,73 +57,16 @@ function getCardState(appointment: AppointmentView): CardState {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-interface TimeAndIconRowProps {
-  appointment: AppointmentView;
-  state: CardState;
-}
-
-function TimeAndIconRow({ appointment, state }: TimeAndIconRowProps) {
-  const iconName =
-    state === 'completed'
-      ? 'checkmark-circle'
-      : state === 'canceled'
-        ? 'close-circle'
-        : state === 'next'
-          ? 'play-circle'
-          : 'time-outline';
-
-  const iconColor =
-    state === 'completed'
-      ? Colors.success
-      : state === 'canceled'
-        ? Colors.textTertiary
-        : state === 'next'
-          ? Colors.primary
-          : Colors.textSecondary;
-
-  const timeStyle = [
-    styles.timeText,
-    state === 'next' ? styles.timeTextBold : null,
-    state === 'canceled' ? styles.canceledText : null,
-  ];
-
-  return (
-    <View style={styles.timeRow}>
-      <Ionicons name={iconName} size={16} color={iconColor} style={styles.stateIcon} />
-      <Text style={timeStyle}>
-        {formatTime(appointment.startTime)}
-        {appointment.endTime ? ` – ${formatTime(appointment.endTime)}` : ''}
-      </Text>
-      {state === 'canceled' && (
-        <View style={styles.canceledBadgeWrapper}>
-          <Badge label="Annulé" variant="danger" />
-        </View>
-      )}
-    </View>
-  );
-}
-
-interface PatientNameRowProps {
-  name: string;
-  state: CardState;
+interface PatientBadgesProps {
   isAld: boolean;
   hasActiveBsi: boolean;
   bsiLevel: string | null;
 }
 
-function PatientNameRow({ name, state, isAld, hasActiveBsi, bsiLevel }: PatientNameRowProps) {
-  const nameStyle = [
-    styles.patientName,
-    state === 'next' ? styles.patientNameBold : null,
-    state === 'canceled' ? styles.canceledPatientName : null,
-    state === 'completed' ? styles.completedPatientName : null,
-  ];
-
+function PatientBadges({ isAld, hasActiveBsi, bsiLevel }: PatientBadgesProps) {
+  if (!isAld && !(hasActiveBsi && bsiLevel)) return null;
   return (
-    <View style={styles.patientRow}>
-      <Text style={nameStyle} numberOfLines={1}>
-        {name}
-      </Text>
+    <View style={styles.badgeRow}>
       {isAld && (
         <View style={styles.aldBadge}>
           <Text style={styles.aldText}>ALD</Text>
@@ -138,6 +78,230 @@ function PatientNameRow({ name, state, isAld, hasActiveBsi, bsiLevel }: PatientN
         </View>
       )}
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Completed Card
+// ---------------------------------------------------------------------------
+
+function CompletedCard({ appointment, onPress }: { appointment: AppointmentView; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, styles.cardCompleted, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${appointment.patient.displayName}, termine`}
+    >
+      <View style={styles.completedContent}>
+        {/* Green checkmark circle */}
+        <View style={styles.completedIconCircle}>
+          <Ionicons name="checkmark" size={16} color={Colors.white} />
+        </View>
+
+        {/* Middle: time + patient name */}
+        <View style={styles.completedInfo}>
+          <Text style={styles.completedTime}>
+            {formatTime(appointment.startTime)}
+            {' - '}
+            {appointment.careTypeLabel}
+          </Text>
+          <Text style={styles.completedName} numberOfLines={1}>
+            {appointment.patient.displayName}
+          </Text>
+        </View>
+
+        {/* Right: Termine badge */}
+        <Text style={styles.completedBadge}>Termine</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Next (EN COURS) Card
+// ---------------------------------------------------------------------------
+
+function NextCard({
+  appointment,
+  onPress,
+  onMarkComplete,
+  onNavigate,
+  isMarkingComplete,
+}: {
+  appointment: AppointmentView;
+  onPress: () => void;
+  onMarkComplete: () => void;
+  onNavigate: () => void;
+  isMarkingComplete: boolean;
+}) {
+  const duration =
+    appointment.startTime && appointment.endTime
+      ? estimateDuration(appointment.startTime, appointment.endTime)
+      : null;
+
+  return (
+    <View style={[styles.card, styles.cardNext]}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [styles.nextContent, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={`${appointment.patient.displayName}, en cours`}
+      >
+        {/* EN COURS badge */}
+        <View style={styles.enCoursBadgeRow}>
+          <View style={styles.enCoursBadge}>
+            <Text style={styles.enCoursBadgeText}>EN COURS</Text>
+          </View>
+          {/* Info button */}
+          <TouchableOpacity
+            onPress={onPress}
+            style={styles.infoButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="information-circle-outline" size={22} color={Colors.textTertiary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Time + care type */}
+        <Text style={styles.nextTimeText}>
+          {formatTime(appointment.startTime)}
+          {appointment.endTime ? ` - ${formatTime(appointment.endTime)}` : ''}
+          {' | '}
+          {appointment.careTypeLabel}
+          {duration != null ? ` | ${duration}` : ''}
+        </Text>
+
+        {/* Patient name */}
+        <Text style={styles.nextPatientName} numberOfLines={1}>
+          {appointment.patient.displayName}
+        </Text>
+
+        {/* Patient badges */}
+        <PatientBadges
+          isAld={appointment.patient.isAld}
+          hasActiveBsi={appointment.patient.hasActiveBsi}
+          bsiLevel={appointment.patient.bsiLevel}
+        />
+
+        {/* Address */}
+        {appointment.patient.address.length > 0 && (
+          <View style={styles.addressRow}>
+            <Ionicons name="location-outline" size={14} color={Colors.textTertiary} />
+            <Text style={styles.addressText} numberOfLines={2}>
+              {appointment.patient.address}
+            </Text>
+          </View>
+        )}
+      </Pressable>
+
+      {/* Action buttons */}
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          onPress={onMarkComplete}
+          disabled={isMarkingComplete}
+          style={[
+            styles.actionButton,
+            styles.validateButton,
+            isMarkingComplete && styles.actionButtonDisabled,
+          ]}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Valider le rendez-vous"
+          accessibilityState={{ busy: isMarkingComplete }}
+        >
+          {isMarkingComplete ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={16} color={Colors.white} />
+              <Text style={styles.validateButtonText}>Valider</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={onNavigate}
+          style={[styles.actionButton, styles.navigateButton]}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Naviguer vers le patient"
+        >
+          <Ionicons name="navigate-outline" size={16} color="#475569" />
+          <Text style={styles.navigateButtonText}>Naviguer</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled Card
+// ---------------------------------------------------------------------------
+
+function ScheduledCard({ appointment, onPress }: { appointment: AppointmentView; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, styles.cardScheduled, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${appointment.patient.displayName}, planifie`}
+    >
+      <View style={styles.scheduledContent}>
+        {/* Clock icon */}
+        <View style={styles.scheduledIconCircle}>
+          <Ionicons name="time-outline" size={16} color="#94A3B8" />
+        </View>
+
+        {/* Middle: time + patient */}
+        <View style={styles.scheduledInfo}>
+          <Text style={styles.scheduledTime}>
+            {formatTime(appointment.startTime)}
+            {' - '}
+            {appointment.careTypeLabel}
+          </Text>
+          <Text style={styles.scheduledName} numberOfLines={1}>
+            {appointment.patient.displayName}
+          </Text>
+          <PatientBadges
+            isAld={appointment.patient.isAld}
+            hasActiveBsi={appointment.patient.hasActiveBsi}
+            bsiLevel={appointment.patient.bsiLevel}
+          />
+        </View>
+
+        {/* Right: chevron */}
+        <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+      </View>
+    </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Canceled Card
+// ---------------------------------------------------------------------------
+
+function CanceledCard({ appointment, onPress }: { appointment: AppointmentView; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, styles.cardCanceled, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${appointment.patient.displayName}, annule`}
+    >
+      <View style={styles.canceledContent}>
+        <View style={styles.canceledLeft}>
+          <Ionicons name="close-circle" size={16} color={Colors.textTertiary} style={{ marginRight: 6 }} />
+          <Text style={styles.canceledTime}>
+            {formatTime(appointment.startTime)}
+          </Text>
+          <Text style={styles.canceledName} numberOfLines={1}>
+            {appointment.patient.displayName}
+          </Text>
+        </View>
+        <Badge label="Annule" variant="danger" />
+      </View>
+    </Pressable>
   );
 }
 
@@ -167,115 +331,25 @@ function AppointmentCardInner({
     onMarkComplete(appointment);
   }, [appointment, onMarkComplete]);
 
-  // Derive container style from state — StyleSheet.flatten accepts falsy values
-  const stateStyle =
-    state === 'completed'
-      ? styles.cardCompleted
-      : state === 'canceled'
-        ? styles.cardCanceled
-        : state === 'next'
-          ? styles.cardNext
-          : styles.cardScheduled;
-
-  const containerStyle: ViewStyle = StyleSheet.flatten([styles.card, stateStyle]);
-
-  const duration =
-    appointment.startTime && appointment.endTime
-      ? estimateDuration(appointment.startTime, appointment.endTime)
-      : null;
-
-  const accessibilityLabel = [
-    appointment.patient.displayName,
-    formatTime(appointment.startTime),
-    state === 'completed' ? 'réalisé' : state === 'canceled' ? 'annulé' : state === 'next' ? 'prochain' : 'planifié',
-  ].join(', ');
-
-  return (
-    <View style={containerStyle}>
-      {/* Pressable covers the entire card content but NOT the action buttons */}
-      <Pressable
-        onPress={handlePress}
-        style={({ pressed }) => [styles.pressableContent, pressed && styles.pressed]}
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-      >
-        {/* Time + state icon row */}
-        <TimeAndIconRow appointment={appointment} state={state} />
-
-        {/* Patient name row (always visible) */}
-        <PatientNameRow
-          name={appointment.patient.displayName}
-          state={state}
-          isAld={appointment.patient.isAld}
-          hasActiveBsi={appointment.patient.hasActiveBsi}
-          bsiLevel={appointment.patient.bsiLevel}
+  switch (state) {
+    case 'completed':
+      return <CompletedCard appointment={appointment} onPress={handlePress} />;
+    case 'next':
+      return (
+        <NextCard
+          appointment={appointment}
+          onPress={handlePress}
+          onMarkComplete={handleMarkComplete}
+          onNavigate={handleNavigate}
+          isMarkingComplete={isMarkingComplete}
         />
-
-        {/* Compact state: only time + name */}
-        {state === 'completed' && (
-          <Text style={styles.completedLabel}>Réalisé</Text>
-        )}
-
-        {/* Full detail rows (NEXT + SCHEDULED) */}
-        {(state === 'next' || state === 'scheduled') && (
-          <View style={styles.detailRows}>
-            <Text style={styles.careTypeText} numberOfLines={1}>
-              {appointment.careTypeLabel}
-              {' · '}
-              {formatLocationType(appointment.locationType)}
-              {duration != null ? ` · ${duration}` : ''}
-            </Text>
-          </View>
-        )}
-
-        {/* Address only for NEXT */}
-        {state === 'next' && appointment.patient.address.length > 0 && (
-          <Text style={styles.addressText} numberOfLines={2}>
-            {appointment.patient.address}
-          </Text>
-        )}
-      </Pressable>
-
-      {/* Action buttons for NEXT state — outside Pressable to avoid nesting */}
-      {state === 'next' && (
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            onPress={handleNavigate}
-            style={[styles.actionButton, styles.navigateButton]}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Y aller"
-          >
-            <Ionicons name="compass-outline" size={16} color={Colors.text} />
-            <Text style={styles.navigateButtonText}>Y aller</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleMarkComplete}
-            disabled={isMarkingComplete}
-            style={[
-              styles.actionButton,
-              styles.completeButton,
-              isMarkingComplete && styles.actionButtonDisabled,
-            ]}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Marquer comme réalisé"
-            accessibilityState={{ busy: isMarkingComplete }}
-          >
-            {isMarkingComplete ? (
-              <ActivityIndicator size="small" color={Colors.white} />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={16} color={Colors.white} />
-                <Text style={styles.completeButtonText}>Réalisé</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
+      );
+    case 'canceled':
+      return <CanceledCard appointment={appointment} onPress={handlePress} />;
+    case 'scheduled':
+    default:
+      return <ScheduledCard appointment={appointment} onPress={handlePress} />;
+  }
 }
 
 const AppointmentCard = React.memo(AppointmentCardInner);
@@ -285,13 +359,10 @@ export default AppointmentCard;
 // Styles
 // ---------------------------------------------------------------------------
 
-const LEFT_BORDER_WIDTH = 4;
-const LEFT_BORDER_THIN = 2;
-
 const styles = StyleSheet.create({
-  // ── Card containers ──────────────────────────────────────────────────────
+  // -- Base card -----------------------------------------------------------
   card: {
-    borderRadius: 10,
+    borderRadius: 14,
     marginHorizontal: 16,
     marginVertical: 5,
     overflow: 'hidden',
@@ -301,94 +372,186 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  cardCompleted: {
-    backgroundColor: Colors.successLight,
-    borderLeftWidth: LEFT_BORDER_WIDTH,
-    borderLeftColor: Colors.success,
-  },
-  cardCanceled: {
-    backgroundColor: Colors.borderLight,
-    borderLeftWidth: LEFT_BORDER_THIN,
-    borderLeftColor: Colors.disabled,
-  },
-  cardNext: {
-    backgroundColor: Colors.surface,
-    borderLeftWidth: LEFT_BORDER_WIDTH,
-    borderLeftColor: Colors.primary,
-  },
-  cardScheduled: {
-    backgroundColor: Colors.surface,
-    borderLeftWidth: LEFT_BORDER_THIN,
-    borderLeftColor: Colors.border,
-  },
-
-  // ── Pressable content area ────────────────────────────────────────────────
-  pressableContent: {
-    paddingTop: 12,
-    paddingBottom: 10,
-    paddingHorizontal: 14,
-  },
   pressed: {
     opacity: 0.85,
   },
 
-  // ── Time row ─────────────────────────────────────────────────────────────
-  timeRow: {
+  // -- Completed -----------------------------------------------------------
+  cardCompleted: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  completedContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 12,
   },
-  stateIcon: {
-    marginRight: 5,
-  },
-  timeText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontVariant: ['tabular-nums'],
-  },
-  timeTextBold: {
-    fontWeight: '700',
-    color: Colors.text,
-    fontSize: 14,
-  },
-  canceledText: {
-    color: Colors.textTertiary,
-  },
-  canceledBadgeWrapper: {
-    marginLeft: 8,
-  },
-
-  // ── Patient name row ──────────────────────────────────────────────────────
-  patientRow: {
-    flexDirection: 'row',
+  completedIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.success,
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 3,
+    justifyContent: 'center',
   },
-  patientName: {
+  completedInfo: {
+    flex: 1,
+  },
+  completedTime: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  completedName: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.text,
-    flexShrink: 1,
+    color: '#374151',
+    opacity: 0.8,
   },
-  patientNameBold: {
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  canceledPatientName: {
-    textDecorationLine: 'line-through',
-    color: Colors.textTertiary,
-    fontWeight: '400',
-  },
-  completedPatientName: {
+  completedBadge: {
+    fontSize: 12,
+    fontWeight: '600',
     color: Colors.success,
   },
 
-  // ── ALD / BSI inline badges ───────────────────────────────────────────────
+  // -- Next (EN COURS) -----------------------------------------------------
+  cardNext: {
+    backgroundColor: Colors.surface,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.primary,
+  },
+  nextContent: {
+    paddingTop: 14,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
+  },
+  enCoursBadgeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  enCoursBadge: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  enCoursBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.white,
+    letterSpacing: 0.5,
+  },
+  infoButton: {
+    padding: 2,
+  },
+  nextTimeText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginBottom: 4,
+    fontVariant: ['tabular-nums'],
+  },
+  nextPatientName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+    marginTop: 6,
+  },
+  addressText: {
+    fontSize: 13,
+    color: Colors.textTertiary,
+    lineHeight: 18,
+    flex: 1,
+  },
+
+  // -- Scheduled -----------------------------------------------------------
+  cardScheduled: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    opacity: 0.85,
+  },
+  scheduledContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  scheduledIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scheduledInfo: {
+    flex: 1,
+  },
+  scheduledTime: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  scheduledName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+
+  // -- Canceled -----------------------------------------------------------
+  cardCanceled: {
+    backgroundColor: Colors.borderLight,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  canceledContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  canceledLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  canceledTime: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginRight: 8,
+  },
+  canceledName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textTertiary,
+    textDecorationLine: 'line-through',
+    flex: 1,
+  },
+
+  // -- Badges (ALD / BSI) -------------------------------------------------
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
   aldBadge: {
     backgroundColor: Colors.warningLight,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
   },
   aldText: {
@@ -398,8 +561,8 @@ const styles = StyleSheet.create({
   },
   bsiBadge: {
     backgroundColor: Colors.primaryUltraLight,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
   },
   bsiText: {
@@ -408,39 +571,13 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
 
-  // ── Detail rows (care type, location, duration) ───────────────────────────
-  detailRows: {
-    marginTop: 2,
-  },
-  careTypeText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
-
-  // ── Address (NEXT only) ───────────────────────────────────────────────────
-  addressText: {
-    fontSize: 13,
-    color: Colors.textTertiary,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-
-  // ── Completed label ───────────────────────────────────────────────────────
-  completedLabel: {
-    fontSize: 12,
-    color: Colors.success,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-
-  // ── Action buttons (NEXT) ─────────────────────────────────────────────────
+  // -- Action buttons (NEXT) -----------------------------------------------
   actionRow: {
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: 14,
-    paddingBottom: 12,
-    paddingTop: 4,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: 6,
   },
   actionButton: {
     flex: 1,
@@ -448,30 +585,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    minHeight: 40,
-    borderRadius: 8,
-    paddingVertical: 9,
+    minHeight: 44,
+    borderRadius: 10,
+    paddingVertical: 10,
     paddingHorizontal: 12,
   },
   actionButtonDisabled: {
     opacity: 0.5,
   },
+  validateButton: {
+    backgroundColor: Colors.primary,
+  },
+  validateButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.white,
+  },
   navigateButton: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: '#F1F5F9',
   },
   navigateButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
-  },
-  completeButton: {
-    backgroundColor: Colors.primary,
-  },
-  completeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.white,
+    color: '#475569',
   },
 });

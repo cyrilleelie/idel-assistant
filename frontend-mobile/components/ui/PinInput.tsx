@@ -22,7 +22,7 @@ const SHAKE_DISTANCE = 10;
 const SHAKE_DURATION = 60;
 
 export default function PinInput({
-  length = 6,
+  length = 4,
   onComplete,
   error,
   disabled = false,
@@ -80,16 +80,21 @@ export default function PinInput({
       <Animated.View
         style={[styles.dotsRow, { transform: [{ translateX: shakeAnim }] }]}
       >
-        {Array.from({ length }, (_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              i < digits.length ? styles.dotFilled : styles.dotEmpty,
-              error != null && error.length > 0 && styles.dotError,
-            ]}
-          />
-        ))}
+        {Array.from({ length }, (_, i) => {
+          const isFilled = i < digits.length;
+          const hasError = error != null && error.length > 0;
+          return (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                isFilled
+                  ? (hasError ? styles.dotError : styles.dotFilled)
+                  : styles.dotEmpty,
+              ]}
+            />
+          );
+        })}
       </Animated.View>
 
       {/* Error message */}
@@ -121,7 +126,7 @@ export default function PinInput({
                   >
                     <Ionicons
                       name="backspace-outline"
-                      size={24}
+                      size={26}
                       color={disabled || digits.length === 0 ? Colors.disabled : Colors.text}
                     />
                   </Pressable>
@@ -159,7 +164,7 @@ export default function PinInput({
 }
 
 const DOT_SIZE = 16;
-const KEY_SIZE = 72;
+const KEY_SIZE = 76;
 
 const styles = StyleSheet.create({
   container: {
@@ -167,7 +172,7 @@ const styles = StyleSheet.create({
   },
   dotsRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 20,
     marginBottom: 12,
   },
   dot: {
@@ -178,15 +183,15 @@ const styles = StyleSheet.create({
   dotEmpty: {
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: Colors.border,
+    borderColor: `${Colors.primary}4D`,
   },
   dotFilled: {
     backgroundColor: Colors.primary,
     borderWidth: 0,
   },
   dotError: {
-    borderColor: Colors.error,
     backgroundColor: Colors.error,
+    borderWidth: 0,
   },
   errorText: {
     fontSize: 13,
@@ -208,15 +213,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     margin: 4,
     borderRadius: KEY_SIZE / 2,
-    minHeight: 44,
-    minWidth: 44,
+    minHeight: 48,
+    minWidth: 48,
   },
   keypadKeyPressed: {
     backgroundColor: Colors.borderLight,
   },
   keypadDigit: {
-    fontSize: 28,
-    fontWeight: '500',
+    fontSize: 30,
+    fontWeight: '600',
     color: Colors.text,
   },
   keypadDigitDisabled: {

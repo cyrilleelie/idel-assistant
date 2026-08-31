@@ -36,6 +36,7 @@ import FacturationTab from './components/facturation/FacturationTab';
 import MaTourneeTab from './components/tournee/MaTourneeTab';
 import AdministrationScreen from './components/admin/AdministrationScreen';
 import RdvModal from './components/modals/RdvModal';
+import { useDialog } from './components/ui/ConfirmDialog';
 
 // --- Sub-tab definitions per screen ---
 const cabinetTabs = [
@@ -53,6 +54,10 @@ const defaultTabForScreen = {
 };
 
 export default function App() {
+  const dialog = useDialog();
+  const dialogRef = useRef(dialog);
+  dialogRef.current = dialog;
+
   // --- AGENT IA ---
   const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -162,13 +167,45 @@ export default function App() {
   const [activeScreen, setActiveScreen] = useState('cabinet');
   const [activeTab, setActiveTab] = useState('cabinet-info');
 
-  const handleScreenChange = useCallback((screen) => {
+  const doScreenChange = useCallback((screen) => {
+    // Fermer tous les tiroirs ouverts
+    if (rdvModalParamsRef.current) setRdvModalParams(null);
+    if (selectedNurseIdRef.current) {
+      setSelectedNurseId(null);
+      setIsEditingNurse(false);
+    }
+    if (selectedPatientIdRef.current) {
+      setSelectedPatientId(null);
+      setIsEditingPatient(false);
+    }
+
     setActiveScreen(screen);
     setActiveTab(defaultTabForScreen[screen]);
     if (screen === 'facturation') {
       setPendingFacturationCount(0);
     }
   }, []);
+
+  const handleScreenChange = useCallback(async (screen) => {
+    // Vérifier si un tiroir est ouvert avec des modifications non sauvegardées
+    const hasOpenRdvDrawer = rdvModalParamsRef.current !== null;
+    const rdvFormDirty = hasOpenRdvDrawer && rdvFormInitialRef.current != null
+      && JSON.stringify(rdvFormRef.current) !== JSON.stringify(rdvFormInitialRef.current);
+    const nurseFormDirty = isEditingNurseRef.current && isFormDirty(nurseFormRef, nurseFormInitialRef);
+    const patientFormDirty = isEditingPatientRef.current && isFormDirty(patientFormRef, patientFormInitialRef);
+
+    const hasUnsavedChanges = rdvFormDirty || nurseFormDirty || patientFormDirty;
+
+    if (hasUnsavedChanges) {
+      const confirmed = await dialogRef.current.confirm(
+        'Des modifications non sauvegardées seront perdues. Voulez-vous quitter cette vue ?',
+        { title: 'Modifications non sauvegardées' }
+      );
+      if (!confirmed) return;
+    }
+
+    doScreenChange(screen);
+  }, [doScreenChange]);
 
   // --- ÉTATS (State) ---
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -221,6 +258,42 @@ export default function App() {
   const [isEditingPatient, setIsEditingPatient] = useState(false);
   const [patientForm, setPatientForm] = useState({});
   const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
+
+  // Refs pour détection de tiroirs ouverts (utilisées par handleScreenChange et guards)
+  const rdvModalParamsRef = useRef(rdvModalParams);
+  rdvModalParamsRef.current = rdvModalParams;
+  const rdvFormRef = useRef(rdvForm);
+  rdvFormRef.current = rdvForm;
+  const rdvFormInitialRef = useRef(null);
+  const isEditingNurseRef = useRef(isEditingNurse);
+  isEditingNurseRef.current = isEditingNurse;
+  const selectedNurseIdRef = useRef(selectedNurseId);
+  selectedNurseIdRef.current = selectedNurseId;
+  const nurseFormRef = useRef(nurseForm);
+  nurseFormRef.current = nurseForm;
+  const nurseFormInitialRef = useRef(null);
+  const isEditingPatientRef = useRef(isEditingPatient);
+  isEditingPatientRef.current = isEditingPatient;
+  const patientFormRef = useRef(patientForm);
+  patientFormRef.current = patientForm;
+  const patientFormInitialRef = useRef(null);
+
+  // Helper : vérifie si un formulaire est dirty (modifié par rapport à l'état initial)
+  const isFormDirty = (currentRef, initialRef) => {
+    if (!initialRef.current) return false;
+    return JSON.stringify(currentRef.current) !== JSON.stringify(initialRef.current);
+  };
+
+  // Helper : demande confirmation si des modifications non sauvegardées existent
+  const confirmIfDirty = async (editingRef, currentRef, initialRef) => {
+    if (editingRef.current && isFormDirty(currentRef, initialRef)) {
+      return await dialogRef.current.confirm(
+        'Des modifications non sauvegardées seront perdues. Voulez-vous continuer ?',
+        { title: 'Modifications non sauvegardées' }
+      );
+    }
+    return true;
+  };
 
   // Navigation programmatique vers un patient (depuis Facturation, etc.)
   // Stocker l'intention dans un ref pour qu'elle survive au reset de l'effet ci-dessous
@@ -284,6 +357,13 @@ export default function App() {
   const restoreNavigation = useCallback((state) => {
     const { activeScreen: screen, activeTab: tab, selectedPatientId: patId, patientSubTab: subTab } = state;
     const screenChanges = activeScreenRef.current !== screen;
+
+    // Fermer les tiroirs ouverts lors de la navigation arrière/avant
+    if (screenChanges) {
+      setRdvModalParams(null);
+      setSelectedNurseId(null);
+      setIsEditingNurse(false);
+    }
 
     if (screen === 'patients' && patId) {
       pendingPatientNavRef.current = {
@@ -513,16 +593,21 @@ export default function App() {
   const activeNurses = nurses.filter(n => n.active !== false);
   const activePatients = patients.filter(p => p.active !== false);
 
-  const openNewPatient = () => {
-    setPatientForm({ firstName: '', lastName: '', phone: '', email: '', address: '', ssn: '', doctorName: '', doctorContact: '', antecedents: '', notes: '', prescriptions: [], amo_code: '', amo_center: '', amc_code: '', amc_name: '', amc_contract: '', exoneration_type: '', birth_rank: null });
+  const openNewPatient = async () => {
+    if (!await confirmIfDirty(isEditingPatientRef, patientFormRef, patientFormInitialRef)) return;
+    const form = { firstName: '', lastName: '', phone: '', email: '', address: '', ssn: '', doctorName: '', doctorContact: '', antecedents: '', notes: '', prescriptions: [], amo_code: '', amo_center: '', amc_code: '', amc_name: '', amc_contract: '', exoneration_type: '', birth_rank: null };
+    setPatientForm(form);
+    patientFormInitialRef.current = form;
     setSelectedPatientId('new');
     setIsEditingPatient(true);
     setPatientSubTab('info');
   };
 
-  const openPatientDetail = (patient) => {
+  const openPatientDetail = async (patient) => {
+    if (!await confirmIfDirty(isEditingPatientRef, patientFormRef, patientFormInitialRef)) return;
     setSelectedPatientId(patient.id);
     setPatientForm({ ...patient });
+    patientFormInitialRef.current = null;
     setIsEditingPatient(false);
     setPatientSubTab('info');
     loadPrescriptionsForPatient(patient.id);
@@ -531,6 +616,18 @@ export default function App() {
   const closePatientDetail = () => {
     setSelectedPatientId(null);
     setIsEditingPatient(false);
+    patientFormInitialRef.current = null;
+  };
+
+  // Wrapper pour capturer l'état initial quand l'édition patient commence
+  const setIsEditingPatientWithSnapshot = (editing) => {
+    if (editing && !isEditingPatient) {
+      patientFormInitialRef.current = JSON.parse(JSON.stringify(patientForm));
+    }
+    if (!editing) {
+      patientFormInitialRef.current = null;
+    }
+    setIsEditingPatient(editing);
   };
 
   const handleSavePatient = async (e) => {
@@ -547,7 +644,7 @@ export default function App() {
         setSelectedPatientId(mapped.id);
         setPatientForm({ ...mapped, prescriptions: currentPrescriptions });
       } catch (err) {
-        alert(err.response?.data?.detail || 'Erreur lors de la création du patient.');
+        dialog.alert(err.response?.data?.detail || 'Erreur lors de la création du patient.', { variant: 'error', title: 'Erreur' });
         return;
       }
     } else {
@@ -564,11 +661,12 @@ export default function App() {
             : a
         ));
       } catch (err) {
-        alert(err.response?.data?.detail || 'Erreur lors de la mise à jour du patient.');
+        dialog.alert(err.response?.data?.detail || 'Erreur lors de la mise à jour du patient.', { variant: 'error', title: 'Erreur' });
         return;
       }
     }
     setIsEditingPatient(false);
+    patientFormInitialRef.current = null;
   };
 
   const deactivatePatient = async (id) => {
@@ -577,7 +675,7 @@ export default function App() {
       setPatients(prev => prev.map(p => p.id === id ? { ...p, active: false } : p));
       closePatientDetail();
     } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors de l\'archivage du patient.');
+      dialog.alert(err.response?.data?.detail || 'Erreur lors de l\'archivage du patient.', { variant: 'error', title: 'Erreur' });
     }
   };
   const reactivatePatient = async (id) => {
@@ -587,24 +685,41 @@ export default function App() {
       setPatients(prev => prev.map(p => p.id === id ? mapped : p));
       setPatientForm(mapped);
     } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors de la réactivation du patient.');
+      dialog.alert(err.response?.data?.detail || 'Erreur lors de la réactivation du patient.', { variant: 'error', title: 'Erreur' });
     }
   };
 
   // --- LOGIQUE INFIRMIERS ---
-  const openNurseDetail = (nurse) => {
+  const openNurseDetail = async (nurse) => {
+    if (!await confirmIfDirty(isEditingNurseRef, nurseFormRef, nurseFormInitialRef)) return;
     setSelectedNurseId(nurse.id);
     setNurseForm({ ...nurse });
+    nurseFormInitialRef.current = null;
     setIsEditingNurse(false);
   };
-  const openNewNurse = () => {
-    setNurseForm({ firstName: '', lastName: '', role: 'Titulaire', phone: '', email: '', color: nurseColors[0] });
+  const openNewNurse = async () => {
+    if (!await confirmIfDirty(isEditingNurseRef, nurseFormRef, nurseFormInitialRef)) return;
+    const form = { firstName: '', lastName: '', role: 'Titulaire', phone: '', email: '', color: nurseColors[0] };
+    setNurseForm(form);
+    nurseFormInitialRef.current = form;
     setSelectedNurseId('new');
     setIsEditingNurse(true);
   };
   const closeNurseDetail = () => {
     setSelectedNurseId(null);
     setIsEditingNurse(false);
+    nurseFormInitialRef.current = null;
+  };
+
+  // Wrapper pour capturer l'état initial quand l'édition infirmier commence
+  const setIsEditingNurseWithSnapshot = (editing) => {
+    if (editing && !isEditingNurse) {
+      nurseFormInitialRef.current = JSON.parse(JSON.stringify(nurseForm));
+    }
+    if (!editing) {
+      nurseFormInitialRef.current = null;
+    }
+    setIsEditingNurse(editing);
   };
 
   const handleSaveNurse = async (e) => {
@@ -618,8 +733,9 @@ export default function App() {
         setNurses((prev) => sortByRole([...prev, mapped]));
         setSelectedNurseId(mapped.id);
         setIsEditingNurse(false);
+        nurseFormInitialRef.current = null;
       } catch (err) {
-        alert(err.response?.data?.detail || "Erreur lors de l'invitation.");
+        dialog.alert(err.response?.data?.detail || "Erreur lors de l'invitation.", { variant: 'error', title: 'Erreur' });
       }
     } else {
       try {
@@ -629,8 +745,9 @@ export default function App() {
         setNurses((prev) => sortByRole(prev.map((n) => (n.id === selectedNurseId ? mapped : n))));
         setNurseForm(mapped);
         setIsEditingNurse(false);
+        nurseFormInitialRef.current = null;
       } catch (err) {
-        alert(err.response?.data?.detail || 'Erreur lors de la mise à jour.');
+        dialog.alert(err.response?.data?.detail || 'Erreur lors de la mise à jour.', { variant: 'error', title: 'Erreur' });
       }
     }
   };
@@ -642,7 +759,7 @@ export default function App() {
       setNurses((prev) => prev.map((n) => (n.id === id ? mapped : n)));
       closeNurseDetail();
     } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors de la désactivation.');
+      dialog.alert(err.response?.data?.detail || 'Erreur lors de la désactivation.', { variant: 'error', title: 'Erreur' });
     }
   };
 
@@ -653,7 +770,7 @@ export default function App() {
       setNurses((prev) => prev.map((n) => (n.id === id ? mapped : n)));
       setNurseForm(mapped);
     } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors de la réactivation.');
+      dialog.alert(err.response?.data?.detail || 'Erreur lors de la réactivation.', { variant: 'error', title: 'Erreur' });
     }
   };
 
@@ -898,7 +1015,9 @@ export default function App() {
 
   const openRdvModal = (dateStr, slotId, nurseId) => {
     setRdvModalParams({ dateStr, slotId, nurseId });
-    setRdvForm({ mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home', careLabels: [], actCodes: [] });
+    const initialForm = { mode: 'select', patientId: '', newFirstName: '', newLastName: '', startTime: '', endTime: '', careProtocolId: '', locationType: 'home', careLabels: [], actCodes: [] };
+    setRdvForm(initialForm);
+    rdvFormInitialRef.current = initialForm;
     setRdvPrescriptions([]);
     setRdvError('');
     // Fetch care protocols to determine which patients have active plans (en cours)
@@ -934,9 +1053,21 @@ export default function App() {
     })();
   };
 
-  const editRdv = (appt) => {
+  const editRdv = async (appt) => {
+    // Si un autre RDV est en cours d'édition avec des modifications, demander confirmation
+    if (rdvModalParamsRef.current && rdvModalParamsRef.current.editAppt?.id !== appt.id) {
+      if (isFormDirty(rdvFormRef, rdvFormInitialRef)) {
+        const ok = await dialogRef.current.confirm(
+          'Des modifications non sauvegardées seront perdues. Voulez-vous continuer ?',
+          { title: 'Modifications non sauvegardées' }
+        );
+        if (!ok) return;
+      }
+    }
     setRdvModalParams({ dateStr: appt.dateStr, slotId: appt.slotId, nurseId: appt.nurseId, editAppt: appt });
-    setRdvForm({ mode: 'select', patientId: appt.patientId, newFirstName: '', newLastName: '', startTime: appt.startTime, endTime: appt.endTime, careProtocolId: appt.careProtocolId || '', locationType: appt._apiLocationType || 'home', status: appt.status || 'scheduled', careLabels: appt.careLabels || [], actCodes: appt.actCodes || [] });
+    const initialForm = { mode: 'select', patientId: appt.patientId, newFirstName: '', newLastName: '', startTime: appt.startTime, endTime: appt.endTime, careProtocolId: appt.careProtocolId || '', locationType: appt._apiLocationType || 'home', status: appt.status || 'scheduled', careLabels: appt.careLabels || [], actCodes: appt.actCodes || [] };
+    setRdvForm(initialForm);
+    rdvFormInitialRef.current = initialForm;
     setRdvError('');
     loadRdvPrescriptions(appt.patientId);
   };
@@ -1099,7 +1230,7 @@ export default function App() {
       assignSlotIds([mappedAppt], getActiveConfigForDate);
       setAppointments(prev => prev.map(a => a.id === id ? mappedAppt : a));
     } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors de l\'annulation du RDV.');
+      dialog.alert(err.response?.data?.detail || 'Erreur lors de l\'annulation du RDV.', { variant: 'error', title: 'Erreur' });
     }
   };
 
@@ -1132,7 +1263,7 @@ export default function App() {
         loadPrescriptionsForPatient(updated.patient_id).catch(() => {});
       }
     } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors de la complétion du RDV.');
+      dialog.alert(err.response?.data?.detail || 'Erreur lors de la complétion du RDV.', { variant: 'error', title: 'Erreur' });
     }
   };
 
@@ -1211,7 +1342,18 @@ export default function App() {
               {cabinetTabs.filter(t => t.id !== 'creneaux' || !isReadOnly).map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
-                  onClick={() => setActiveTab(id)}
+                  onClick={async () => {
+                    if (id !== activeTab && selectedNurseId && isEditingNurse && isFormDirty(nurseFormRef, nurseFormInitialRef)) {
+                      const ok = await dialog.confirm('Des modifications non sauvegardées seront perdues. Voulez-vous continuer ?', { title: 'Modifications non sauvegardées' });
+                      if (!ok) return;
+                    }
+                    if (id !== activeTab && selectedNurseId) {
+                      setSelectedNurseId(null);
+                      setIsEditingNurse(false);
+                      nurseFormInitialRef.current = null;
+                    }
+                    setActiveTab(id);
+                  }}
                   className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors ${
                     activeTab === id
                       ? 'border-blue-600 text-blue-600'
@@ -1245,7 +1387,7 @@ export default function App() {
               patientForm={patientForm}
               setPatientForm={setPatientForm}
               isEditingPatient={isEditingPatient}
-              setIsEditingPatient={setIsEditingPatient}
+              setIsEditingPatient={setIsEditingPatientWithSnapshot}
               patientSubTab={patientSubTab}
               setPatientSubTab={setPatientSubTab}
               openNewPatient={openNewPatient}
@@ -1313,6 +1455,7 @@ export default function App() {
               cabinetData={cabinetData}
               fetchScheduleForMonth={fetchAndSetSchedule}
               meUserId={meData?.user?.id}
+              selectedRdvId={rdvModalParams?.editAppt?.id || null}
             />
           )}
 
@@ -1335,7 +1478,7 @@ export default function App() {
                   setNurseForm={setNurseForm}
                   selectedNurseId={selectedNurseId}
                   isEditingNurse={isEditingNurse}
-                  setIsEditingNurse={setIsEditingNurse}
+                  setIsEditingNurse={setIsEditingNurseWithSnapshot}
                   openNurseDetail={openNurseDetail}
                   openNewNurse={openNewNurse}
                   closeNurseDetail={closeNurseDetail}

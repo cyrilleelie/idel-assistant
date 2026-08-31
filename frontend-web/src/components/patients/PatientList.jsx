@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, UserPlus, ChevronLeft, ChevronRight, Edit, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
 import { listCareProtocols } from '../../api/care-protocols';
+import { useDialog } from '../ui/ConfirmDialog';
 
 const statusFilters = [
   { id: 'all', label: 'Tous' },
@@ -11,6 +12,7 @@ const statusFilters = [
 const PAGE_SIZE = 12;
 
 export default function PatientList({ patients, patientSearch, setPatientSearch, openNewPatient, openPatientDetail, selectedPatientId, deactivatePatient, reactivatePatient, setPatientSubTab }) {
+  const dialog = useDialog();
   const [statusFilter, setStatusFilter] = useState('active');
   const [page, setPage] = useState(1);
   const [toggleAlert, setToggleAlert] = useState(null); // { patientId, message }
@@ -36,11 +38,11 @@ export default function PatientList({ patients, patientSearch, setPatientSearch,
         setPatientSubTab('prescriptions');
         openPatientDetail(patient);
       } else {
-        const ok = window.confirm(`Désactiver ${patient.firstName} ${patient.lastName} ?`);
+        const ok = await dialog.confirm(`Désactiver ${patient.firstName} ${patient.lastName} ?`, { title: 'Désactivation', variant: 'danger' });
         if (ok) await deactivatePatient(patient.id);
       }
     } catch {
-      const ok = window.confirm(`Désactiver ${patient.firstName} ${patient.lastName} ?`);
+      const ok = await dialog.confirm(`Désactiver ${patient.firstName} ${patient.lastName} ?`, { title: 'Désactivation', variant: 'danger' });
       if (ok) await deactivatePatient(patient.id);
     } finally {
       setToggleLoading(null);

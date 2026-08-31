@@ -8,7 +8,7 @@
  * Audit: view_invoice, send_invoice.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -34,11 +34,9 @@ import {
   generateInvoiceHtml,
 } from '@/services/invoiceService';
 import type { InvoiceDetail } from '@/services/invoiceService';
-import InvoiceActsTable from '@/components/invoice/InvoiceActsTable';
 import InvoiceSendModal from '@/components/invoice/InvoiceSendModal';
 import VitaleStatusBadge from '@/components/invoice/VitaleStatusBadge';
 import PdfPresentationMode from '@/components/invoice/PdfPresentationMode';
-import Badge from '@/components/ui/Badge';
 import LoadingScreen from '@/components/ui/LoadingScreen';
 import { useToastStore } from '@/stores/toastStore';
 import { formatAmount, formatInvoiceNumber } from '@/utils/formatters';
@@ -54,26 +52,41 @@ type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 function invoiceStatusLabel(status: string): string {
   switch (status) {
     case 'validated':
-      return 'Validee';
+      return 'PAYE';
     case 'draft':
-      return 'Brouillon';
+      return 'BROUILLON';
     case 'cancelled':
-      return 'Annulee';
+      return 'ANNULEE';
+    case 'transmitted':
+      return 'TRANSMISE';
     default:
-      return status;
+      return status.toUpperCase();
   }
 }
 
-function invoiceStatusVariant(status: string): BadgeVariant {
+function invoiceStatusBgColor(status: string): string {
   switch (status) {
     case 'validated':
-      return 'success';
+      return `${Colors.primary}15`;
     case 'draft':
-      return 'warning';
+      return '#FEF3C7';
     case 'cancelled':
-      return 'danger';
+      return Colors.errorLight;
     default:
-      return 'neutral';
+      return Colors.borderLight;
+  }
+}
+
+function invoiceStatusTextColor(status: string): string {
+  switch (status) {
+    case 'validated':
+      return Colors.primary;
+    case 'draft':
+      return '#D97706';
+    case 'cancelled':
+      return Colors.error;
+    default:
+      return Colors.textSecondary;
   }
 }
 
@@ -94,7 +107,7 @@ export default function InvoiceDetailScreen() {
 
   useScreenProtection();
 
-  // ── State ─────────────────────────────────────────────────────────────────
+  // -- State --
 
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,7 +122,7 @@ export default function InvoiceDetailScreen() {
   const [showSendModal, setShowSendModal] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
-  // ── Load invoice ──────────────────────────────────────────────────────────
+  // -- Load invoice --
 
   const loadInvoice = useCallback(async () => {
     setIsLoading(true);
@@ -139,20 +152,13 @@ export default function InvoiceDetailScreen() {
     loadInvoice();
   }, [loadInvoice]);
 
-  // ── PDF / HTML display ─────────────────────────────────────────────────
+  // -- PDF / HTML display --
 
-  /**
-   * Try to load the PDF from cache or server.
-   * If download fails, generate HTML invoice locally as fallback.
-   * Returns true if content is ready to display.
-   */
   const loadDisplayContent = useCallback(async (): Promise<boolean> => {
     if (!invoice) return false;
 
-    // Already loaded
     if (pdfBase64 || invoiceHtml) return true;
 
-    // Check local cache
     const cached = await getCachedPdfPath(database, invoice.id);
     if (cached) {
       try {
@@ -160,11 +166,10 @@ export default function InvoiceDetailScreen() {
         setPdfBase64(b64);
         return true;
       } catch {
-        // Cache corrupted — fall through to download
+        // Cache corrupted
       }
     }
 
-    // Try server download
     if (isOnline && invoice.serverId) {
       setIsPdfLoading(true);
       try {
@@ -178,13 +183,12 @@ export default function InvoiceDetailScreen() {
         setPdfBase64(b64);
         return true;
       } catch {
-        // Download failed — fall through to HTML fallback
+        // Download failed
       } finally {
         setIsPdfLoading(false);
       }
     }
 
-    // Fallback: generate HTML invoice from local data
     const html = generateInvoiceHtml(invoice);
     setInvoiceHtml(html);
     return true;
@@ -204,7 +208,7 @@ export default function InvoiceDetailScreen() {
     }
   }, [loadDisplayContent]);
 
-  // ── Send actions ──────────────────────────────────────────────────────────
+  // -- Send actions --
 
   const handleOpenSend = useCallback((channel: 'email' | 'sms') => {
     setSendChannel(channel);
@@ -240,7 +244,14 @@ export default function InvoiceDetailScreen() {
     [invoice, isOnline, sendChannel, logAccess, showToast],
   );
 
-  // ── Loading / not found states ────────────────────────────────────────────
+  // -- Computed values --
+
+  const formattedDate = useMemo(() => {
+    if (!invoice?.date) return '';
+    return formatDateFrench(invoice.date);
+  }, [invoice?.date]);
+
+  // -- Loading / not found states --
 
   if (isLoading) {
     return <LoadingScreen message="Chargement de la facture..." />;
@@ -273,23 +284,45 @@ export default function InvoiceDetailScreen() {
     );
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // -- Render --
 
   return (
     <>
       <Stack.Screen
         options={{
           headerShown: true,
-          title: `Facture ${invoice.invoiceNumber}`,
+          title: '',
           headerStyle: styles.headerBar,
           headerTitleStyle: styles.headerTitle,
           headerTintColor: Colors.text,
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.headerBackBtn}
+              hitSlop={8}
+            >
+              <Ionicons name="arrow-back" size={24} color={Colors.text} />
+            </TouchableOpacity>
+          ),
+          headerTitle: () => (
+            <View style={styles.headerTitleArea}>
+              <Text style={styles.headerTitleMain}>
+                Facture {formatInvoiceNumber(invoice.invoiceNumber)}
+              </Text>
+              <Text style={styles.headerTitleSub}>{formattedDate}</Text>
+            </View>
+          ),
           headerRight: () => (
-            <View style={styles.headerBadge}>
-              <Badge
-                label={invoiceStatusLabel(invoice.status)}
-                variant={invoiceStatusVariant(invoice.status)}
-              />
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: invoiceStatusBgColor(invoice.status) },
+            ]}>
+              <Text style={[
+                styles.statusBadgeText,
+                { color: invoiceStatusTextColor(invoice.status) },
+              ]}>
+                {invoiceStatusLabel(invoice.status)}
+              </Text>
             </View>
           ),
         }}
@@ -300,80 +333,115 @@ export default function InvoiceDetailScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Invoice info card */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Patient</Text>
-            <Text style={styles.infoValue}>{invoice.patientName}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Date</Text>
-            <Text style={styles.infoValue}>
-              {invoice.date ? formatDateFrench(invoice.date) : '-'}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Numero</Text>
-            <Text style={styles.infoValue}>
-              {formatInvoiceNumber(invoice.invoiceNumber)}
-            </Text>
-          </View>
-          <View style={[styles.infoRow, styles.infoRowLast]}>
-            <Text style={styles.infoLabel}>Montant</Text>
-            <Text style={styles.infoValueBold}>{formatAmount(invoice.totalAmount)}</Text>
-          </View>
-          <View style={styles.badgeRow}>
-            <VitaleStatusBadge status={invoice.vitaleStatus} />
+        {/* Hero section: amount */}
+        <View style={styles.heroSection}>
+          <Text style={styles.heroLabel}>Montant Total</Text>
+          <Text style={styles.heroAmount}>{formatAmount(invoice.totalAmount)}</Text>
+          <View style={styles.heroPatientBadge}>
+            <Ionicons name="person-outline" size={14} color={Colors.primary} />
+            <Text style={styles.heroPatientName}>{invoice.patientName}</Text>
           </View>
         </View>
 
-        {/* Acts table */}
+        {/* Detail des actes */}
         <Text style={styles.sectionTitle}>DETAIL DES ACTES</Text>
-        <InvoiceActsTable
-          acts={invoice.acts}
-          totalAmount={invoice.totalAmount}
-          amountAmo={invoice.amountAmo}
-          amountAmc={invoice.amountAmc}
-          amountPatient={invoice.amountPatient}
-        />
-
-        {/* Sharing section */}
-        <Text style={styles.sectionTitle}>PARTAGER</Text>
-        <View style={styles.actionsContainer}>
-          <ActionRow
-            icon="document-text-outline"
-            label="Voir le PDF"
-            onPress={handleViewPdf}
-            loading={isPdfLoading}
-          />
-          <ActionRow
-            icon="mail-outline"
-            label="Envoyer par email"
-            onPress={() => handleOpenSend('email')}
-          />
-          <ActionRow
-            icon="chatbubble-outline"
-            label="Envoyer par SMS (lien)"
-            onPress={() => handleOpenSend('sms')}
-          />
-          <ActionRow
-            icon="tv-outline"
-            label="Presenter au patient"
-            onPress={handlePresent}
-            loading={isPdfLoading}
-          />
+        <View style={styles.actsCard}>
+          {/* Table header */}
+          <View style={styles.actsHeader}>
+            <Text style={[styles.actsHeaderCell, styles.actsHeaderActe]}>ACTE</Text>
+            <Text style={[styles.actsHeaderCell, styles.actsHeaderQte]}>QTE</Text>
+            <Text style={[styles.actsHeaderCell, styles.actsHeaderMontant]}>MONTANT</Text>
+          </View>
+          {/* Table rows */}
+          {invoice.acts.map((act, idx) => (
+            <View
+              key={idx}
+              style={[
+                styles.actsRow,
+                idx === invoice.acts.length - 1 && styles.actsRowLast,
+              ]}
+            >
+              <View style={styles.actsActeCol}>
+                <Text style={styles.actsCode}>{act.code}</Text>
+                {act.label ? (
+                  <Text style={styles.actsLabel}>{act.label}</Text>
+                ) : null}
+              </View>
+              <Text style={styles.actsQte}>{act.quantity ?? 1}</Text>
+              <Text style={styles.actsMontant}>{formatAmount(act.amount)}</Text>
+            </View>
+          ))}
         </View>
 
-        {/* Carte Vitale section */}
-        <Text style={styles.sectionTitle}>CARTE VITALE</Text>
-        <View style={styles.vitaleCard}>
-          <Ionicons name="lock-closed-outline" size={20} color={Colors.textTertiary} />
-          <View style={styles.vitaleTextArea}>
-            <Text style={styles.vitaleTitle}>Validation carte vitale</Text>
-            <Text style={styles.vitaleDesc}>
-              Disponible dans une version ulterieure.
-            </Text>
+        {/* Financial summary */}
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Total Hors Taxes</Text>
+            <Text style={styles.summaryValue}>{formatAmount(invoice.totalAmount)}</Text>
           </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>TVA</Text>
+            <Text style={styles.summaryValue}>0,00 EUR</Text>
+          </View>
+          <View style={styles.summarySeparator} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryTotalLabel}>Total a payer</Text>
+            <Text style={styles.summaryTotalValue}>{formatAmount(invoice.totalAmount)}</Text>
+          </View>
+        </View>
+
+        {/* AMO / AMC breakdown if available */}
+        {(invoice.amountAmo > 0 || invoice.amountAmc > 0) && (
+          <View style={styles.breakdownCard}>
+            {invoice.amountAmo > 0 && (
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Part AMO</Text>
+                <Text style={styles.breakdownValue}>{formatAmount(invoice.amountAmo)}</Text>
+              </View>
+            )}
+            {invoice.amountAmc > 0 && (
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Part AMC</Text>
+                <Text style={styles.breakdownValue}>{formatAmount(invoice.amountAmc)}</Text>
+              </View>
+            )}
+            {invoice.amountPatient > 0 && (
+              <View style={styles.breakdownRow}>
+                <Text style={styles.breakdownLabel}>Part patient</Text>
+                <Text style={styles.breakdownValue}>{formatAmount(invoice.amountPatient)}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Carte Vitale badge */}
+        <View style={styles.vitaleBadgeRow}>
+          <VitaleStatusBadge status={invoice.vitaleStatus} />
+        </View>
+
+        {/* Action buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            onPress={handleViewPdf}
+            style={styles.actionBtnSecondary}
+            activeOpacity={0.75}
+            disabled={isPdfLoading}
+          >
+            {isPdfLoading ? (
+              <ActivityIndicator size="small" color={Colors.text} />
+            ) : (
+              <Ionicons name="document-text-outline" size={20} color={Colors.text} />
+            )}
+            <Text style={styles.actionBtnSecondaryText}>PDF</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleOpenSend('email')}
+            style={styles.actionBtnPrimary}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="send-outline" size={20} color={Colors.white} />
+            <Text style={styles.actionBtnPrimaryText}>Envoyer</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -395,7 +463,7 @@ export default function InvoiceDetailScreen() {
         isSending={isSending}
       />
 
-      {/* Presentation mode — PDF or HTML fallback */}
+      {/* Presentation mode */}
       <PdfPresentationMode
         pdfBase64={pdfBase64}
         htmlContent={invoiceHtml}
@@ -403,39 +471,6 @@ export default function InvoiceDetailScreen() {
         onClose={() => setShowPresentation(false)}
       />
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ActionRow sub-component
-// ---------------------------------------------------------------------------
-
-function ActionRow({
-  icon,
-  label,
-  onPress,
-  loading = false,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  onPress: () => void;
-  loading?: boolean;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      style={styles.actionRow}
-      activeOpacity={0.75}
-      disabled={loading}
-    >
-      {loading ? (
-        <ActivityIndicator size="small" color={Colors.primary} />
-      ) : (
-        <Ionicons name={icon} size={20} color={Colors.primary} />
-      )}
-      <Text style={styles.actionLabel}>{label}</Text>
-      <Ionicons name="chevron-forward" size={16} color={Colors.textTertiary} />
-    </TouchableOpacity>
   );
 }
 
@@ -452,8 +487,35 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text,
   },
-  headerBadge: {
-    marginRight: 8,
+  headerBackBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleArea: {
+    alignItems: 'center',
+    gap: 1,
+  },
+  headerTitleMain: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  headerTitleSub: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  statusBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginRight: 4,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
 
   scrollView: {
@@ -465,45 +527,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
-  // Info card
-  infoCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  // Hero
+  heroSection: {
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
+    paddingVertical: 24,
+    gap: 8,
   },
-  infoRowLast: {
-    borderBottomWidth: 0,
-  },
-  infoLabel: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  infoValue: {
+  heroLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
+    color: Colors.textSecondary,
+    fontWeight: '500',
   },
-  infoValueBold: {
-    fontSize: 16,
+  heroAmount: {
+    fontSize: 40,
     fontWeight: '800',
-    color: Colors.text,
+    color: Colors.primary,
     fontVariant: ['tabular-nums'],
   },
-  badgeRow: {
+  heroPatientBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.primaryUltraLight,
     paddingHorizontal: 14,
-    paddingBottom: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  heroPatientName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
   },
 
   // Sections
@@ -512,56 +565,185 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.textTertiary,
     letterSpacing: 0.8,
-    marginTop: 20,
+    marginTop: 8,
     marginBottom: 8,
     marginLeft: 4,
   },
 
-  // Actions
-  actionsContainer: {
+  // Acts table
+  actsCard: {
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
+    marginBottom: 12,
   },
-  actionRow: {
+  actsHeader: {
+    flexDirection: 'row',
+    backgroundColor: Colors.borderLight,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  actsHeaderCell: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textTertiary,
+    letterSpacing: 0.5,
+  },
+  actsHeaderActe: {
+    flex: 1,
+  },
+  actsHeaderQte: {
+    width: 48,
+    textAlign: 'center',
+  },
+  actsHeaderMontant: {
+    width: 80,
+    textAlign: 'right',
+  },
+  actsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderLight,
   },
-  actionLabel: {
+  actsRowLast: {
+    borderBottomWidth: 0,
+  },
+  actsActeCol: {
     flex: 1,
-    fontSize: 15,
+    gap: 2,
+  },
+  actsCode: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  actsLabel: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: Colors.textSecondary,
+  },
+  actsQte: {
+    width: 48,
+    textAlign: 'center',
+    fontSize: 14,
+    color: Colors.text,
+  },
+  actsMontant: {
+    width: 80,
+    textAlign: 'right',
+    fontSize: 14,
+    fontWeight: '700',
     color: Colors.text,
   },
 
-  // Carte Vitale
-  vitaleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  // Financial summary
+  summaryCard: {
     backgroundColor: Colors.borderLight,
-    borderRadius: 12,
-    padding: 14,
-    opacity: 0.7,
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+    marginBottom: 12,
   },
-  vitaleTextArea: {
-    flex: 1,
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  vitaleTitle: {
+  summaryLabel: {
     fontSize: 14,
-    fontWeight: '600',
     color: Colors.textSecondary,
   },
-  vitaleDesc: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    marginTop: 2,
+  summaryValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  summarySeparator: {
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  summaryTotalLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  summaryTotalValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Colors.primary,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Breakdown
+  breakdownCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    gap: 8,
+    marginBottom: 12,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  breakdownLabel: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  breakdownValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+
+  // Vitale badge
+  vitaleBadgeRow: {
+    marginBottom: 20,
+  },
+
+  // Action buttons
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  actionBtnSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: Colors.borderLight,
+  },
+  actionBtnSecondaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  actionBtnPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+  },
+  actionBtnPrimaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.white,
   },
 
   // Not found

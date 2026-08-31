@@ -1,17 +1,22 @@
 /**
- * PatientHeader — Full header for the patient detail screen.
+ * PatientHeader — Redesigned header for the patient detail screen.
  *
- * Shows avatar, name, age, status badge, ALD/BSI badges,
- * and action buttons (call, navigate, email).
+ * Shows:
+ * - Large avatar (80x80) with initials
+ * - Patient name (large bold)
+ * - Status badge ("ACTIF" green or "INACTIF" gray) next to name
+ * - Birth date + age below
+ * - ID number (serverId) below
+ * - Action buttons row
  */
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Badge from '@/components/ui/Badge';
 import { Colors } from '@/constants/colors';
 import type { PatientView } from '@/types/patient';
 import { formatPatientAge } from '@/types/patient';
+import { formatDateFrench } from '@/utils/dateHelpers';
 
 interface PatientHeaderProps {
   patient: PatientView;
@@ -27,29 +32,38 @@ export default function PatientHeader({
   onEmail,
 }: PatientHeaderProps) {
   const age = formatPatientAge(patient.birthDate);
+  const isActive = patient.status === 'active';
+  const initials = `${patient.firstName.charAt(0).toUpperCase()}${patient.lastName.charAt(0).toUpperCase()}`;
 
   return (
     <View style={styles.container}>
-      {/* Avatar */}
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {patient.firstName.charAt(0).toUpperCase()}
-          {patient.lastName.charAt(0).toUpperCase()}
-        </Text>
+      {/* Large avatar */}
+      <View style={styles.avatarOuter}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials}</Text>
+        </View>
       </View>
 
-      {/* Name + age */}
-      <Text style={styles.name}>{patient.displayName}</Text>
-      {age != null && <Text style={styles.age}>{age}</Text>}
-
-      {/* Badges */}
-      {(patient.isAld || patient.hasActiveBsi) && (
-        <View style={styles.badges}>
-          {patient.isAld && <Badge label="ALD" variant="warning" />}
-          {patient.hasActiveBsi && patient.bsiLevel != null && (
-            <Badge label={patient.bsiLevel} variant="info" />
-          )}
+      {/* Name + status badge */}
+      <View style={styles.nameRow}>
+        <Text style={styles.name}>{patient.displayName}</Text>
+        <View style={[styles.statusBadge, isActive ? styles.statusActive : styles.statusInactive]}>
+          <Text style={[styles.statusText, isActive ? styles.statusTextActive : styles.statusTextInactive]}>
+            {isActive ? 'ACTIF' : 'INACTIF'}
+          </Text>
         </View>
+      </View>
+
+      {/* Birth date + age */}
+      {patient.birthDate != null && (
+        <Text style={styles.birthDate}>
+          {formatDateFrench(patient.birthDate)}{age ? ` - ${age}` : ''}
+        </Text>
+      )}
+
+      {/* ID number */}
+      {patient.serverId != null && patient.serverId.length > 0 && (
+        <Text style={styles.idNumber}>ID: {patient.serverId.substring(0, 8).toUpperCase()}</Text>
       )}
 
       {/* Action buttons */}
@@ -117,36 +131,82 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 16,
   },
+
+  // Avatar
+  avatarOuter: {
+    marginBottom: 14,
+  },
   avatar: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: Colors.primaryUltraLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: Colors.white,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   avatarText: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: Colors.primary,
   },
+
+  // Name + status
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
   name: {
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: '700',
     color: Colors.text,
     textAlign: 'center',
   },
-  age: {
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  statusActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusInactive: {
+    backgroundColor: '#F1F5F9',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  statusTextActive: {
+    color: '#16A34A',
+  },
+  statusTextInactive: {
+    color: '#94A3B8',
+  },
+
+  // Birth date + ID
+  birthDate: {
     fontSize: 14,
     color: Colors.textSecondary,
     marginTop: 2,
   },
-  badges: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
+  idNumber: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginTop: 4,
+    letterSpacing: 0.3,
   },
+
+  // Action buttons
   actions: {
     flexDirection: 'row',
     gap: 16,

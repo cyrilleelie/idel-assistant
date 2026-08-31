@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -80,6 +80,20 @@ export default function UnlockScreen() {
     };
   }, [biometricEnabled, handleUnlockSuccess]);
 
+  // Handle biometric button press
+  const handleBiometricPress = useCallback(async () => {
+    if (isProcessing) return;
+
+    try {
+      const result = await authenticateWithBiometrics();
+      if (result.success) {
+        await handleUnlockSuccess('biometric');
+      }
+    } catch {
+      // Silently fail - user can retry or use PIN
+    }
+  }, [isProcessing, handleUnlockSuccess]);
+
   // Handle PIN entry
   const handlePinComplete = useCallback(
     async (pin: string) => {
@@ -112,7 +126,7 @@ export default function UnlockScreen() {
           `Code incorrect. ${remaining} tentative${remaining > 1 ? 's' : ''} restante${remaining > 1 ? 's' : ''}.`,
         );
       } catch {
-        setError('Erreur de vérification');
+        setError('Erreur de v\u00e9rification');
       } finally {
         setIsProcessing(false);
       }
@@ -138,15 +152,15 @@ export default function UnlockScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Lock icon */}
+        {/* Logo */}
         <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="lock-closed" size={44} color={Colors.primary} />
+          <View style={styles.logoBox}>
+            <Ionicons name="medical" size={28} color={Colors.white} />
           </View>
-          <Text style={styles.title}>Application verrouillée</Text>
+          <Text style={styles.title}>IDEL Planning Pro</Text>
           <Text style={styles.subtitle}>
             {showPinInput
-              ? `Saisissez votre code PIN à ${PIN_LENGTH} chiffres`
+              ? 'Saisissez votre code PIN'
               : 'Authentification en cours...'}
           </Text>
         </View>
@@ -161,15 +175,41 @@ export default function UnlockScreen() {
           />
         )}
 
+        {/* Remaining attempts */}
+        {showPinInput && remainingAttempts < MAX_PIN_ATTEMPTS && remainingAttempts > 0 && (
+          <Text style={styles.attemptsText}>
+            {remainingAttempts} tentative{remainingAttempts > 1 ? 's' : ''} restante{remainingAttempts > 1 ? 's' : ''}
+          </Text>
+        )}
+
+        {/* Biometric button */}
+        {showPinInput && biometricEnabled && (
+          <TouchableOpacity
+            style={styles.biometricButton}
+            onPress={handleBiometricPress}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="scan-outline" size={22} color={Colors.primary} />
+            <Text style={styles.biometricButtonText}>Utiliser la biom{'\u00e9'}trie</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Attempts warning */}
         {remainingAttempts <= 2 && remainingAttempts > 0 && (
           <View style={styles.warningContainer}>
             <Ionicons name="warning" size={16} color={Colors.warning} />
             <Text style={styles.warningText}>
-              Attention : les données seront effacées après {MAX_PIN_ATTEMPTS}{' '}
-              tentatives échouées
+              Attention : les donn{'\u00e9'}es seront effac{'\u00e9'}es apr{'\u00e8'}s {MAX_PIN_ATTEMPTS}{' '}
+              tentatives {'\u00e9'}chou{'\u00e9'}es
             </Text>
           </View>
+        )}
+
+        {/* Forgot PIN */}
+        {showPinInput && (
+          <TouchableOpacity style={styles.forgotPin} activeOpacity={0.7}>
+            <Text style={styles.forgotPinText}>Code PIN oubli{'\u00e9'} ?</Text>
+          </TouchableOpacity>
         )}
       </View>
     </SafeAreaView>
@@ -191,17 +231,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 48,
   },
-  iconContainer: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: Colors.primaryUltraLight,
+  logoBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: Colors.text,
     marginBottom: 8,
@@ -210,6 +250,28 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  attemptsText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  biometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: `${Colors.primary}1A`,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 999,
+    marginTop: 24,
+  },
+  biometricButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: Colors.primary,
   },
   warningContainer: {
     flexDirection: 'row',
@@ -226,5 +288,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     flex: 1,
+  },
+  forgotPin: {
+    marginTop: 32,
+  },
+  forgotPinText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '500',
   },
 });

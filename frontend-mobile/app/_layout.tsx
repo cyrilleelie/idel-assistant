@@ -92,11 +92,16 @@ function RootNavigator() {
       // Non-critical — defaults are already set
     });
 
-    // Set up notification listeners
-    const cleanup = setupNotificationListeners();
+    // Set up notification listeners (async — returns Promise<cleanup>)
+    let cleanupFn: (() => void) | null = null;
+    setupNotificationListeners().then((fn) => {
+      cleanupFn = fn;
+    }).catch(() => {
+      // Non-critical
+    });
 
     return () => {
-      cleanup();
+      cleanupFn?.();
     };
   }, [isAuthenticated, isLocked, setRegistered, loadPreferences]);
 
@@ -146,8 +151,7 @@ function RootNavigator() {
         <Stack.Screen name="settings/change-pin" options={{ presentation: 'card' }} />
         <Stack.Screen name="appointment/[id]" options={{ presentation: 'card' }} />
         <Stack.Screen name="patient/[id]" options={{ presentation: 'card' }} />
-        <Stack.Screen name="transmission/new" options={{ presentation: 'card' }} />
-        <Stack.Screen name="transmission/[id]" options={{ presentation: 'card' }} />
+        <Stack.Screen name="transmission" options={{ presentation: 'card', headerShown: false }} />
         <Stack.Screen name="invoice/[id]" options={{ presentation: 'card' }} />
         <Stack.Screen name="+not-found" />
       </Stack>

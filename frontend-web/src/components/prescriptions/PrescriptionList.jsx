@@ -4,6 +4,7 @@ import { listPrescriptions, createPrescription } from '../../api/prescriptions';
 import client from '../../api/client';
 import PrescriptionForm from './PrescriptionForm';
 import PrescriptionTransmissions from '../transmissions/PrescriptionTransmissions';
+import { useDialog } from '../ui/ConfirmDialog';
 
 function formatDateFr(dateStr) {
   if (!dateStr) return '-';
@@ -59,13 +60,14 @@ function StatusBadge({ status, daysRemaining }) {
  *   - patientDoctor: { name, rpps_number } (optionnel) — médecin traitant pour pré-remplissage
  */
 export default function PrescriptionList({ patientId, patientDoctor = null, onViewTransmissions, onTotalChange }) {
+  const dialog = useDialog();
   const [prescriptions, setPrescriptions] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [editingPrescription, setEditingPrescription] = useState(null);
   const [renewingId, setRenewingId] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('active');
 
   const load = async () => {
     if (!patientId) return;
@@ -73,10 +75,13 @@ export default function PrescriptionList({ patientId, patientDoctor = null, onVi
     setError(null);
     try {
       const data = await listPrescriptions({ patient_id: patientId, limit: 100 });
-      setPrescriptions(data.items || []);
+      const items = data.items || [];
+      setPrescriptions(items);
       const t = data.total || 0;
       setTotal(t);
-      onTotalChange?.(t);
+      // Report active count (active + expiring) for section badge
+      const activeTotal = items.filter(p => p.status === 'active' || p.status === 'expiring').length;
+      onTotalChange?.(activeTotal);
     } catch (err) {
       setError('Erreur lors du chargement des ordonnances');
     } finally {
@@ -95,15 +100,15 @@ export default function PrescriptionList({ patientId, patientDoctor = null, onVi
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
     } catch {
-      alert('Impossible d\'ouvrir le document.');
+      dialog.alert('Impossible d\'ouvrir le document.', { variant: 'error', title: 'Erreur' });
     }
   };
 
   const handleRenew = async (prescription) => {
     if (renewingId) return;
-    const ok = window.confirm(
-      `Renouveler l'ordonnance "${prescription.label || prescription.care_description || 'Ordonnance'}" ?\n\n` +
-      `Une nouvelle ordonnance sera créée avec les mêmes paramètres (sans les dates ni le document).`
+    const ok = await dialog.confirm(
+      `Renouveler l'ordonnance "${prescription.label || prescription.care_description || 'Ordonnance'}" ?\n\nUne nouvelle ordonnance sera créée avec les mêmes paramètres (sans les dates ni le document).`,
+      { title: 'Renouvellement' }
     );
     if (!ok) return;
     setRenewingId(prescription.id);
@@ -132,7 +137,7 @@ export default function PrescriptionList({ patientId, patientDoctor = null, onVi
       });
       load();
     } catch (err) {
-      alert(err.response?.data?.detail || 'Erreur lors du renouvellement');
+      dialog.alert(err.response?.data?.detail || 'Erreur lors du renouvellement', { variant: 'error', title: 'Erreur' });
     } finally {
       setRenewingId(null);
     }
@@ -149,17 +154,20 @@ export default function PrescriptionList({ patientId, patientDoctor = null, onVi
     );
   }
 
+  const activeItems = prescriptions.filter(p => p.status === 'active' || p.status === 'expiring');
+  const expiredItems = prescriptions.filter(p => p.status === 'expired' || p.status === 'completed' || p.status === 'canceled');
+
   const STATUS_FILTERS = [
-    { key: 'all', label: 'Toutes' },
-    { key: 'active', label: 'Actives' },
-    { key: 'expired', label: 'Expirées' },
+    { key: 'all', label: 'Toutes', count: prescriptions.length },
+    { key: 'active', label: 'Actives', count: activeItems.length },
+    { key: 'expired', label: `Expir\u00e9es`, count: expiredItems.length },
   ];
 
   const filtered = statusFilter === 'all'
     ? prescriptions
     : statusFilter === 'active'
-      ? prescriptions.filter(p => p.status === 'active' || p.status === 'expiring')
-      : prescriptions.filter(p => p.status === 'expired');
+      ? activeItems
+      : expiredItems;
 
   return (
     <div className="space-y-4">
@@ -171,13 +179,13 @@ export default function PrescriptionList({ patientId, patientDoctor = null, onVi
               key={f.key}
               type="button"
               onClick={() => setStatusFilter(f.key)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
                 statusFilter === f.key
-                  ? 'bg-[#3c3cf6] text-white'
+                  ? 'bg-primary text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {f.label}
+              {f.label} ({f.count})
             </button>
           ))}
         </div>

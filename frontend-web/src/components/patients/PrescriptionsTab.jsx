@@ -9,6 +9,7 @@ import { getDistanceMatrix } from '../../utils/geocode';
 import { listCareActCodes } from '../../api/cotation';
 import client from '../../api/client';
 import DoctorAutocomplete from '../common/DoctorAutocomplete';
+import { useDialog } from '../ui/ConfirmDialog';
 
 const isActiveAppt = (a) => a.status === 'scheduled' || a.status === 'completed';
 
@@ -514,33 +515,30 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
               const dateCareLocation = getLocationForDate(dateStr);
 
               return (
-                <div key={dateStr} className="bg-white rounded-lg px-3 py-2 border border-slate-200 text-sm space-y-1">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <div className="w-24 shrink-0 font-medium text-slate-700 capitalize">
-                      {dayName(dateObj)} {dayMonth(dateObj)}
-                    </div>
+                <div key={dateStr} className="bg-white rounded-lg px-3 py-2 border border-slate-200 text-sm">
+                  {/* Ligne 1 — Date, horaire, lieu */}
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-slate-700 capitalize">{dayName(dateObj)} {dayMonth(dateObj)}</span>
                     {startTime && dateEnd ? (
-                      <div className="text-slate-500 shrink-0">
-                        {startTime}–{dateEnd}
-                      </div>
+                      <span className="text-slate-500">{startTime}–{dateEnd}</span>
                     ) : (
                       <span className="text-xs text-slate-400 italic">Horaire à définir</span>
                     )}
-
-                    {/* Lieu du soin */}
                     <select
                       value={dateCareLocation}
                       onChange={e => setLocationByDate(prev => ({ ...prev, [dateStr]: e.target.value }))}
                       disabled={isBooking}
-                      className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white text-slate-600 shrink-0"
+                      className="ml-auto border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white text-slate-600"
                     >
                       <option value="domicile">Domicile</option>
                       <option value="cabinet">Cabinet</option>
                     </select>
-
+                  </div>
+                  {/* Ligne 2 — Soignants + bouton Prendre RDV */}
+                  <div className="flex items-center gap-1.5 mt-1.5">
                     {availableNurses.length > 0 ? (
                       <>
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0 flex-wrap">
                           {availableNurses.map(n => {
                             const isSelected = selectedNurse === n.userId;
                             return (
@@ -555,7 +553,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
                                     : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'
                                 }`}
                               >
-                                <span className={`w-1.5 h-1.5 rounded-full ${n.color?.split(' ')[0] || 'bg-slate-400'}`} />
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${n.color?.split(' ')[0] || 'bg-slate-400'}`} />
                                 {n.firstName}
                               </button>
                             );
@@ -564,7 +562,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
                         <button
                           onClick={() => handleBook(dateStr)}
                           disabled={!selectedNurse || isBooking}
-                          className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors shrink-0"
+                          className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0"
                         >
                           {isBooking ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
                           Prendre RDV
@@ -575,7 +573,7 @@ function PlanningSection({ plan, patientId, nurses, appointments, schedule, conf
                     )}
                   </div>
                   {error && (
-                    <p className="text-xs text-red-600">{error}</p>
+                    <p className="text-xs text-red-600 mt-1">{error}</p>
                   )}
                 </div>
               );
@@ -1552,6 +1550,38 @@ function CarePlanForm({ plan, onChange, onCancel, onSave, saving, saveError, nur
   );
 }
 
+// --- Plan "terminé" check (shared between filter + card) ---
+
+function isPlanTerminee(plan, appointments, patientId) {
+  if (plan.status === 'completed') return true;
+  const { soins, careSchedule } = plan;
+  const { startTime, endTime } = careSchedule;
+  const { startDate, endDate } = getPlanDates(soins);
+  if (!patientId) return false;
+
+  const patientAppts = (appointments || []).filter(a => a.patientId === patientId && isActiveAppt(a));
+  let matching;
+  if (plan._apiId) {
+    matching = patientAppts.filter(a => a.careProtocolId === plan._apiId);
+  } else if (startDate && endDate && startTime && endTime) {
+    matching = patientAppts.filter(a =>
+      a.startTime === startTime && a.endTime === endTime
+      && a.dateStr >= startDate && a.dateStr <= endDate
+    );
+  } else {
+    return false;
+  }
+
+  const allCustom = soins.every(s => s.frequency === 'custom' || !s.frequency || !s.startDate || !s.endDate);
+  if (allCustom || !startDate || !endDate) return false;
+
+  const occurrences = generateUnionOccurrences(soins);
+  if (occurrences.length === 0) return false;
+
+  return matching.length >= occurrences.length
+    && matching.every(a => a.status === 'completed');
+}
+
 // --- Soin status badge (same as PrescriptionList) ---
 
 function SoinStatusBadge({ status, daysRemaining }) {
@@ -1594,7 +1624,7 @@ function SoinStatusBadge({ status, daysRemaining }) {
   return null;
 }
 
-async function openSoinDocument(soin) {
+async function openSoinDocument(soin, alertFn) {
   try {
     const response = await client.get(`/prescriptions/${soin._prescriptionId}/document`, {
       responseType: 'blob',
@@ -1603,13 +1633,14 @@ async function openSoinDocument(soin) {
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
   } catch {
-    alert("Impossible d'ouvrir le document.");
+    if (alertFn) alertFn("Impossible d'ouvrir le document.", { variant: 'error', title: 'Erreur' });
   }
 }
 
 // --- CarePlanCard component ---
 
 function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, appointments, nurses, patientId }) {
+  const dialog = useDialog();
   const [rdvExpanded, setRdvExpanded] = useState(false);
   const { soins, careSchedule } = plan;
   const { startTime, endTime } = careSchedule;
@@ -1766,7 +1797,7 @@ function CarePlanCard({ plan, isEditing, onEdit, onDelete, expanded, onToggle, a
                   {soin.document_url ? (
                     <button
                       type="button"
-                      onClick={() => openSoinDocument(soin)}
+                      onClick={() => openSoinDocument(soin, dialog.alert)}
                       className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 mt-1.5 cursor-pointer"
                     >
                       <ExternalLink className="w-3 h-3" />
@@ -1876,6 +1907,7 @@ export default function PrescriptionsTab({
   cabinetData, patients,
   initialEditProtocolId
 }) {
+  const dialog = useDialog();
   const prescriptions = patientForm.prescriptions || [];
   const [expandedId, setExpandedId] = useState(null);
   const [formMode, setFormMode] = useState(null); // null | 'add' | planId (edit)
@@ -1883,6 +1915,7 @@ export default function PrescriptionsTab({
   const [savingPrescription, setSavingPrescription] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [ngapCodes, setNgapCodes] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('active'); // 'all' | 'active' | 'completed'
 
   useEffect(() => {
     listCareActCodes().then(setNgapCodes).catch(() => setNgapCodes([]));
@@ -1893,6 +1926,13 @@ export default function PrescriptionsTab({
     const aStart = getPlanDates(a.soins || []).startDate || '';
     const bStart = getPlanDates(b.soins || []).startDate || '';
     return bStart.localeCompare(aStart);
+  });
+
+  // Filter by status
+  const filteredPrescriptions = sortedPrescriptions.filter(rx => {
+    if (statusFilter === 'all') return true;
+    const terminee = isPlanTerminee(rx, appointments, patientForm.id);
+    return statusFilter === 'completed' ? terminee : !terminee;
   });
 
   const updatePrescriptions = (newList) => {
@@ -2025,14 +2065,14 @@ export default function PrescriptionsTab({
       const msg = `Ce plan de soins a ${pastAppts.length} RDV déjà réalisé${pastAppts.length > 1 ? 's' : ''}.`
         + (futureAppts.length > 0 ? `\n${futureAppts.length} RDV futur${futureAppts.length > 1 ? 's' : ''} seront également annulé${futureAppts.length > 1 ? 's' : ''}.` : '')
         + '\n\nSupprimer ce plan de soins ?';
-      if (!window.confirm(msg)) return;
+      if (!await dialog.confirm(msg, { title: 'Suppression', variant: 'danger' })) return;
     }
 
     if (onDeletePrescription && rx._apiId) {
       try {
         await onDeletePrescription(rx.id);
       } catch (err) {
-        alert(err.response?.data?.detail || 'Erreur lors de la suppression du plan de soins.');
+        dialog.alert(err.response?.data?.detail || 'Erreur lors de la suppression du plan de soins.', { variant: 'error', title: 'Erreur' });
         return;
       }
     }
@@ -2056,8 +2096,34 @@ export default function PrescriptionsTab({
     );
   }
 
+  const activeCount = sortedPrescriptions.filter(rx => !isPlanTerminee(rx, appointments, patientForm.id)).length;
+  const completedCount_filter = sortedPrescriptions.length - activeCount;
+
   return (
     <div className="space-y-4">
+      {/* Status filter */}
+      {sortedPrescriptions.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          {[
+            { id: 'all', label: 'Tous', count: sortedPrescriptions.length },
+            { id: 'active', label: 'En cours', count: activeCount },
+            { id: 'completed', label: `Termin\u00e9`, count: completedCount_filter },
+          ].map(f => (
+            <button
+              key={f.id}
+              onClick={() => setStatusFilter(f.id)}
+              className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${
+                statusFilter === f.id
+                  ? 'bg-primary text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {f.label} ({f.count})
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Bouton ajouter */}
       {formMode === null && (
         <button
@@ -2096,9 +2162,9 @@ export default function PrescriptionsTab({
       )}
 
       {/* Liste des plans de soins */}
-      {sortedPrescriptions.length > 0 ? (
+      {filteredPrescriptions.length > 0 ? (
         <div className="space-y-2">
-          {sortedPrescriptions.map(rx => (
+          {filteredPrescriptions.map(rx => (
             formMode === rx.id && formData ? (
               <CarePlanForm
                 key={rx.id}

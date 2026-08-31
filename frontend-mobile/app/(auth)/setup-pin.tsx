@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -65,21 +65,31 @@ export default function SetupPinScreen() {
   );
 
   const title =
-    phase === 'entering' ? 'Créez votre code PIN' : 'Confirmez votre code PIN';
+    phase === 'entering' ? 'Cr\u00e9er votre code PIN' : 'Confirmez votre code PIN';
 
   const subtitle =
     phase === 'entering'
-      ? 'Ce code protège l\'accès aux données de vos patients'
-      : `Saisissez à nouveau les ${PIN_LENGTH} chiffres`;
+      ? 'Saisissez un code \u00e0 4 chiffres pour\ns\u00e9curiser votre acc\u00e8s'
+      : 'Saisissez \u00e0 nouveau les 4 chiffres';
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* Header bar */}
+      <View style={styles.headerBar}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="arrow-back" size={24} color={Colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>IDEL Planning Pro</Text>
+        <View style={styles.backButton} />
+      </View>
+
       <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <Ionicons name="lock-closed" size={40} color={Colors.primary} />
-          </View>
+        {/* Title section */}
+        <View style={styles.titleSection}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
@@ -105,6 +115,13 @@ export default function SetupPinScreen() {
           />
         </View>
       </View>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
+          {'\u00a9'} 2024 IDEL Planning Pro. Tous droits r{'\u00e9'}serv{'\u00e9'}s.
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -114,30 +131,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-  header: {
+  titleSection: {
     alignItems: 'center',
     marginBottom: 48,
   },
-  iconContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.primaryUltraLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 8,
+    marginBottom: 10,
     textAlign: 'center',
   },
   subtitle: {
@@ -161,5 +187,15 @@ const styles = StyleSheet.create({
   stepDotActive: {
     backgroundColor: Colors.primary,
     width: 24,
+  },
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+  },
+  footerText: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    textAlign: 'center',
   },
 });

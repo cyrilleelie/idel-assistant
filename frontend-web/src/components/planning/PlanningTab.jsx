@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Lock, ShieldCheck, Calendar, CalendarDays, Locate, Eye, Repeat, RotateCcw } from 'lucide-react';
 import { formatDate, getWeekDays, getWeekNumber } from '../../utils/dateTime';
+import { useDialog } from '../ui/ConfirmDialog';
 
 const viewModes = [
   { id: 'month', label: 'Mois', icon: Calendar },
@@ -20,6 +21,8 @@ export default function PlanningTab({
 }) {
   const [viewMode, setViewMode] = useState('month');
   const [weekRef, setWeekRef] = useState(() => new Date());
+
+  const dialog = useDialog();
 
   // --- Trame application panel ---
   const [showTramePanel, setShowTramePanel] = useState(false);
@@ -93,8 +96,9 @@ export default function PlanningTab({
     const periodLabel = viewMode === 'month'
       ? currentDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
       : `semaine ${getWeekNumber(weekDays[0])}`;
-    const confirmed = window.confirm(
-      `Voulez-vous vraiment réinitialiser le planning de ${periodLabel} ?\n\nToutes les assignations seront supprimées. Les RDV existants ne seront pas affectés.`
+    const confirmed = await dialog.confirm(
+      `Voulez-vous vraiment réinitialiser le planning de ${periodLabel} ?\n\nToutes les assignations seront supprimées. Les RDV existants ne seront pas affectés.`,
+      { title: 'Réinitialisation du planning', variant: 'danger' }
     );
     if (!confirmed || !onResetPlanning) return;
     setResetting(true);
@@ -115,15 +119,16 @@ export default function PlanningTab({
 
   const displayDays = viewMode === 'month' ? daysInMonth : weekDays;
 
-  const handleToggleSlot = (dateStr, slotId, nurseId) => {
+  const handleToggleSlot = async (dateStr, slotId, nurseId) => {
     const isAssigned = schedule[dateStr]?.[slotId]?.includes(nurseId);
     if (isAssigned) {
       const slotAppts = appointments.filter(
         a => a.dateStr === dateStr && a.slotId === slotId && a.nurseId === nurseId
       );
       if (slotAppts.length > 0) {
-        const confirmed = window.confirm(
-          `Attention : ${slotAppts.length} RDV programmé(s) sur ce créneau.\nVoulez-vous vraiment retirer ce membre ?`
+        const confirmed = await dialog.confirm(
+          `Attention : ${slotAppts.length} RDV programmé(s) sur ce créneau.\nVoulez-vous vraiment retirer ce membre ?`,
+          { title: 'RDV existants', variant: 'danger' }
         );
         if (!confirmed) return;
       }

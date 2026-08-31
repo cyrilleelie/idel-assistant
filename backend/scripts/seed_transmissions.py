@@ -16,7 +16,11 @@ from app.config import settings
 from app.infrastructure.persistence.database import async_session_factory
 from app.infrastructure.persistence.models.user_model import UserModel, CabinetMemberModel
 from app.infrastructure.persistence.models.patient_model import PatientModel
+from app.infrastructure.persistence.models.prescription_model import PrescriptionModel
 from app.infrastructure.persistence.models.transmission_model import TransmissionModel
+from app.infrastructure.persistence.models.transmission_prescription_model import (
+    TransmissionPrescriptionModel,
+)
 from app.infrastructure.security.encryption import encrypt
 from app.infrastructure.security.key_manager import KeyManager
 from sqlalchemy import select, func

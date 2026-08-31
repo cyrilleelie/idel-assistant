@@ -2,17 +2,19 @@
  * PatientsScreen — List of all patients for the logged-in nurse.
  *
  * Features:
+ * - Header with icon + title + menu
  * - SearchBar for filtering by name/address (local, instant)
+ * - Filter pills: Tous / Actifs / Inactifs
  * - FlatList of PatientCards sorted alphabetically
- * - Pull-to-refresh (placeholder for sync M4)
- * - Tap card → patient detail screen
+ * - Pull-to-refresh (sync)
+ * - Tap card -> patient detail screen
  *
  * Data flow:
  *   useEffect (refreshKey)
  *     -> database.get('patients').query().fetch()
  *     -> buildPatientViews()
  *     -> all patients state
- *   useMemo (searchQuery + all patients)
+ *   useMemo (searchQuery + statusFilter + all patients)
  *     -> filtered + sorted patients
  */
 
@@ -23,6 +25,7 @@ import {
   TextInput,
   FlatList,
   RefreshControl,
+  Pressable,
   StyleSheet,
   type ListRenderItemInfo,
 } from 'react-native';
@@ -38,6 +41,14 @@ import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { Colors } from '@/constants/colors';
 import type Patient from '@/db/models/Patient';
 
+type StatusFilter = 'all' | 'active' | 'inactive';
+
+const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
+  { key: 'all', label: 'Tous' },
+  { key: 'active', label: 'Actifs' },
+  { key: 'inactive', label: 'Inactifs' },
+];
+
 export default function PatientsScreen() {
   const router = useRouter();
   const database = useDatabase();
@@ -49,8 +60,9 @@ export default function PatientsScreen() {
   const [allPatients, setAllPatients] = useState<PatientView[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  // ── Fetch all patients ──────────────────────────────────────────────────
+  // -- Fetch all patients ----------------------------------------------------
 
   useEffect(() => {
     let cancelled = false;
@@ -77,11 +89,19 @@ export default function PatientsScreen() {
     };
   }, [database, refreshKey]);
 
-  // ── Filter + sort ───────────────────────────────────────────────────────
+  // -- Filter + sort ---------------------------------------------------------
 
   const filteredPatients = useMemo(() => {
     let list = allPatients;
 
+    // Status filter
+    if (statusFilter === 'active') {
+      list = list.filter((p) => p.status === 'active');
+    } else if (statusFilter === 'inactive') {
+      list = list.filter((p) => p.status !== 'active');
+    }
+
+    // Search filter
     if (searchQuery.trim().length > 0) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter(
@@ -95,9 +115,9 @@ export default function PatientsScreen() {
 
     // Sort alphabetically by last name
     return [...list].sort((a, b) => a.lastName.localeCompare(b.lastName, 'fr'));
-  }, [allPatients, searchQuery]);
+  }, [allPatients, searchQuery, statusFilter]);
 
-  // ── Callbacks ───────────────────────────────────────────────────────────
+  // -- Callbacks -------------------------------------------------------------
 
   const handlePress = useCallback(
     (patient: PatientView) => {
@@ -119,7 +139,7 @@ export default function PatientsScreen() {
     setIsRefreshing(false);
   }, [database]);
 
-  // ── Render helpers ──────────────────────────────────────────────────────
+  // -- Render helpers --------------------------------------------------------
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<PatientView>) => (
@@ -132,7 +152,26 @@ export default function PatientsScreen() {
 
   const ListHeaderComponent = useMemo(
     () => (
-      <View style={styles.searchContainer}>
+      <View style={styles.headerArea}>
+        {/* Top row: icon + title + menu */}
+        <View style={styles.topRow}>
+          <View style={styles.titleIconContainer}>
+            <View style={styles.titleIcon}>
+              <Ionicons name="person-add-outline" size={20} color={Colors.primary} />
+            </View>
+            <Text style={styles.title}>Patients</Text>
+          </View>
+          <Pressable
+            style={styles.menuButton}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Menu"
+          >
+            <Ionicons name="ellipsis-vertical" size={20} color={Colors.text} />
+          </Pressable>
+        </View>
+
+        {/* Search bar */}
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={18} color={Colors.textTertiary} />
           <TextInput
@@ -146,12 +185,42 @@ export default function PatientsScreen() {
             clearButtonMode="while-editing"
           />
         </View>
+
+        {/* Filter pills */}
+        <View style={styles.filterRow}>
+          {FILTER_OPTIONS.map((option) => {
+            const isActive = statusFilter === option.key;
+            return (
+              <Pressable
+                key={option.key}
+                onPress={() => setStatusFilter(option.key)}
+                style={[
+                  styles.filterPill,
+                  isActive ? styles.filterPillActive : styles.filterPillInactive,
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    isActive ? styles.filterPillTextActive : styles.filterPillTextInactive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* Count label */}
         <Text style={styles.countLabel}>
           {filteredPatients.length} patient{filteredPatients.length !== 1 ? 's' : ''}
         </Text>
       </View>
     ),
-    [searchQuery, setSearchQuery, filteredPatients.length],
+    [searchQuery, setSearchQuery, filteredPatients.length, statusFilter],
   );
 
   const ListEmptyComponent = useMemo(() => {
@@ -176,7 +245,7 @@ export default function PatientsScreen() {
     );
   }, [isLoading, searchQuery]);
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // -- Render ----------------------------------------------------------------
 
   return (
     <View style={styles.container}>
@@ -210,20 +279,56 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 24,
   },
-  searchContainer: {
+
+  // Header area
+  headerArea: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
   },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  titleIconContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  titleIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primaryUltraLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  menuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Search bar
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#E2E8F0',
     paddingHorizontal: 14,
     gap: 8,
+    marginBottom: 12,
   },
   searchInput: {
     flex: 1,
@@ -231,10 +336,40 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: 12,
   },
+
+  // Filter pills
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  filterPillActive: {
+    backgroundColor: Colors.primary,
+  },
+  filterPillInactive: {
+    backgroundColor: '#E2E8F0',
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  filterPillTextActive: {
+    color: Colors.white,
+  },
+  filterPillTextInactive: {
+    color: '#334155',
+  },
+
+  // Count label
   countLabel: {
-    fontSize: 12,
-    color: Colors.textTertiary,
-    marginTop: 8,
-    marginLeft: 4,
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 12,
   },
 });

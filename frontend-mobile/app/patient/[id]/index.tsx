@@ -1,13 +1,13 @@
 /**
- * PatientDetailScreen — Full patient detail screen.
+ * PatientDetailScreen — Redesigned full patient detail screen.
  *
  * Shows:
- * - PatientHeader (avatar, name, age, badges, action buttons)
- * - PatientInfoSection (collapsible: address, phone, email, birthdate, BSI, notes)
- * - Recent documents (3 most recent + "Voir tout" link)
- * - Recent appointments (3 most recent)
- * - "Scanner une ordonnance" button
- * - PdfViewer (print patient summary)
+ * - Custom header: back arrow + "Fiche Patient" + menu
+ * - Patient profile: avatar, name, ACTIF badge, birth date, age, ID
+ * - Quick action cards (phone, next RDV, address)
+ * - Tab navigation: Informations | Dossier | Ordonnances | Transmissions
+ * - Tab content depending on active tab
+ * - FAB button: "Scanner"
  *
  * Security:
  * - Screen protection enabled (prevents screenshots)
@@ -21,9 +21,10 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as Linking from 'expo-linking';
+import * as ExpoLinking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { Q } from '@nozbe/watermelondb';
 import { useDatabase } from '@/contexts/DatabaseContext';
@@ -31,14 +32,14 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useAudit } from '@/hooks/useAudit';
 import { useScreenProtection } from '@/security/screenProtection';
 import { openNavigation, openPhoneDialer } from '@/services/navigationService';
-import { buildPatientView, fetchPatientDocuments } from '@/types/patient';
+import { buildPatientView, fetchPatientDocuments, formatPatientAge } from '@/types/patient';
 import type { PatientView, DocumentView } from '@/types/patient';
 import { buildAppointmentViews } from '@/types/appointment';
 import type { AppointmentView } from '@/types/appointment';
 import { fetchPatientTransmissions } from '@/types/transmission';
 import type { TransmissionView } from '@/types/transmission';
 import { formatTransmissionTime, formatTransmissionStatus } from '@/types/transmission';
-import PatientHeader from '@/components/patient/PatientHeader';
+import { formatDateFrench } from '@/utils/dateHelpers';
 import PatientInfoSection from '@/components/patient/PatientInfoSection';
 import DocumentCard from '@/components/patient/DocumentCard';
 import PdfViewer from '@/components/patient/PdfViewer';
@@ -47,6 +48,15 @@ import { Colors } from '@/constants/colors';
 import type Patient from '@/db/models/Patient';
 import type Appointment from '@/db/models/Appointment';
 
+type TabKey = 'info' | 'dossier' | 'ordonnances' | 'transmissions';
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'info', label: 'Informations' },
+  { key: 'dossier', label: 'Dossier' },
+  { key: 'ordonnances', label: 'Ordonnances' },
+  { key: 'transmissions', label: 'Transmissions' },
+];
+
 export default function PatientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -54,7 +64,7 @@ export default function PatientDetailScreen() {
   const gpsAppPreference = useSettingsStore((s) => s.gpsAppPreference);
   const { logAccess } = useAudit();
 
-  // Screen protection — prevents screenshots of patient data
+  // Screen protection -- prevents screenshots of patient data
   useScreenProtection();
 
   const [patient, setPatient] = useState<PatientView | null>(null);
@@ -62,8 +72,9 @@ export default function PatientDetailScreen() {
   const [recentAppts, setRecentAppts] = useState<AppointmentView[]>([]);
   const [recentTxs, setRecentTxs] = useState<TransmissionView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabKey>('info');
 
-  // ── Load patient + recent data ──────────────────────────────────────────
+  // -- Load patient + recent data -------------------------------------------
 
   useEffect(() => {
     if (!id) return;
@@ -121,7 +132,7 @@ export default function PatientDetailScreen() {
     };
   }, [id, database, logAccess]);
 
-  // ── Callbacks ───────────────────────────────────────────────────────────
+  // -- Callbacks ------------------------------------------------------------
 
   const handleCall = useCallback(() => {
     if (!patient?.phone) return;
@@ -140,7 +151,7 @@ export default function PatientDetailScreen() {
 
   const handleEmail = useCallback(() => {
     if (!patient?.email) return;
-    Linking.openURL(`mailto:${patient.email}`).catch(() => {});
+    ExpoLinking.openURL(`mailto:${patient.email}`).catch(() => {});
   }, [patient]);
 
   const handleViewAllDocs = useCallback(() => {
@@ -171,7 +182,11 @@ export default function PatientDetailScreen() {
     // TODO (M4): Open document viewer
   }, []);
 
-  // ── Loading ─────────────────────────────────────────────────────────────
+  const handleBack = useCallback(() => {
+    router.back();
+  }, [router]);
+
+  // -- Loading --------------------------------------------------------------
 
   if (isLoading) {
     return <LoadingScreen message="Chargement du patient..." />;
@@ -186,45 +201,289 @@ export default function PatientDetailScreen() {
     );
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  const age = formatPatientAge(patient.birthDate);
+  const isActive = patient.status === 'active';
+  const initials = `${patient.firstName.charAt(0).toUpperCase()}${patient.lastName.charAt(0).toUpperCase()}`;
+
+  // Find next upcoming appointment
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const nextAppt = recentAppts.find(
+    (a) => a.date >= todayStr && a.status !== 'canceled',
+  );
+
+  // -- Render ---------------------------------------------------------------
 
   return (
-    <ScrollView
-      style={styles.scrollView}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Header with avatar, name, badges, action buttons */}
-      <PatientHeader
-        patient={patient}
-        onCall={handleCall}
-        onNavigate={handleNavigate}
-        onEmail={handleEmail}
-      />
+    <View style={styles.rootContainer}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Custom header */}
+        <View style={styles.header}>
+          <Pressable onPress={handleBack} style={styles.headerBtn} hitSlop={8}>
+            <Ionicons name="arrow-back" size={22} color={Colors.text} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Fiche Patient</Text>
+          <Pressable style={styles.headerBtn} hitSlop={8}>
+            <Ionicons name="ellipsis-vertical" size={20} color={Colors.text} />
+          </Pressable>
+        </View>
 
-      {/* Collapsible info section */}
+        {/* Patient profile section */}
+        <View style={styles.profileSection}>
+          {/* Avatar */}
+          <View style={styles.avatarOuter}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+          </View>
+
+          {/* Name + status badge */}
+          <View style={styles.nameRow}>
+            <Text style={styles.patientName}>{patient.displayName}</Text>
+            <View style={[styles.statusBadge, isActive ? styles.statusActive : styles.statusInactive]}>
+              <Text style={[styles.statusText, isActive ? styles.statusTextActive : styles.statusTextInactive]}>
+                {isActive ? 'ACTIF' : 'INACTIF'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Birth date + age */}
+          {patient.birthDate != null && (
+            <Text style={styles.birthDate}>
+              {formatDateFrench(patient.birthDate)}{age ? ` - ${age}` : ''}
+            </Text>
+          )}
+
+          {/* ID */}
+          {patient.serverId != null && patient.serverId.length > 0 && (
+            <Text style={styles.idNumber}>
+              ID: {patient.serverId.substring(0, 8).toUpperCase()}
+            </Text>
+          )}
+        </View>
+
+        {/* Quick action cards */}
+        <View style={styles.quickActions}>
+          {/* Phone card */}
+          <Pressable
+            style={({ pressed }) => [styles.quickCard, pressed && styles.quickCardPressed]}
+            onPress={handleCall}
+            disabled={!patient.phone}
+            accessibilityRole="button"
+            accessibilityLabel="Appeler le patient"
+          >
+            <Ionicons name="call-outline" size={20} color={Colors.primary} />
+            <Text style={styles.quickCardLabel} numberOfLines={1}>
+              {patient.phone ?? 'Non renseigne'}
+            </Text>
+          </Pressable>
+
+          {/* Next RDV card */}
+          <View style={styles.quickCard}>
+            <Ionicons name="calendar-outline" size={20} color="#D97706" />
+            <Text style={[styles.quickCardLabel, { color: '#D97706' }]} numberOfLines={1}>
+              {nextAppt
+                ? `${nextAppt.date.split('-').reverse().join('/')} ${nextAppt.startTime}`
+                : 'Aucun RDV'}
+            </Text>
+          </View>
+
+          {/* Address card */}
+          <Pressable
+            style={({ pressed }) => [styles.quickCard, pressed && styles.quickCardPressed]}
+            onPress={handleNavigate}
+            accessibilityRole="button"
+            accessibilityLabel="Ouvrir la navigation GPS"
+          >
+            <Ionicons name="location-outline" size={20} color={Colors.primary} />
+            <Text style={styles.quickCardLabel} numberOfLines={2}>
+              {patient.address || 'Non renseigne'}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Tab navigation */}
+        <View style={styles.tabBar}>
+          {TABS.map((tab) => {
+            const isActiveTab = activeTab === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                onPress={() => setActiveTab(tab.key)}
+                style={[styles.tab, isActiveTab && styles.tabActive]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActiveTab }}
+              >
+                <Text style={[styles.tabText, isActiveTab && styles.tabTextActive]}>
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* Tab content */}
+        {activeTab === 'info' && (
+          <InformationsTab
+            patient={patient}
+            onAddressPress={handleNavigate}
+            onPhonePress={handleCall}
+            onEmailPress={handleEmail}
+          />
+        )}
+
+        {activeTab === 'dossier' && (
+          <DossierTab
+            recentDocs={recentDocs}
+            recentAppts={recentAppts}
+            onDocPress={handleDocPress}
+            onViewAllDocs={handleViewAllDocs}
+          />
+        )}
+
+        {activeTab === 'ordonnances' && (
+          <OrdonnancesTab
+            recentDocs={recentDocs}
+            onDocPress={handleDocPress}
+            onViewAllDocs={handleViewAllDocs}
+          />
+        )}
+
+        {activeTab === 'transmissions' && (
+          <TransmissionsTab
+            recentTxs={recentTxs}
+            onViewAll={handleViewAllTransmissions}
+            onAdd={handleAddTransmission}
+          />
+        )}
+
+        {/* PDF export (kept from original) */}
+        <PdfViewer patient={patient} />
+
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+
+      {/* FAB - Scanner button */}
+      <Pressable
+        onPress={handleScan}
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Scanner une ordonnance"
+      >
+        <Ionicons name="camera-outline" size={22} color={Colors.white} />
+        <Text style={styles.fabText}>Scanner</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab: Informations
+// ---------------------------------------------------------------------------
+
+function InformationsTab({
+  patient,
+  onAddressPress,
+  onPhonePress,
+  onEmailPress,
+}: {
+  patient: PatientView;
+  onAddressPress: () => void;
+  onPhonePress: () => void;
+  onEmailPress: () => void;
+}) {
+  // Parse allergies from notes (look for comma-separated items after "Allergies:" or similar)
+  // For now, use placeholder data since PatientView doesn't have a dedicated allergies field
+  const allergies = extractAllergies(patient.notes);
+
+  return (
+    <View style={styles.tabContent}>
+      {/* Allergies & Alertes */}
+      {allergies.length > 0 && (
+        <View style={styles.infoCard}>
+          <Text style={styles.infoCardTitle}>ALLERGIES & ALERTES</Text>
+          <View style={styles.allergyRow}>
+            {allergies.map((allergy, index) => (
+              <View key={index} style={styles.allergyBadge}>
+                <Text style={styles.allergyBadgeText}>{allergy}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Existing PatientInfoSection (address, phone, email, etc.) */}
       <PatientInfoSection
         patient={patient}
-        onAddressPress={handleNavigate}
-        onPhonePress={handleCall}
-        onEmailPress={handleEmail}
+        onAddressPress={onAddressPress}
+        onPhonePress={onPhonePress}
+        onEmailPress={onEmailPress}
       />
 
-      {/* Recent documents */}
+      {/* ALD / BSI badges */}
+      {(patient.isAld || patient.hasActiveBsi) && (
+        <View style={styles.infoCard}>
+          <Text style={styles.infoCardTitle}>PATHOLOGIES & ANTECEDENTS</Text>
+          <View style={styles.bulletList}>
+            {patient.isAld && (
+              <View style={styles.bulletItem}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.bulletText}>Patient en ALD (Affection Longue Duree)</Text>
+              </View>
+            )}
+            {patient.hasActiveBsi && patient.bsiLevel != null && (
+              <View style={styles.bulletItem}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.bulletText}>BSI actif: {patient.bsiLevel}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Notes as pathologies/antecedents */}
+      {patient.notes != null && patient.notes.length > 0 && (
+        <View style={styles.infoCard}>
+          <Text style={styles.infoCardTitle}>NOTES</Text>
+          <Text style={styles.notesText}>{patient.notes}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab: Dossier
+// ---------------------------------------------------------------------------
+
+function DossierTab({
+  recentDocs,
+  recentAppts,
+  onDocPress,
+  onViewAllDocs,
+}: {
+  recentDocs: DocumentView[];
+  recentAppts: AppointmentView[];
+  onDocPress: (doc: DocumentView) => void;
+  onViewAllDocs: () => void;
+}) {
+  return (
+    <View style={styles.tabContent}>
+      {/* Documents */}
       <SectionHeader
         icon="document-text-outline"
         title="Documents recents"
         actionLabel={recentDocs.length > 0 ? 'Voir tout' : undefined}
-        onAction={handleViewAllDocs}
+        onAction={onViewAllDocs}
       />
       {recentDocs.length > 0 ? (
         <View style={styles.docsContainer}>
           {recentDocs.map((doc) => (
-            <DocumentCard
-              key={doc.id}
-              document={doc}
-              onPress={handleDocPress}
-            />
+            <DocumentCard key={doc.id} document={doc} onPress={onDocPress} />
           ))}
         </View>
       ) : (
@@ -232,10 +491,7 @@ export default function PatientDetailScreen() {
       )}
 
       {/* Recent appointments */}
-      <SectionHeader
-        icon="calendar-outline"
-        title="Derniers rendez-vous"
-      />
+      <SectionHeader icon="calendar-outline" title="Derniers rendez-vous" />
       {recentAppts.length > 0 ? (
         <View style={styles.apptsContainer}>
           {recentAppts.map((appt) => (
@@ -245,13 +501,66 @@ export default function PatientDetailScreen() {
       ) : (
         <Text style={styles.emptyText}>Aucun rendez-vous</Text>
       )}
+    </View>
+  );
+}
 
-      {/* Recent transmissions */}
+// ---------------------------------------------------------------------------
+// Tab: Ordonnances
+// ---------------------------------------------------------------------------
+
+function OrdonnancesTab({
+  recentDocs,
+  onDocPress,
+  onViewAllDocs,
+}: {
+  recentDocs: DocumentView[];
+  onDocPress: (doc: DocumentView) => void;
+  onViewAllDocs: () => void;
+}) {
+  const prescriptions = recentDocs.filter((d) => d.fileType === 'prescription');
+
+  return (
+    <View style={styles.tabContent}>
+      <SectionHeader
+        icon="document-text-outline"
+        title="Ordonnances"
+        actionLabel={prescriptions.length > 0 ? 'Voir tout' : undefined}
+        onAction={onViewAllDocs}
+      />
+      {prescriptions.length > 0 ? (
+        <View style={styles.docsContainer}>
+          {prescriptions.map((doc) => (
+            <DocumentCard key={doc.id} document={doc} onPress={onDocPress} />
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.emptyText}>Aucune ordonnance</Text>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tab: Transmissions
+// ---------------------------------------------------------------------------
+
+function TransmissionsTab({
+  recentTxs,
+  onViewAll,
+  onAdd,
+}: {
+  recentTxs: TransmissionView[];
+  onViewAll: () => void;
+  onAdd: () => void;
+}) {
+  return (
+    <View style={styles.tabContent}>
       <SectionHeader
         icon="chatbubble-ellipses-outline"
         title="Transmissions recentes"
         actionLabel={recentTxs.length > 0 ? 'Voir tout' : undefined}
-        onAction={handleViewAllTransmissions}
+        onAction={onViewAll}
       />
       {recentTxs.length > 0 ? (
         <View style={styles.txContainer}>
@@ -263,36 +572,20 @@ export default function PatientDetailScreen() {
         <Text style={styles.emptyText}>Aucune transmission</Text>
       )}
 
-      {/* Action buttons */}
       <Pressable
-        onPress={handleAddTransmission}
-        style={({ pressed }) => [styles.scanBtn, pressed && styles.scanBtnPressed]}
+        onPress={onAdd}
+        style={({ pressed }) => [styles.addTxBtn, pressed && styles.addTxBtnPressed]}
         accessibilityRole="button"
       >
         <Ionicons name="mic-outline" size={20} color={Colors.primary} />
-        <Text style={styles.scanBtnText}>Ajouter une transmission</Text>
+        <Text style={styles.addTxBtnText}>Ajouter une transmission</Text>
       </Pressable>
-
-      {/* Scan button */}
-      <Pressable
-        onPress={handleScan}
-        style={({ pressed }) => [styles.scanBtn, pressed && styles.scanBtnPressed]}
-        accessibilityRole="button"
-      >
-        <Ionicons name="scan-outline" size={20} color={Colors.primary} />
-        <Text style={styles.scanBtnText}>Scanner une ordonnance</Text>
-      </Pressable>
-
-      {/* PDF export */}
-      <PdfViewer patient={patient} />
-
-      <View style={styles.bottomSpacer} />
-    </ScrollView>
+    </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// Shared sub-components
 // ---------------------------------------------------------------------------
 
 function SectionHeader({
@@ -332,7 +625,7 @@ function ApptRow({ appointment }: { appointment: AppointmentView }) {
       <View style={[styles.apptDot, { backgroundColor: statusColor }]} />
       <View style={styles.apptInfo}>
         <Text style={styles.apptDate}>
-          {appointment.date} — {appointment.startTime}
+          {appointment.date} -- {appointment.startTime}
         </Text>
         <Text style={styles.apptType}>{appointment.careTypeLabel}</Text>
       </View>
@@ -369,7 +662,7 @@ function TxRow({ transmission }: { transmission: TransmissionView }) {
       />
       <View style={styles.apptInfo}>
         <Text style={styles.apptDate}>
-          {formatTransmissionTime(transmission.createdAt)} — {transmission.authorName}
+          {formatTransmissionTime(transmission.createdAt)} -- {transmission.authorName}
         </Text>
         <Text style={styles.apptType} numberOfLines={1}>
           {transmission.contentStructured?.synthese ??
@@ -385,17 +678,37 @@ function TxRow({ transmission }: { transmission: TransmissionView }) {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract allergies from notes text.
+ * Looks for patterns like "Allergies: X, Y, Z" or "Allergie: X"
+ */
+function extractAllergies(notes: string | null): string[] {
+  if (!notes) return [];
+  const match = notes.match(/allerg(?:ies?)\s*[:=]\s*([^\n]+)/i);
+  if (!match) return [];
+  return match[1]
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+// ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  scrollView: {
+  rootContainer: {
     flex: 1,
     backgroundColor: Colors.background,
   },
+  scrollView: {
+    flex: 1,
+  },
   content: {
-    paddingTop: 16,
-    paddingHorizontal: 16,
+    paddingBottom: 100,
   },
   notFound: {
     flex: 1,
@@ -409,12 +722,235 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
 
+  // Custom header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+
+  // Profile section
+  profileSection: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  avatarOuter: {
+    marginBottom: 14,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.primaryUltraLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.white,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  avatarText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  patientName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  statusActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusInactive: {
+    backgroundColor: '#F1F5F9',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  statusTextActive: {
+    color: '#16A34A',
+  },
+  statusTextInactive: {
+    color: '#94A3B8',
+  },
+  birthDate: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  idNumber: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginTop: 4,
+    letterSpacing: 0.3,
+  },
+
+  // Quick action cards
+  quickActions: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  quickCard: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    gap: 6,
+  },
+  quickCardPressed: {
+    opacity: 0.8,
+    backgroundColor: Colors.borderLight,
+  },
+  quickCardLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+
+  // Tab bar
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 8,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: Colors.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.textTertiary,
+  },
+  tabTextActive: {
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+
+  // Tab content
+  tabContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+
+  // Info card (allergies, pathologies)
+  infoCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    marginBottom: 12,
+  },
+  infoCardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textTertiary,
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  allergyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  allergyBadge: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  allergyBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
+  bulletList: {
+    gap: 8,
+  },
+  bulletItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.textTertiary,
+    marginTop: 6,
+  },
+  bulletText: {
+    fontSize: 14,
+    color: Colors.text,
+    flex: 1,
+    lineHeight: 20,
+  },
+  notesText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+
   // Section headers
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 20,
+    marginTop: 16,
     marginBottom: 10,
   },
   sectionTitle: {
@@ -491,8 +1027,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Scan button
-  scanBtn: {
+  // Add transmission button
+  addTxBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -501,15 +1037,41 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     marginTop: 8,
-    marginBottom: 4,
   },
-  scanBtnPressed: {
+  addTxBtnPressed: {
     opacity: 0.8,
   },
-  scanBtnText: {
+  addTxBtnText: {
     fontSize: 15,
     fontWeight: '600',
     color: Colors.primary,
+  },
+
+  // FAB
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 28,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  fabPressed: {
+    opacity: 0.9,
+  },
+  fabText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.white,
   },
 
   bottomSpacer: {
